@@ -37,8 +37,15 @@ const styles = StyleSheet.create({
     flex: 0.08,
     backgroundColor: "#161519",
   },
+  sideBarItems: {
+    flex: 1,
+    justifyContent: "flex-start",
+    alignItems: "center",
+    paddingTop: 10,
+  },
   logo: {
     width: "80%",
+    height: 150,
     resizeMode: "contain",
   },
   navBar: {
@@ -50,7 +57,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBFBFB",
   },
   topBar: {
-    flex: 0.075,
-    backgroundColor: "#F67011",
+      flex: 0.075,
+      backgroundColor: "#F67011",
   }
 });
