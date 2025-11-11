@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Button, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 
 export default function Index() {
   return (
@@ -16,12 +18,26 @@ export default function Index() {
         </View>
       </View>
 
-      {/* main content of the page */}
       <View style={styles.mainContent}>
         {/* top bar on the page */}
-        <View style={styles.topBar}>
+        <LinearGradient colors ={["#F67011", "#FF9624"]} start={{x: 0, y: 0}} end={{x: 1, y: 0}} style={styles.topBar}>
+          <Text style={styles.pageTitle}>CrewConnect / Home</Text>
 
-        </View>
+          <View style={styles.topBarRight}>
+            <TextInput placeholder="Search..." placeholderTextColor="#4C4C4C" style={styles.searchbar}/>
+
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="person-circle-outline" size={45} color="#161519"/>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="settings-outline" size={45} color="#161519"/>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+        {/* main content of the page */}
+
+
       </View>
     </View>
   );
@@ -48,16 +64,36 @@ const styles = StyleSheet.create({
     height: 150,
     resizeMode: "contain",
   },
-  navBar: {
-
-  },
   mainContent: {
     flex: 1,
     flexDirection: "column",
     backgroundColor: "#FBFBFB",
   },
   topBar: {
-      flex: 0.075,
-      backgroundColor: "#F67011",
+    flex: 0.075,
+    backgroundColor: "#F67011",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+  },
+  pageTitle: {
+    color: "#161519",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",    
+  },
+  searchbar: {
+    backgroundColor: "#FBFBFB",
+    width: 250,
+    height: 40,
+    borderRadius: 10,
+    marginRight: 15,
+  },
+  iconButton: {
+    marginLeft: 25,
   }
 });
