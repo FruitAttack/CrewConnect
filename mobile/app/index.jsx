@@ -7,11 +7,12 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = () => { 
     console.log('Email:', email);
     console.log('Password:', password);
     router.push("/clockin_Screen");
     console.log('Navigate: /clockin_Screen');
+    // comment
   };
 
   return (
