@@ -19,7 +19,10 @@ function RootNavigator() {
   return (
     <Stack>
       <Stack.Protected guard={!!session}>
-        <Stack.Screen name="(dashboard)" />
+        <Stack.Screen 
+          name="(dashboard)"
+          options={{ title: "My Dashboard" }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={!session}>
