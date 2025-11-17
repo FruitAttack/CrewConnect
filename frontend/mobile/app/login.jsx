@@ -16,7 +16,8 @@ const LoginPage = () => {
     console.log('Password:', password);
     
     setError('');
-    const response = await apiCall('auth/login', 'POST', { username: email, password });
+    const response = await apiCall('auth/login', 'POST', { email, password });
+    console.log(response.data)
 
     if (response.success) {
       signIn(response.data.token); // store token in session context
@@ -28,7 +29,7 @@ const LoginPage = () => {
 
   const handleForgotPassword = async () => {
     setError('');
-    const response = await apiCall('auth/register', 'POST', { username: email, password: password });
+    const response = await apiCall('auth/register', 'POST', { email, password });
 
     if (response.success) {
       console.log('User registered via forgot password flow:', response.data);

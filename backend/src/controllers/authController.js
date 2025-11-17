@@ -1,70 +1,79 @@
-import sql from '../utils/db.js'
-import jwt from 'jsonwebtoken';
+import { supabase } from '../utils/supabase.js'
+import jwt from 'jsonwebtoken'
 
-const SECRET = 'dummysecret';
+const SECRET = 'dummysecret'
 
 export const registerUser = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) 
-      return res.status(400).json({ message: 'Username and password required' });
+    const { email, password } = req.body
 
-    // Check if user already exists
-    const existingUsers = await sql`
-      select id, username
-      from app.users
-      where username = ${username}
-    `;
+    if (!email || !password)
+      return res.status(400).json({ message: 'Email and password required' })
 
-    if (existingUsers.length > 0) {
-      return res.status(400).json({ message: 'User already exists' });
+    // Create user using Supabase Admin API
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // skips sending email confirmation
+    })
+
+    if (error) {
+      console.error(error)
+      return res.status(400).json({ message: error.message })
     }
 
-    // Insert new user into database
-    const insertedUsers = await sql`
-      insert into app.users (username, password)
-      values (${username}, ${password})
-      returning id, username
-    `;
+    const user = data.user
 
-    console.log(insertedUsers)
-    const user = insertedUsers[0];
+    // Generate your own JWT (optional but common)
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      SECRET,
+      { expiresIn: '1h' }
+    )
 
-    // Generate JWT token
-    const token = jwt.sign({ username: user.username, id: user.id }, SECRET, { expiresIn: '1h' });
-
-    return res.status(201).json({ message: 'User registered successfully', token });
+    return res.status(201).json({
+      message: 'User registered successfully',
+      user,
+      token,
+    })
   } catch (err) {
-    console.error('Error registering user:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error('Register error:', err)
+    return res.status(500).json({ message: 'Server error' })
   }
-};
+}
 
 export const loginUser = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) 
-      return res.status(400).json({ message: 'Username and password required' });
+    const { email, password } = req.body
 
-    // Check if user exists and password matches
-    const usersFound = await sql`
-      select id, username
-      from app.users
-      where username = ${username} and password = ${password}
-    `;
+    if (!email || !password)
+      return res.status(400).json({ message: 'Email and password required' })
 
-    if (usersFound.length === 0) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error(error)
+      return res.status(401).json({ message: 'Invalid login' })
     }
 
-    const user = usersFound[0];
+    const user = data.user
 
-    // Generate JWT token
-    const token = jwt.sign({ username: user.username, id: user.id }, SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      SECRET,
+      { expiresIn: '1h' }
+    )
 
-    return res.status(200).json({ message: `Welcome, ${user.username}!`, token });
+    return res.status(200).json({
+      message: `Welcome, ${user.email}!`,
+      token,
+      email
+    })
   } catch (err) {
-    console.error('Error logging in user:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error('Login error:', err)
+    return res.status(500).json({ message: 'Server error' })
   }
-};
+}

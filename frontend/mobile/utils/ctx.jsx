@@ -24,16 +24,23 @@ export function SessionProvider({ children }) {
   return (
     <AuthContext.Provider
       value={{
-        signIn: () => {
-          // Perform sign-in logic here
-          setSession('xxx');
+        signIn: (token, username) => {
+          const sessionData = JSON.stringify({
+            token,
+            username,
+          });
+
+          setSession(sessionData);
         },
+
         signOut: () => {
           setSession(null);
         },
-        session,
+
+        session: session,
         isLoading,
-      }}>
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
