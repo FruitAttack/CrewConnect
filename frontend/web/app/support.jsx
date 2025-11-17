@@ -15,7 +15,7 @@ export default function Index() {
           end={{ x: 1, y: 0 }}
           style={styles.topBar}
         >
-          <Text style={styles.pageTitle}>CrewConnect / Home</Text>
+          <Text style={styles.pageTitle}>CrewConnect / Support</Text>
 
           <View style={styles.topBarRight}>
             <TextInput
