@@ -2,16 +2,18 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router'
+import { useSession } from '../utils/ctx';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const { signIn } = useSession();
 
   const handleLogin = () => { 
     console.log('Email:', email);
     console.log('Password:', password);
-    router.push("/clockin_Screen");
-    console.log('Navigate: /clockin_Screen');
+    signIn();
+    router.replace('/');
     // comment
   };
 
