@@ -1,33 +1,49 @@
+import { useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import LoginModal from "./loginModal";
 
 export default function TopBar({ title }) {
+  const [loginVisible, setLoginVisible] = useState(false);
+
   return (
-    <LinearGradient
-      colors={["#F67011", "#FF9624"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.topBar}
-    >
-      <Text style={styles.pageTitle}>{title}</Text>
+    <>
+      {/* Login modal */}
+      <LoginModal 
+        visible={loginVisible}
+        onClose={() => setLoginVisible(false)}
+      />
 
-      <View style={styles.topBarRight}>
-        <TextInput
-          placeholder="Search..."
-          placeholderTextColor="#4C4C4C"
-          style={styles.searchbar}
-        />
+      {/* Top bar */}
+      <LinearGradient
+        colors={["#F67011", "#FF9624"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.topBar}
+      >
+        <Text style={styles.pageTitle}>{title}</Text>
 
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="person-circle-outline" size={45} color="#161519" />
-        </TouchableOpacity>
+        <View style={styles.topBarRight}>
+          <TextInput
+            placeholder="Search..."
+            placeholderTextColor="#4C4C4C"
+            style={styles.searchbar}
+          />
 
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="settings-outline" size={45} color="#161519" />
-        </TouchableOpacity>
-      </View>
-    </LinearGradient>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => setLoginVisible(true)}
+          >
+            <Ionicons name="person-circle-outline" size={45} color="#161519" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="settings-outline" size={45} color="#161519" />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </>
   );
 }
 
