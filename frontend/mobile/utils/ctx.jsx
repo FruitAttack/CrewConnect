@@ -1,5 +1,5 @@
-import { use, createContext } from 'react';
-import { useStorageState } from './useStorageState';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase.js';
 
 const AuthContext = createContext({
   signIn: () => null,
@@ -10,37 +10,50 @@ const AuthContext = createContext({
 
 // Use this hook to access the user info.
 export function useSession() {
-  const value = use(AuthContext);
-  if (!value) {
-    throw new Error('useSession must be wrapped in a <SessionProvider />');
-  }
-
-  return value;
+  return useContext(AuthContext);
 }
 
 export function SessionProvider({ children }) {
-  const [[isLoading, session], setSession] = useStorageState('session');
+  const [session, setSession] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for existing session on mount
+    const currentSession = supabase.auth.getSession();
+    currentSession.then(({ data }) => {
+      setSession(data.session);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes (login/logout)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (email, password) => {
+    setIsLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setIsLoading(false);
+
+    if (error) throw error;
+    setSession(data.session);
+    return data.session;
+  };
+
+  const signOut = async () => {
+    setIsLoading(true);
+    await supabase.auth.signOut();
+    setSession(null);
+    setIsLoading(false);
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        signIn: (token, username) => {
-          const sessionData = JSON.stringify({
-            token,
-            username,
-          });
-
-          setSession(sessionData);
-        },
-
-        signOut: () => {
-          setSession(null);
-        },
-
-        session: session,
-        isLoading,
-      }}
-    >
+    <AuthContext.Provider value={{ session, isLoading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
