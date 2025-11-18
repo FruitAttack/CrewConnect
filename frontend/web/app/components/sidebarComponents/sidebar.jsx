@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useSidebar } from "./sidebarContext";
+import { useSidebar } from "../sidebarContext";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COLLAPSED_WIDTH = 80;

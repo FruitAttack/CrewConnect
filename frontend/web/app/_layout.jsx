@@ -1,8 +1,8 @@
 import { View, StyleSheet } from "react-native";
 import { Slot, useSegments } from "expo-router";
-import { SidebarProvider } from "./components/sidebarContext";
-import Sidebar from "./components/sidebar";
-import TopBar from "./components/topbar";
+import { SidebarProvider } from "./components/sidebarComponents/sidebarContext";
+import Sidebar from "./components/sidebarComponents/sidebar";
+import TopBar from "./components/topbarComponents/topbar";
 
 export default function RootLayout() {
   const segments = useSegments();
