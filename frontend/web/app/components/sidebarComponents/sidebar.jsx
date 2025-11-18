@@ -1,16 +1,8 @@
 import React, { useRef, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  Dimensions,
-  Image,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useSidebar } from "../sidebarContext";
+import { useSidebar } from "./sidebarContext";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COLLAPSED_WIDTH = 80;
@@ -18,7 +10,7 @@ const EXPANDED_WIDTH = 240;
 const ANIM_DURATION = 220;
 
 /**
- * this is the sidebar for navigation when the user is not signed in
+ * this is the sidebar for navigation
  * @returns a sidebar UI component
  */
 export default function Sidebar() {
@@ -81,7 +73,7 @@ export default function Sidebar() {
           style={{ width: "100%", alignItems: "center" }}
         >
           <Animated.Image
-            source={require("../../assets/images/CC_logo_nobackground.png")}
+            source={require("../../../assets/images/CC_logo_nobackground.png")}
             style={[styles.logo, { height: logoHeight }]}
             resizeMode="contain"
           />

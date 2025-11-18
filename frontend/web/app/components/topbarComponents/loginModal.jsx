@@ -1,5 +1,9 @@
 import { Modal, View, Text, StyleSheet, TextInput, TouchableOpacity, TouchableWithoutFeedback } from "react-native";
 
+/**
+ * this provided a login modal component
+ * for the user to sign in, and links to sign up or request password resets
+ */
 export default function LoginModal({ visible, onClose }) {
   return (
     <Modal

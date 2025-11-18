@@ -4,6 +4,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import LoginModal from "./loginModal";
 
+
+/**
+ * A topbar component, containing the page title, the searchbar, account and settings buttons
+ * and interactions for those components like the login modal
+ */
 export default function TopBar({ title }) {
   const [loginVisible, setLoginVisible] = useState(false);
 
