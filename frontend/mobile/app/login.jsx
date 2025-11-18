@@ -15,7 +15,7 @@ import { apiCall } from "../utils/api";
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { signIn } = useSession();
+  const { signIn, isLoading } = useSession();
   const [error, setError] = useState("");
 
   // Setu username and password for ease of testing
@@ -64,13 +64,14 @@ const LoginPage = () => {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, isLoading && styles.inputDisabled]}
             placeholder="johndoe@example.com"
             placeholderTextColor="#999"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            editable={!isLoading}
           />
         </View>
 
@@ -78,12 +79,13 @@ const LoginPage = () => {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Password</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, isLoading && styles.inputDisabled]}
             placeholder="Password"
             placeholderTextColor="#999"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            editable={!isLoading}
           />
         </View>
 
@@ -92,8 +94,14 @@ const LoginPage = () => {
         ) : null}
 
         {/* Login Button */}
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
+        <TouchableOpacity
+          style={[styles.button, isLoading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={isLoading}
+        >
+          <Text style={styles.buttonText}>
+            {isLoading ? "Logging in..." : "Login"}
+          </Text>
         </TouchableOpacity>
 
         {/* Forgot Password */}
@@ -168,5 +176,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 45,
     fontSize: 15,
+  },
+  inputDisabled: {
+    backgroundColor: "#E0E0E0",
+  },
+  buttonDisabled: {
+    backgroundColor: "#A0A0A0",
   },
 });
