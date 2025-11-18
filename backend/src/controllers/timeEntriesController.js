@@ -1,0 +1,336 @@
+import { supabase } from '../utils/supabase.js';
+
+/**
+ * Clock in with automatic validation and geofencing
+ * POST /api/time-entries/clock-in
+ */
+export async function clockIn(req, res) {
+  try {
+    const { 
+      project_id, 
+      cost_code_id, 
+      equipment_id, 
+      latitude, 
+      longitude, 
+      notes 
+    } = req.body;
+
+    // Validate required fields
+    if (!project_id || !cost_code_id) {
+      return res.status(400).json({ 
+        message: 'project_id and cost_code_id are required' 
+      });
+    }
+
+    // Call database function for smart clock-in
+    const { data, error } = await supabase.rpc('clock_in', {
+      p_project_id: project_id,
+      p_cost_code_id: cost_code_id,
+      p_equipment_id: equipment_id || null,
+      p_lat: latitude || null,
+      p_lng: longitude || null,
+      p_notes: notes || null
+    });
+
+    if (error) {
+      console.error('Clock in error:', error);
+      return res.status(400).json({ 
+        message: error.message || 'Failed to clock in'
+      });
+    }
+
+    // Database function returns {success, time_entry_id, error_message}
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ 
+        message: result.error_message 
+      });
+    }
+
+    return res.status(201).json({
+      message: 'Clocked in successfully',
+      time_entry_id: result.time_entry_id
+    });
+
+  } catch (err) {
+    console.error('Clock in error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Clock out
+ * POST /api/time-entries/clock-out
+ */
+export async function clockOut(req, res) {
+  try {
+    const { 
+      time_entry_id,
+      latitude,
+      longitude,
+      break_minutes,
+      notes
+    } = req.body;
+
+    if (!time_entry_id) {
+      return res.status(400).json({ 
+        message: 'time_entry_id is required' 
+      });
+    }
+
+    // Call database function for clock-out
+    const { data, error } = await supabase.rpc('clock_out', {
+      p_time_entry_id: time_entry_id,
+      p_lat: latitude || null,
+      p_lng: longitude || null,
+      p_break_minutes: break_minutes || 0,
+      p_notes: notes || null
+    });
+
+    if (error) {
+      console.error('Clock out error:', error);
+      return res.status(400).json({ 
+        message: error.message || 'Failed to clock out'
+      });
+    }
+
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ 
+        message: result.error_message 
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Clocked out successfully',
+      total_hours: result.total_hours
+    });
+
+  } catch (err) {
+    console.error('Clock out error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Get current user's open time entry
+ * GET /api/time-entries/current
+ */
+export async function getCurrentTimeEntry(req, res) {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_current_time_entry');
+
+    if (error) {
+      console.error('Get current entry error:', error);
+      return res.status(500).json({ message: 'Failed to get current time entry' });
+    }
+
+    // If no open entry, data will be empty array
+    if (!data || data.length === 0) {
+      return res.status(200).json({ 
+        message: 'No active time entry',
+        current_entry: null 
+      });
+    }
+
+    return res.status(200).json({
+      current_entry: data[0]
+    });
+
+  } catch (err) {
+    console.error('Get current entry error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Get user's time entries for a date range
+ * GET /api/time-entries?start_date=2025-01-01&end_date=2025-01-31
+ */
+export async function getTimeEntries(req, res) {
+  try {
+    const { start_date, end_date, user_id } = req.query;
+
+    // Build query
+    let query = supabase
+      .from('time_entries')
+      .select(`
+        *,
+        projects:project_id(id, name),
+        cost_codes:cost_code_id(id, code, name),
+        equipment:equipment_id(id, label)
+      `)
+      .order('clock_in', { ascending: false });
+
+    // Filter by date range if provided
+    if (start_date) {
+      query = query.gte('clock_in', start_date);
+    }
+    if (end_date) {
+      query = query.lte('clock_in', end_date);
+    }
+
+    // Filter by user if admin is looking at someone else's entries
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Get time entries error:', error);
+      return res.status(500).json({ message: 'Failed to get time entries' });
+    }
+
+    return res.status(200).json({ time_entries: data });
+
+  } catch (err) {
+    console.error('Get time entries error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Get nearby projects based on user location
+ * GET /api/time-entries/nearby-projects?latitude=40.7128&longitude=-74.0060
+ */
+export async function getNearbyProjects(req, res) {
+  try {
+    const { latitude, longitude, max_distance_km } = req.query;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ 
+        message: 'latitude and longitude are required' 
+      });
+    }
+
+    const { data, error } = await supabase.rpc('get_nearby_projects', {
+      p_user_lat: parseFloat(latitude),
+      p_user_lng: parseFloat(longitude),
+      p_max_distance_km: max_distance_km ? parseFloat(max_distance_km) : 50
+    });
+
+    if (error) {
+      console.error('Get nearby projects error:', error);
+      return res.status(500).json({ message: 'Failed to get nearby projects' });
+    }
+
+    return res.status(200).json({ projects: data });
+
+  } catch (err) {
+    console.error('Get nearby projects error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Validate geofence for a project
+ * POST /api/time-entries/validate-geofence
+ */
+export async function validateGeofence(req, res) {
+  try {
+    const { project_id, latitude, longitude } = req.body;
+
+    if (!project_id || !latitude || !longitude) {
+      return res.status(400).json({ 
+        message: 'project_id, latitude, and longitude are required' 
+      });
+    }
+
+    const { data, error } = await supabase.rpc('validate_geofence', {
+      p_project_id: project_id,
+      p_user_lat: latitude,
+      p_user_lng: longitude
+    });
+
+    if (error) {
+      console.error('Validate geofence error:', error);
+      return res.status(500).json({ message: 'Failed to validate geofence' });
+    }
+
+    const result = data[0];
+
+    return res.status(200).json({
+      is_valid: result.is_valid,
+      distance_meters: result.distance_meters,
+      allowed_radius_meters: result.allowed_radius_meters,
+      error_message: result.error_message
+    });
+
+  } catch (err) {
+    console.error('Validate geofence error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Update a time entry (Admin/Supervisor/Foreman only)
+ * PUT /api/time-entries/:id
+ */
+export async function updateTimeEntry(req, res) {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Remove fields that shouldn't be updated directly
+    delete updates.id;
+    delete updates.user_id;
+    delete updates.company_id;
+    delete updates.created_at;
+
+    const { data, error } = await supabase
+      .from('time_entries')
+      .update(updates)
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error('Update time entry error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: 'Time entry not found or no permission' });
+    }
+
+    return res.status(200).json({
+      message: 'Time entry updated successfully',
+      time_entry: data[0]
+    });
+
+  } catch (err) {
+    console.error('Update time entry error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Delete a time entry (Admin/Supervisor only)
+ * DELETE /api/time-entries/:id
+ */
+export async function deleteTimeEntry(req, res) {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('time_entries')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Delete time entry error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.status(200).json({
+      message: 'Time entry deleted successfully'
+    });
+
+  } catch (err) {
+    console.error('Delete time entry error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
