@@ -2,18 +2,42 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router'
+import { useSession } from '../utils/ctx';
+import { apiCall } from '../utils/api';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const { signIn } = useSession();
+  const [error, setError] = useState('');
 
-  const handleLogin = () => { 
+  const handleLogin = async () => { 
     console.log('Email:', email);
     console.log('Password:', password);
-    router.push("/clockin_Screen");
-    console.log('Navigate: /clockin_Screen');
-    // comment
+    
+    setError('');
+    const response = await apiCall('auth/login', 'POST', { email, password });
+    console.log(response.data)
+
+    if (response.success) {
+      signIn(response.data.token); // store token in session context
+      router.replace('/');
+    } else {
+      setError(response.message);
+    }
   };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    const response = await apiCall('auth/register', 'POST', { email, password });
+
+    if (response.success) {
+      console.log('User registered via forgot password flow:', response.data);
+    } else {
+      setError(response.message);
+    }
+};
+
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -56,13 +80,15 @@ const LoginPage = () => {
           />
         </View>
 
+        {error ? <Text style={{ color: 'red', marginBottom: 10 }}>{error}</Text> : null}
+
         {/* Login Button */}
         <TouchableOpacity style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
         </TouchableOpacity>
 
         {/* Forgot Password */}
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleForgotPassword}>
           <Text style={styles.linkText}>Forgot Password?</Text>
         </TouchableOpacity>
 
