@@ -13,45 +13,54 @@ export const registerUser = async (req, res) => {
   try {
     const { email, password, full_name, company_id } = req.body
 
-    if (!email || !password)
+    // Validate required fields
+    if (!email || !password) {
       return res.status(400).json({ message: 'Email and password required' })
+    }
+
+    if (!company_id) {
+      return res.status(400).json({ message: 'company_id is required' })
+    }
 
     // Create user using Supabase Admin API
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // skips sending email confirmation
+      email_confirm: true,
       user_metadata: {
         full_name: full_name || null
       }
     })
 
     if (error) {
-      console.error(error)
+      console.error('Auth user creation error:', error)
       return res.status(400).json({ message: error.message })
     }
 
     const user = data.user
 
-    // Create user profile if company_id provided
-    if (company_id) {
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: user.id,
-          email: user.email,
-          full_name: full_name || null,
-          default_company_id: company_id,
-          is_active: true
-        })
+    // Create user profile in app.users table (REQUIRED)
+    const { error: profileError } = await supabase
+      .schema('app')  
+      .from('users')
+      .insert({
+        id: user.id,
+        email: user.email,
+        full_name: full_name || null,
+        default_company_id: company_id,
+        is_active: true
+      })
 
-      if (profileError) {
-        console.error('Profile creation error:', profileError)
-        // Continue anyway - profile can be created later
-      }
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+      // Cleanup: delete the auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(user.id)
+      return res.status(400).json({ 
+        message: 'Failed to create user profile: ' + profileError.message 
+      })
     }
 
-    // Generate your own JWT
+    // Generate JWT
     const token = jwt.sign(
       { id: user.id, email: user.email },
       SECRET,
@@ -62,7 +71,8 @@ export const registerUser = async (req, res) => {
       message: 'User registered successfully',
       user: {
         id: user.id,
-        email: user.email
+        email: user.email,
+        full_name: full_name
       },
       token,
     })
@@ -119,7 +129,6 @@ export const refreshToken = async (req, res) => {
       return res.status(400).json({ message: 'Token required' })
     }
 
-    // Verify old token (allow expired tokens for refresh)
     let decoded
     try {
       decoded = jwt.verify(token, SECRET, { ignoreExpiration: true })
@@ -127,7 +136,6 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid token' })
     }
 
-    // Generate new token
     const newToken = jwt.sign(
       { id: decoded.id, email: decoded.email },
       SECRET,

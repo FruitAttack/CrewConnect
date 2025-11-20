@@ -7,6 +7,8 @@ const SECRET = process.env.JWT_SECRET || 'dummysecret';
  * Verify JWT token and attach user to request
  */
 export const authenticate = async (req, res, next) => {
+  console.log('=== AUTH MIDDLEWARE ===');
+  console.log('Authorization header:', req.headers.authorization);
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
@@ -21,6 +23,7 @@ export const authenticate = async (req, res, next) => {
     let decoded;
     try {
       decoded = jwt.verify(token, SECRET);
+      console.log('Decoded token:', decoded);
     } catch (err) {
       if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ message: 'Token expired' });
@@ -28,23 +31,22 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid token' });
     }
 
-    // Get user from database with role and company info
+    console.log('Querying user with ID:', decoded.id);
+
+    // Get user from database (simplified - no join)
     const { data: user, error } = await supabase
+      .schema('app')
       .from('users')
-      .select(`
-        *,
-        user_roles(
-          role_key,
-          company_id,
-          roles(key, label),
-          companies(id, name)
-        )
-      `)
+      .select('*')
       .eq('id', decoded.id)
       .eq('is_active', true)
       .single();
 
+    console.log('Query result - user:', user);
+    console.log('Query result - error:', error);
+
     if (error || !user) {
+      console.log('User lookup failed!');
       return res.status(401).json({ message: 'User not found or inactive' });
     }
 
@@ -55,10 +57,12 @@ export const authenticate = async (req, res, next) => {
       full_name: user.full_name,
       default_company_id: user.default_company_id,
       can_view_rates: user.can_view_rates,
-      roles: user.user_roles || []
+      roles: [] // Empty for now - can add role lookup separately if needed
     };
 
+    console.log('req.user set:', req.user);
     next();
+
   } catch (err) {
     console.error('Authentication error:', err);
     return res.status(500).json({ message: 'Authentication failed' });
