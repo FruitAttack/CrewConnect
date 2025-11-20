@@ -8,7 +8,10 @@ import {
   getWageHistory
 } from '../controllers/reportsController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // Equipment reports
 router.get('/equipment-utilization', getEquipmentUtilization);

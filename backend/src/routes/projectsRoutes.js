@@ -10,7 +10,10 @@ import {
   getProjectCostBreakdown
 } from '../controllers/projectsController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // CRUD operations
 router.get('/', getAllProjects);

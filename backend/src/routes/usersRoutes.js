@@ -10,8 +10,12 @@ import {
   updateUserEmployment,
   searchUsers
 } from "../controllers/usersController.js";
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Apply authentication to all routes
+router.use(authenticate);
 
 // Search (must come before /:id route)
 router.get("/search", searchUsers);

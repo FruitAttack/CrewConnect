@@ -9,7 +9,10 @@ import {
   reassignEmployee
 } from '../controllers/employeeAssignmentsController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // Bulk operations (must come before single routes)
 router.post('/bulk', bulkAssignEmployees);
