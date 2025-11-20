@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import Octicons from '@expo/vector-icons/Octicons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
-const Clockin_Screen = () => {
+import { router } from 'expo-router';
+const Clockin_Home = () => {
   const [minutesElapsed, setMinutesElapsed] = useState(0);
   const [isClockedIn, setIsClockedIn] = useState(false);
   const intervalRef = useRef(null);
@@ -10,6 +11,7 @@ const Clockin_Screen = () => {
   const handleClockIn = () => {
     if (!isClockedIn) {
       setIsClockedIn(true);
+      router.push("/map_costcode_Screen");
       intervalRef.current = setInterval(() => {
         setMinutesElapsed((prev) => prev + 1);
       }, 60000); // every 1 minute
@@ -49,7 +51,7 @@ const Clockin_Screen = () => {
   );
 };
 
-export default Clockin_Screen;
+export default Clockin_Home;
 
 const styles = StyleSheet.create({
   container: {
