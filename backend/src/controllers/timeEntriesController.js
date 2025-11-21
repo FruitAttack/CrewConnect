@@ -6,6 +6,12 @@ import { supabase } from '../utils/supabase.js';
  */
 export async function clockIn(req, res) {
   try {
+    console.log('=== CLOCK IN DEBUG ===');
+    console.log('Headers:', req.headers.authorization);
+    console.log('req.user:', req.user);
+    console.log('req.user?.id:', req.user?.id);
+    console.log('====================');
+
     const { 
       project_id, 
       cost_code_id, 
@@ -22,15 +28,28 @@ export async function clockIn(req, res) {
       });
     }
 
+    // Get user ID from authenticated request
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        message: 'User not authenticated' 
+      });
+    }
+
     // Call database function for smart clock-in
-    const { data, error } = await supabase.rpc('clock_in', {
-      p_project_id: project_id,
-      p_cost_code_id: cost_code_id,
-      p_equipment_id: equipment_id || null,
-      p_lat: latitude || null,
-      p_lng: longitude || null,
-      p_notes: notes || null
-    });
+    // Note: Using .rpc() with schema specified
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('clock_in', {
+        p_user_id: userId,
+        p_project_id: project_id,
+        p_cost_code_id: cost_code_id,
+        p_equipment_id: equipment_id || null,
+        p_lat: latitude || null,
+        p_lng: longitude || null,
+        p_notes: notes || null
+      });
 
     if (error) {
       console.error('Clock in error:', error);
@@ -80,13 +99,15 @@ export async function clockOut(req, res) {
     }
 
     // Call database function for clock-out
-    const { data, error } = await supabase.rpc('clock_out', {
-      p_time_entry_id: time_entry_id,
-      p_lat: latitude || null,
-      p_lng: longitude || null,
-      p_break_minutes: break_minutes || 0,
-      p_notes: notes || null
-    });
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('clock_out', {
+        p_time_entry_id: time_entry_id,
+        p_lat: latitude || null,
+        p_lng: longitude || null,
+        p_break_minutes: break_minutes || 0,
+        p_notes: notes || null
+      });
 
     if (error) {
       console.error('Clock out error:', error);
@@ -120,8 +141,17 @@ export async function clockOut(req, res) {
  */
 export async function getCurrentTimeEntry(req, res) {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const { data, error } = await supabase
-      .rpc('get_current_time_entry');
+      .schema('app')
+      .rpc('get_current_time_entry', {
+        p_user_id: userId
+      });
 
     if (error) {
       console.error('Get current entry error:', error);
@@ -153,9 +183,11 @@ export async function getCurrentTimeEntry(req, res) {
 export async function getTimeEntries(req, res) {
   try {
     const { start_date, end_date, user_id } = req.query;
+    const requestingUserId = req.user?.id;
 
     // Build query
     let query = supabase
+      .schema('app')
       .from('time_entries')
       .select(`
         *,
@@ -165,17 +197,19 @@ export async function getTimeEntries(req, res) {
       `)
       .order('clock_in', { ascending: false });
 
+    // Filter by user - either requesting user or admin looking at someone else
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+    } else {
+      query = query.eq('user_id', requestingUserId);
+    }
+
     // Filter by date range if provided
     if (start_date) {
       query = query.gte('clock_in', start_date);
     }
     if (end_date) {
       query = query.lte('clock_in', end_date);
-    }
-
-    // Filter by user if admin is looking at someone else's entries
-    if (user_id) {
-      query = query.eq('user_id', user_id);
     }
 
     const { data, error } = await query;
@@ -200,6 +234,7 @@ export async function getTimeEntries(req, res) {
 export async function getNearbyProjects(req, res) {
   try {
     const { latitude, longitude, max_distance_km } = req.query;
+    const companyId = req.user?.default_company_id;
 
     if (!latitude || !longitude) {
       return res.status(400).json({ 
@@ -207,11 +242,20 @@ export async function getNearbyProjects(req, res) {
       });
     }
 
-    const { data, error } = await supabase.rpc('get_nearby_projects', {
-      p_user_lat: parseFloat(latitude),
-      p_user_lng: parseFloat(longitude),
-      p_max_distance_km: max_distance_km ? parseFloat(max_distance_km) : 50
-    });
+    if (!companyId) {
+      return res.status(400).json({ 
+        message: 'User company not found' 
+      });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('get_nearby_projects', {
+        p_company_id: companyId,
+        p_user_lat: parseFloat(latitude),
+        p_user_lng: parseFloat(longitude),
+        p_max_distance_km: max_distance_km ? parseFloat(max_distance_km) : 50
+      });
 
     if (error) {
       console.error('Get nearby projects error:', error);
@@ -240,11 +284,13 @@ export async function validateGeofence(req, res) {
       });
     }
 
-    const { data, error } = await supabase.rpc('validate_geofence', {
-      p_project_id: project_id,
-      p_user_lat: latitude,
-      p_user_lng: longitude
-    });
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('validate_geofence', {
+        p_project_id: project_id,
+        p_user_lat: latitude,
+        p_user_lng: longitude
+      });
 
     if (error) {
       console.error('Validate geofence error:', error);
@@ -282,6 +328,7 @@ export async function updateTimeEntry(req, res) {
     delete updates.created_at;
 
     const { data, error } = await supabase
+      .schema('app')
       .from('time_entries')
       .update(updates)
       .eq('id', id)
@@ -316,6 +363,7 @@ export async function deleteTimeEntry(req, res) {
     const { id } = req.params;
 
     const { error } = await supabase
+      .schema('app')
       .from('time_entries')
       .delete()
       .eq('id', id);

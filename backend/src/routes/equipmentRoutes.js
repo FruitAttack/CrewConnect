@@ -10,7 +10,10 @@ import {
   getEquipmentUsage
 } from '../controllers/equipmentController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // Equipment types (must come before /:id route)
 router.get('/types', getEquipmentTypes);

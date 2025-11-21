@@ -9,7 +9,10 @@ import {
   getCustomerProjectsSummary
 } from '../controllers/customersController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // Search (must come before /:id route)
 router.get('/search', searchCustomers);

@@ -21,8 +21,32 @@ export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
     autoRefreshToken: false,
     persistSession: false,
     detectSessionInUrl: false
+  },
+  db: {
+    schema: 'app' // Set default schema to 'app'
   }
 });
+
+// Helper function to create a client with user context for RLS
+// Use this when you want RLS policies to apply based on a specific user
+export const createUserClient = (userId) => {
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    },
+    db: {
+      schema: 'app'
+    },
+    global: {
+      headers: {
+        // Set the user context for RLS policies
+        'x-supabase-user-id': userId
+      }
+    }
+  });
+};
 
 // Optional: Create a separate client for RLS-enabled operations
 // Use this if you want to test RLS policies from the backend
@@ -33,6 +57,9 @@ export const supabaseWithRLS = createClient(
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    db: {
+      schema: 'app'
     }
   }
 );
