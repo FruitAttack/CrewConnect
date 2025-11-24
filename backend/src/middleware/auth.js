@@ -31,14 +31,14 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid token' });
     }
 
-    console.log('Querying user with ID:', decoded.id);
+    console.log('Querying user with ID:', decoded.sub);
 
     // Get user from database (simplified - no join)
     const { data: user, error } = await supabase
       .schema('app')
       .from('users')
       .select('*')
-      .eq('id', decoded.id)
+      .eq('id', decoded.sub)
       .eq('is_active', true)
       .single();
 
