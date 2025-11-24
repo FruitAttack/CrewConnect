@@ -37,7 +37,7 @@ const DashboardLayout = () => {
             }
         } />
       <Tabs.Screen 
-      name="clockin_Screen" 
+      name="(clockin_Screen)" 
       options={
         {   title: 'Clock',
             tabBarIcon: ({focused})=>
