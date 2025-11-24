@@ -25,7 +25,7 @@ const Clockin_Home = () => {
 
   const handleTakeBreak = () => {
     console.log("Take Break pressed");
-   
+    
   };
 
   const handleSwitchJob = () => {
