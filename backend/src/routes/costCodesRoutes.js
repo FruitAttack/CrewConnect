@@ -9,7 +9,10 @@ import {
   searchCostCodes
 } from '../controllers/costCodesController.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticate);
 
 // Search (must come before /:id route)
 router.get('/search', searchCostCodes);
