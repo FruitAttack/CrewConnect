@@ -13,8 +13,14 @@ import {
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { apiCall } from "../../../utils/api";
+import { useSession } from "../../../utils/ctx";
+import { useTimeStore } from "../../../store/timeStore";
 
 export default function ClockInDetail() {
+  const { session } = useSession();
+  const setClockIn = useTimeStore((s) => s.setClockIn);
+
   // Job Dropdown
   const [jobOpen, setJobOpen] = useState(false);
   const [job, setJob] = useState(null);
@@ -45,8 +51,63 @@ export default function ClockInDetail() {
   // Notes Input Field
   const [notes, setNotes] = useState("");
 
-  const handleStart = () => {
-    console.log("Start button pressed!");
+  const handleStart = async () => {
+    // Validate you selected a job/costCode at least
+    if (!job || !costCode) {
+      alert("Please select a Job and Cost Code.");
+      return;
+    }
+
+    if (!session?.access_token) {
+      alert("You are not logged in.");
+      return;
+    }
+
+    // const body = {
+    //   project_id: job,
+    //   cost_code_id: costCode,
+    //   equipment_id: equipment ?? null,
+    //   notes: notes ?? null,
+    // };
+    const selectedProjectId = "f190e26e-4544-425d-8b8c-9f27fce5fb87"; // Lot 42 – Phase 1
+    const selectedCostCodeId = "cca3e163-efef-44a3-a46b-ce78cf32934c"; // Sewer
+    const body = {
+      project_id: selectedProjectId,
+      cost_code_id: selectedCostCodeId,
+      // equipment_id: equipmentId ?? null,
+      // latitude: position?.lat ?? null,
+      // longitude: position?.lng ?? null,
+      // notes: noteInput ?? null,
+    };
+
+    if (!session?.access_token) {
+      console.error("No session token — user must log in again.");
+      return;
+    }
+
+    console.log("Making API CALL")
+    const response = await apiCall(
+      session.access_token,
+      "time-entries/clock-in",
+      "POST",
+      body
+    );
+    console.log(response)
+
+    if (!response.success) {
+      console.log("Clock-in failed:", response.message);
+      alert(response.message || "Clock-in failed.");
+      return;
+    }
+
+    const timeEntryId = response.data?.time_entry_id;
+    // const startTimestamp = response.data?.clock_in;
+    const startTimestamp = new Date().toISOString();
+
+    // Store in global Zustand
+    setClockIn(timeEntryId, startTimestamp);
+
+    // Return back to Home Clock screen
     router.back();
   };
 
@@ -59,7 +120,6 @@ export default function ClockInDetail() {
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.container}>
-
             {/* Job Dropdown */}
             <Text style={styles.label}>Job</Text>
             <View style={{ zIndex: 3000 }}>
@@ -123,7 +183,6 @@ export default function ClockInDetail() {
             <Pressable style={styles.button} onPress={handleStart}>
               <Text style={styles.buttonText}>Start</Text>
             </Pressable>
-
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
