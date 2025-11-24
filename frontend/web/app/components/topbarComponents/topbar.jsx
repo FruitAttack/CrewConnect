@@ -3,20 +3,14 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-nativ
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import LoginModal from "./loginModal";
-import { useSession } from "../../../utils/ctx";
 
+
+/**
+ * A topbar component, containing the page title, the searchbar, account and settings buttons
+ * and interactions for those components like the login modal
+ */
 export default function TopBar({ title }) {
   const [loginVisible, setLoginVisible] = useState(false);
-
-  const { session } = useSession();  
-  const user = session?.user;
-
-  // Determine the label under the icon
-  const label = user
-    ? user.user_metadata?.full_name ||
-      user.user_metadata?.name ||
-      user.email?.split("@")[0]
-    : "Log In";
 
   return (
     <>
@@ -42,13 +36,11 @@ export default function TopBar({ title }) {
             style={styles.searchbar}
           />
 
-          {/* Icon + label */}
-          <TouchableOpacity
-            style={styles.iconWrapper}
+          <TouchableOpacity 
+            style={styles.iconButton}
             onPress={() => setLoginVisible(true)}
           >
             <Ionicons name="person-circle-outline" size={45} color="#161519" />
-            <Text style={styles.iconLabel}>{label}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.iconButton}>
@@ -84,16 +76,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginRight: 15,
     paddingHorizontal: 10,
-  },
-  iconWrapper: {
-    alignItems: "center",
-    marginLeft: 18,
-  },
-  iconLabel: {
-    marginTop: -4,
-    fontSize: 12,
-    color: "#161519",
-    fontWeight: "500",
   },
   iconButton: {
     marginLeft: 18,
