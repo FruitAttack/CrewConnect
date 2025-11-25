@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, } fro
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSidebar } from "./sidebarContext";
+import { useSession } from "../../../utils/ctx";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COLLAPSED_WIDTH = 80;
@@ -16,6 +17,9 @@ const ANIM_DURATION = 220;
 export default function Sidebar() {
   const router = useRouter();
   const { isExpanded, toggleSidebar } = useSidebar();
+  const { session } = useSession();
+
+  const homeRoute = session ? "/(app)/dashboard" : "/";
 
   const anim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
 
@@ -50,7 +54,7 @@ export default function Sidebar() {
   });
 
   const navItems = [
-    { icon: "home-outline", label: "Home", route: "/" },
+    { icon: "home-outline", label: "Home", route: homeRoute },
     { icon: "grid-outline", label: "Features", route: "/features" },
     { icon: "pricetags-outline", label: "Pricing", route: "/pricing" },
     { icon: "help-circle-outline", label: "Support", route: "/support" },
@@ -61,7 +65,7 @@ export default function Sidebar() {
   }
 
   function onPressLogo() {
-    router.push("/");
+    router.push(homeRoute);
   }
 
   return (

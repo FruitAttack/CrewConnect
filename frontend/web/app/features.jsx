@@ -1,6 +1,9 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
 
-export default function Index() {
+/**
+ * This is the features page, where we can describe the functionality of the project to prospective/current users
+ */
+export default function Features() {
 
   return (
     <View style={styles.container}>

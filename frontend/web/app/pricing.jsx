@@ -1,6 +1,9 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
 
-export default function Index() {
+/**
+ * Here any pricing info we have can be placed, and subscriptions can be made
+ */
+export default function Pricing() {
 
   return (
     <View style={styles.container}>

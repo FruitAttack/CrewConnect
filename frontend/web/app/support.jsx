@@ -1,6 +1,9 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
 
-export default function Index() {
+/**
+ * Here can be any tutorials, guides to learn how to use the systems, as well as ways to report bugs and get technical assistance from the devs
+ */
+export default function Support() {
 
   return (
     <View style={styles.container}>

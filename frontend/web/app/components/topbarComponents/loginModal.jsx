@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal, View, Text, StyleSheet, TextInput, TouchableOpacity, TouchableWithoutFeedback } from "react-native";
 import { useSession } from "../../../utils/ctx";
+import { useRouter } from "expo-router"
 
 /**
  *  This is the popup for the log in screen
@@ -8,15 +9,17 @@ import { useSession } from "../../../utils/ctx";
  *  Or to navigate to sign up, or request a password reset
  */
 export default function LoginModal({ visible, onClose }) {
-  const { signIn, signOut, session } = useSession();   // ⬅ include signOut + session
+  const { signIn, signOut, session } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const router = useRouter();
 
   async function handleLogin() {
     try {
       setErrorMsg("");
       await signIn(email, password);
+      router.replace("/(app)/dashboard");
       onClose();
     } catch (err) {
       setErrorMsg(err.message);
@@ -25,6 +28,7 @@ export default function LoginModal({ visible, onClose }) {
 
   async function handleLogout() {
     await signOut();
+    router.replace("/")
     onClose();
   }
 
