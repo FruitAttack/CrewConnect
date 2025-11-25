@@ -21,12 +21,12 @@ export async function clockIn(req, res) {
       notes 
     } = req.body;
 
-    // Validate required fields
-    if (!project_id || !cost_code_id) {
+    // Validate required fields - cost_code_id is now optional
+    if (!project_id) {
       return res.status(400).json({ 
-        message: 'project_id and cost_code_id are required' 
+        message: 'project_id is required' 
       });
-    }
+}
 
     // Get user ID from authenticated request
     const userId = req.user?.id;
@@ -84,6 +84,7 @@ export async function clockIn(req, res) {
  */
 export async function clockOut(req, res) {
   try {
+    const userId = req.user?.id;  // Make sure this exists
     const { 
       time_entry_id,
       latitude,
@@ -91,6 +92,10 @@ export async function clockOut(req, res) {
       break_minutes,
       notes
     } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
 
     if (!time_entry_id) {
       return res.status(400).json({ 
@@ -102,6 +107,7 @@ export async function clockOut(req, res) {
     const { data, error } = await supabase
       .schema('app')
       .rpc('clock_out', {
+        p_user_id: userId,  // ADD THIS LINE
         p_time_entry_id: time_entry_id,
         p_lat: latitude || null,
         p_lng: longitude || null,
@@ -502,6 +508,51 @@ export async function getCurrentBreak(req, res) {
 
   } catch (err) {
     console.error('Get current break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Update cost code on open time entry
+ * PUT /api/time-entries/update-cost-code
+ */
+export async function updateCostCode(req, res) {
+  try {
+    const userId = req.user?.id;
+    const { time_entry_id, cost_code_id, equipment_id } = req.body;
+
+    if (!userId || !time_entry_id || !cost_code_id) {
+      return res.status(400).json({ 
+        message: 'time_entry_id and cost_code_id are required' 
+      });
+    }
+
+    // Use the simpler RPC function
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('set_time_entry_cost_code', {
+        p_time_entry_id: time_entry_id,
+        p_cost_code_id: cost_code_id,
+        p_equipment_id: equipment_id || null
+    });
+
+    if (error) {
+      console.error('Update cost code error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (!data) {
+      return res.status(404).json({ 
+        message: 'Time entry not found or already closed' 
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Cost code updated successfully'
+    });
+
+  } catch (err) {
+    console.error('Update cost code error:', err);
     return res.status(500).json({ message: 'Server error' });
   }
 }

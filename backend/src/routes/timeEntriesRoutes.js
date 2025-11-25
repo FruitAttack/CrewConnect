@@ -10,7 +10,8 @@ import {
   deleteTimeEntry,
   startBreak,
   endBreak,
-  getCurrentBreak
+  getCurrentBreak,
+  updateCostCode
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -37,5 +38,8 @@ router.delete('/:id', deleteTimeEntry);
 router.post('/break/start', startBreak);
 router.post('/break/end', endBreak);
 router.get('/break/current', getCurrentBreak);
+
+// Cost code management
+router.put('/update-cost-code', updateCostCode);
 
 export default router;
