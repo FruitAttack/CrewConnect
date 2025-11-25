@@ -25,21 +25,21 @@ router.post('/clock-in', clockIn);
 router.post('/clock-out', clockOut);
 router.get('/current', getCurrentTimeEntry);
 
-// Geofencing
-router.get('/nearby-projects', getNearbyProjects);
-router.post('/validate-geofence', validateGeofence);
-
-// CRUD operations
-router.get('/', getTimeEntries);
-router.put('/:id', updateTimeEntry);
-router.delete('/:id', deleteTimeEntry);
-
 // Break management
 router.post('/break/start', startBreak);
 router.post('/break/end', endBreak);
 router.get('/break/current', getCurrentBreak);
 
-// Cost code management
+// Cost code management - MUST BE BEFORE /:id routes!
 router.put('/update-cost-code', updateCostCode);
+
+// Geofencing
+router.get('/nearby-projects', getNearbyProjects);
+router.post('/validate-geofence', validateGeofence);
+
+// CRUD operations - parameterized routes go LAST
+router.get('/', getTimeEntries);
+router.put('/:id', updateTimeEntry);
+router.delete('/:id', deleteTimeEntry);
 
 export default router;

@@ -517,38 +517,56 @@ export async function getCurrentBreak(req, res) {
  * PUT /api/time-entries/update-cost-code
  */
 export async function updateCostCode(req, res) {
+  console.log('=== UPDATE COST CODE CALLED ===');
+  console.log('Body:', req.body);
+  console.log('User ID:', req.user?.id);
+  
   try {
     const userId = req.user?.id;
     const { time_entry_id, cost_code_id, equipment_id } = req.body;
 
     if (!userId || !time_entry_id || !cost_code_id) {
+      console.log('Validation failed');
       return res.status(400).json({ 
         message: 'time_entry_id and cost_code_id are required' 
       });
     }
 
-    // Use the simpler RPC function
+    console.log('About to update:', { time_entry_id, cost_code_id, userId });
+
+    // BYPASS RPC - Use direct Supabase update instead
+    const updateData = { cost_code_id: cost_code_id };
+    if (equipment_id) {
+      updateData.equipment_id = equipment_id;
+    }
+
     const { data, error } = await supabase
-      .schema('app')
-      .rpc('set_time_entry_cost_code', {
-        p_time_entry_id: time_entry_id,
-        p_cost_code_id: cost_code_id,
-        p_equipment_id: equipment_id || null
-    });
+      .from('time_entries')
+      .update(updateData)
+      .eq('id', time_entry_id)
+      .eq('user_id', userId)
+      .is('clock_out', null)
+      .select();
+
+    console.log('Update result - data:', data);
+    console.log('Update result - error:', error);
 
     if (error) {
       console.error('Update cost code error:', error);
       return res.status(400).json({ message: error.message });
     }
 
-    if (!data) {
+    if (!data || data.length === 0) {
+      console.log('No rows updated');
       return res.status(404).json({ 
         message: 'Time entry not found or already closed' 
       });
     }
 
+    console.log('Success! Updated entry:', data[0]);
     return res.status(200).json({
-      message: 'Cost code updated successfully'
+      message: 'Cost code updated successfully',
+      updated_entry: data[0]
     });
 
   } catch (err) {
