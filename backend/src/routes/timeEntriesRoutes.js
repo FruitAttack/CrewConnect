@@ -7,7 +7,10 @@ import {
   getNearbyProjects,
   validateGeofence,
   updateTimeEntry,
-  deleteTimeEntry
+  deleteTimeEntry,
+  startBreak,
+  endBreak,
+  getCurrentBreak
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -29,5 +32,10 @@ router.post('/validate-geofence', validateGeofence);
 router.get('/', getTimeEntries);
 router.put('/:id', updateTimeEntry);
 router.delete('/:id', deleteTimeEntry);
+
+// Break management
+router.post('/break/start', startBreak);
+router.post('/break/end', endBreak);
+router.get('/break/current', getCurrentBreak);
 
 export default router;

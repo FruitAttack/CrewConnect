@@ -382,3 +382,126 @@ export async function deleteTimeEntry(req, res) {
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+/**
+ * Start a break
+ * POST /api/time-entries/break/start
+ */
+export async function startBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+    const { break_type } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('start_break', {
+        p_user_id: userId,
+        p_break_type: break_type || 'standard'
+      });
+
+    if (error) {
+      console.error('Start break error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ message: result.error_message });
+    }
+
+    return res.status(201).json({
+      message: 'Break started',
+      break_id: result.break_id
+    });
+
+  } catch (err) {
+    console.error('Start break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * End a break
+ * POST /api/time-entries/break/end
+ */
+export async function endBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('end_break', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('End break error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ message: result.error_message });
+    }
+
+    return res.status(200).json({
+      message: 'Break ended',
+      break_minutes: result.break_minutes
+    });
+
+  } catch (err) {
+    console.error('End break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Get current break status
+ * GET /api/time-entries/break/current
+ */
+export async function getCurrentBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('get_current_break', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('Get current break error:', error);
+      return res.status(500).json({ message: 'Failed to get break status' });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(200).json({
+        on_break: false,
+        current_break: null
+      });
+    }
+
+    return res.status(200).json({
+      on_break: true,
+      current_break: data[0]
+    });
+
+  } catch (err) {
+    console.error('Get current break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
