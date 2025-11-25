@@ -2,8 +2,13 @@ import { useState } from "react";
 import { Modal, View, Text, StyleSheet, TextInput, TouchableOpacity, TouchableWithoutFeedback } from "react-native";
 import { useSession } from "../../../utils/ctx";
 
+/**
+ *  This is the popup for the log in screen
+ *  Allows the user to type their credentials to sign in
+ *  Or to navigate to sign up, or request a password reset
+ */
 export default function LoginModal({ visible, onClose }) {
-  const { signIn } = useSession();
+  const { signIn, signOut, session } = useSession();   // ⬅ include signOut + session
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -18,6 +23,11 @@ export default function LoginModal({ visible, onClose }) {
     }
   }
 
+  async function handleLogout() {
+    await signOut();
+    onClose();
+  }
+
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
@@ -26,34 +36,52 @@ export default function LoginModal({ visible, onClose }) {
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.modalBox}>
 
-              <Text style={styles.title}>Log In</Text>
+              <Text style={styles.title}>
+                {session ? "Account" : "Log In"}
+              </Text>
 
-              {errorMsg ? <Text style={{ color:"red" }}>{errorMsg}</Text> : null}
+              {/* Change the modal based on if the user is logged in or not */}
+              {session ? (
+                <>
+                  <Text style={{ marginBottom: 15 }}>You are signed in as:</Text>
+                  <Text style={{ fontWeight: "bold", marginBottom: 20 }}>
+                    {session.user.email}
+                  </Text>
 
-              <TextInput
-                placeholder="Email"
-                placeholderTextColor="#888"
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-              />
+                  <TouchableOpacity style={styles.loginButton} onPress={handleLogout}>
+                    <Text style={styles.loginButtonText}>Log Out</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {errorMsg ? <Text style={{ color:"red" }}>{errorMsg}</Text> : null}
 
-              <TextInput
-                placeholder="Password"
-                placeholderTextColor="#888"
-                secureTextEntry
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-              />
+                  <TextInput
+                    placeholder="Email"
+                    placeholderTextColor="#888"
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                  />
 
-              <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-                <Text style={styles.loginButtonText}>Log In</Text>
-              </TouchableOpacity>
+                  <TextInput
+                    placeholder="Password"
+                    placeholderTextColor="#888"
+                    secureTextEntry
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                  />
 
-              <TouchableOpacity><Text style={styles.link}>Forgot Password?</Text></TouchableOpacity>
-              <TouchableOpacity><Text style={styles.link}>Sign Up</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+                    <Text style={styles.loginButtonText}>Log In</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity><Text style={styles.link}>Forgot Password?</Text></TouchableOpacity>
+                  <TouchableOpacity><Text style={styles.link}>Sign Up</Text></TouchableOpacity>
+                </>
+              )}
 
             </View>
           </TouchableWithoutFeedback>
@@ -63,7 +91,6 @@ export default function LoginModal({ visible, onClose }) {
     </Modal>
   );
 }
-
 
 const styles = StyleSheet.create({
   overlay: {
