@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from "react-native";
 import Octicons from "@expo/vector-icons/Octicons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { router } from "expo-router";
@@ -18,15 +18,18 @@ const Clockin_Home = () => {
     hydrateFromServer,
   } = useTimeStore();
 
-  const [tick, setTick] = useState(0); // local tick to trigger re-render every 1 sec
+  const [tick, setTick] = useState(0);
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [currentBreakId, setCurrentBreakId] = useState(null);
   const intervalRef = useRef(null);
 
-  // Hydrate Zustand store on mount → fetch "current time entry" from backend
+  // Hydrate Zustand store on mount and check break status
   useEffect(() => {
-    hydrateFromServer(session); 
+    hydrateFromServer(session);
+    checkBreakStatus();
   }, []);
 
-  // Start local 1-second re-render loop so elapsed time updates live
+  // Start local 1-second re-render loop
   useEffect(() => {
     intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(intervalRef.current);
@@ -34,11 +37,27 @@ const Clockin_Home = () => {
 
   const secondsElapsed = getElapsedSeconds();
 
+  // Check current break status from backend
+  const checkBreakStatus = async () => {
+    if (!session?.access_token) return;
+
+    const response = await apiCall(
+      session.access_token,
+      "time-entries/break/current",
+      "GET"
+    );
+
+    if (response.success && response.data?.on_break) {
+      setIsOnBreak(true);
+      setCurrentBreakId(response.data.current_break.id);
+    }
+  };
+
   const handleClockButtonPressed = () => {
     if (!isClockedIn) {
       router.push("/map_costcode_Screen");
     } else {
-      handleClockOut()
+      handleClockOut();
       return;
     }
   };
@@ -62,27 +81,67 @@ const Clockin_Home = () => {
 
     if (!response.success) {
       console.error("Clock-out failed:", response.message);
+      Alert.alert("Error", response.message || "Failed to clock out");
       return;
     }
 
     console.log("Clock-out success:", response);
-
     setClockOut();
+    
+    // Reset break state on clock out
+    setIsOnBreak(false);
+    setCurrentBreakId(null);
   };
 
+  const handleTakeBreak = async () => {
+    if (!session?.access_token) {
+      Alert.alert("Error", "Not authenticated");
+      return;
+    }
 
-  const handleTakeBreak = () => {
-    console.log("Take Break pressed");
+    if (!isOnBreak) {
+      // Start break
+      const response = await apiCall(
+        session.access_token,
+        "time-entries/break/start",
+        "POST",
+        {}
+      );
+
+      if (!response.success) {
+        console.error("Start break failed:", response.message);
+        Alert.alert("Error", response.message || "Failed to start break");
+        return;
+      }
+
+      console.log("Break started:", response.data);
+      setIsOnBreak(true);
+      setCurrentBreakId(response.data.break_id);
+    } else {
+      // End break
+      const response = await apiCall(
+        session.access_token,
+        "time-entries/break/end",
+        "POST",
+        {}
+      );
+
+      if (!response.success) {
+        console.error("End break failed:", response.message);
+        Alert.alert("Error", response.message || "Failed to end break");
+        return;
+      }
+
+      console.log("Break ended:", response.data.break_minutes, "minutes");
+      setIsOnBreak(false);
+      setCurrentBreakId(null);
+    }
   };
 
   const handleSwitchJob = () => {
     console.log("Switch Job pressed");
     router.push("/map_costcode_Screen");
   };
-
-  useEffect(() => {
-    return () => clearInterval(intervalRef.current);
-  }, []);
 
   const formatTime = () => {
     const hours = Math.floor(secondsElapsed / 3600)
@@ -125,8 +184,14 @@ const Clockin_Home = () => {
             style={styles.bottomButton}
             onPress={handleTakeBreak}
           >
-            <FontAwesome6 name="pause" size={28} color="#ff9500" />
-            <Text style={styles.bottomButtonText}>Take Break</Text>
+            <FontAwesome6 
+              name={isOnBreak ? "play" : "pause"} 
+              size={28} 
+              color={isOnBreak ? "#00cc00" : "#ff9500"} 
+            />
+            <Text style={styles.bottomButtonText}>
+              {isOnBreak ? "Resume" : "Take Break"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -160,7 +225,7 @@ const styles = StyleSheet.create({
   circleButton: {
     width: 225,
     height: 225,
-    borderRadius: 130,
+    borderRadius: 112.5, // Fixed: 225/2 for perfect circle
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
