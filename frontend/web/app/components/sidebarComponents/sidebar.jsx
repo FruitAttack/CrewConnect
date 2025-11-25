@@ -53,12 +53,21 @@ export default function Sidebar() {
     outputRange: [0, 12],
   });
 
-  const navItems = [
+  const publicNavItems = [
     { icon: "home-outline", label: "Home", route: homeRoute },
     { icon: "grid-outline", label: "Features", route: "/features" },
     { icon: "pricetags-outline", label: "Pricing", route: "/pricing" },
     { icon: "help-circle-outline", label: "Support", route: "/support" },
   ];
+
+  const privateNavItems = [
+    { icon: "construct-outline", label: "Labor", route: "/(app)/laborOverview" },
+    { icon: "cube-outline", label: "Materials", route: "/(app)/materialsOverview" },
+    { icon: "briefcase-outline", label: "Projects", route: "/(app)/projectsOverview" },
+    { icon: "shield-checkmark-outline", label: "Safety", route: "/(app)/safetyOverview" },
+  ];
+
+  const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
 
   function onPressLink(route) {
     router.push(route);
