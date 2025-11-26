@@ -1,8 +1,9 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 
-export default function Index() {
+/**
+ * This is the features page, where we can describe the functionality of the project to prospective/current users
+ */
+export default function Features() {
 
   return (
     <View style={styles.container}>

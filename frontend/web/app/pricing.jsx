@@ -1,8 +1,9 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 
-export default function Index() {
+/**
+ * Here any pricing info we have can be placed, and subscriptions can be made
+ */
+export default function Pricing() {
 
   return (
     <View style={styles.container}>

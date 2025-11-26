@@ -1,18 +1,17 @@
 import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
-
+ 
 /**
- * This is the home page, for users who aren't signed in
- * Here marketing material showing off the project can be displayed
+ * This is the overview for materials analytics
  */
-export default function Index() {
+export default function Dashboard() {
 
   return (
-    <View style={styles.container}>
-      {/* index page content */}
-      <View style={styles.mainContent}>
-
-      </View>
-    </View>
+        <View style={styles.container}>
+            {/* features page content */}
+            <View style={styles.mainContent}>
+              
+            </View>
+        </View>
   );
 }
 
