@@ -24,7 +24,7 @@ const DashboardLayout = () => {
         }
     >
       <Tabs.Screen 
-      name="index" 
+      name="(app_Screen)" 
       options={
             {   title: 'Apps', 
                 tabBarIcon: ({focused})=>
