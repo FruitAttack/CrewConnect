@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { apiCall } from "../utils/api";
 
 export const useTimeStore = create((set) => ({
   isClockedIn: false,
@@ -34,16 +35,13 @@ export const useTimeStore = create((set) => ({
   hydrateFromServer: async (session) => {
     if (!session?.access_token) return;
 
-    const res = await fetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/time-entries/current`,
-      {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      }
+    const response = await apiCall(
+      session.access_token,
+      "time-entries/current",
+      "GET"
     );
 
-    const data = await res.json();
-
-    if (!data.success || !data.data?.clock_in) {
+    if (!response.success || !response.data.current_entry?.clock_in) {
       set({
         isClockedIn: false,
         currentTimeEntryId: null,
@@ -54,8 +52,8 @@ export const useTimeStore = create((set) => ({
 
     set({
       isClockedIn: true,
-      currentTimeEntryId: data.data.time_entry_id,
-      clockInTimestamp: data.data.clock_in,
+      currentTimeEntryId: response.data.current_entry.id,
+      clockInTimestamp: response.data.current_entry.clock_in,
     });
   },
 }));

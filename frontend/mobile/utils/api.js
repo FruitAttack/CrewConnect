@@ -1,6 +1,6 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
-const API_URL = "http://172.20.10.6:5001"
+// const API_URL = "http://10.18.146.193:5001"
 
 export async function apiCall(token, route, method = 'GET', body = null) {
   try {
@@ -14,7 +14,7 @@ export async function apiCall(token, route, method = 'GET', body = null) {
     const options = { method, headers }
     if (body) options.body = JSON.stringify(body)
 
-    const response = await fetch(`${API_URL}/api/${route}`, options)
+    const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/api/${route}`, options)
 
     // Attempt JSON parse always
     let data = {}

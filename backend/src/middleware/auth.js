@@ -38,7 +38,7 @@ export const authenticate = async (req, res, next) => {
       .schema('app')
       .from('users')
       .select('*')
-      .eq('id', decoded.id)
+      .eq('id', decoded.sub)
       .eq('is_active', true)
       .single();
 

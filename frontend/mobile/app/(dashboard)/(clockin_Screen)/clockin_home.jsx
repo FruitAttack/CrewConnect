@@ -23,17 +23,24 @@ const Clockin_Home = () => {
   const [currentBreakId, setCurrentBreakId] = useState(null);
   const intervalRef = useRef(null);
 
-  // Hydrate Zustand store on mount and check break status
+  // Hydrate Zustand store on mount
   useEffect(() => {
     hydrateFromServer(session);
     checkBreakStatus();
   }, []);
 
-  // Start local 1-second re-render loop
+  // Start local 1-second re-render loop when clocked in and off break
   useEffect(() => {
-    intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000);
+    const shouldTick = isClockedIn && !isOnBreak;
+
+    if (shouldTick) {
+      intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000);
+    } else {
+      clearInterval(intervalRef.current);
+    }
+
     return () => clearInterval(intervalRef.current);
-  }, []);
+  }, [isClockedIn, isOnBreak]);
 
   const secondsElapsed = getElapsedSeconds();
 
@@ -87,7 +94,7 @@ const Clockin_Home = () => {
 
     console.log("Clock-out success:", response);
     setClockOut();
-    
+
     // Reset break state on clock out
     setIsOnBreak(false);
     setCurrentBreakId(null);
@@ -184,10 +191,10 @@ const Clockin_Home = () => {
             style={styles.bottomButton}
             onPress={handleTakeBreak}
           >
-            <FontAwesome6 
-              name={isOnBreak ? "play" : "pause"} 
-              size={28} 
-              color={isOnBreak ? "#00cc00" : "#ff9500"} 
+            <FontAwesome6
+              name={isOnBreak ? "play" : "pause"}
+              size={28}
+              color={isOnBreak ? "#00cc00" : "#ff9500"}
             />
             <Text style={styles.bottomButtonText}>
               {isOnBreak ? "Resume" : "Take Break"}
