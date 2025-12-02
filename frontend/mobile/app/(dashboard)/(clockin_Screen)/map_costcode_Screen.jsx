@@ -10,6 +10,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Platform,
+  Alert,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,7 +20,7 @@ import { useTimeStore } from "../../../store/timeStore";
 
 export default function ClockInDetail() {
   const { session } = useSession();
-  const setClockIn = useTimeStore((s) => s.setClockIn);
+  const doClockIn = useTimeStore((s) => s.doClockIn); // Use the new async action
 
   // Job Dropdown
   const [jobOpen, setJobOpen] = useState(false);
@@ -80,34 +81,13 @@ export default function ClockInDetail() {
       // notes: noteInput ?? null,
     };
 
-    if (!session?.access_token) {
-      console.error("No session token — user must log in again.");
-      return;
-    }
-
-    console.log("Making API CALL")
-    const response = await apiCall(
-      session.access_token,
-      "time-entries/clock-in",
-      "POST",
-      body
-    );
-    console.log(response)
+    const response = await doClockIn(session, body);
 
     if (!response.success) {
       console.log("Clock-in failed:", response.message);
-      alert(response.message || "Clock-in failed.");
+      Alert.alert("Clock-in Failed", response.message || "An unknown error occurred during clock-in.");
       return;
     }
-
-    const timeEntryId = response.data?.time_entry_id;
-    // const startTimestamp = response.data?.clock_in;
-    const startTimestamp = new Date().toISOString();
-
-    // Store in global Zustand
-    setClockIn(timeEntryId, startTimestamp);
-
-    // Return back to Home Clock screen
     router.back();
   };
 

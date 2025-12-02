@@ -11,22 +11,21 @@ const Clockin_Home = () => {
   const { session } = useSession();
   const {
     isClockedIn,
-    currentTimeEntryId,
-    clockInTimestamp,
-    getElapsedSeconds,
-    setClockOut,
+    currentTimeEntryId, // Still useful for context/debugging, though not used in API calls anymore
+    isOnBreak,
+    doClockOut, // Use the new store actions
+    doStartBreak,
+    doEndBreak,
     hydrateFromServer,
+    getElapsedSeconds,
   } = useTimeStore();
 
   const [tick, setTick] = useState(0);
-  const [isOnBreak, setIsOnBreak] = useState(false);
-  const [currentBreakId, setCurrentBreakId] = useState(null);
   const intervalRef = useRef(null);
 
   // Hydrate Zustand store on mount
   useEffect(() => {
     hydrateFromServer(session);
-    checkBreakStatus();
   }, []);
 
   // Start local 1-second re-render loop when clocked in and off break
@@ -44,22 +43,6 @@ const Clockin_Home = () => {
 
   const secondsElapsed = getElapsedSeconds();
 
-  // Check current break status from backend
-  const checkBreakStatus = async () => {
-    if (!session?.access_token) return;
-
-    const response = await apiCall(
-      session.access_token,
-      "time-entries/break/current",
-      "GET"
-    );
-
-    if (response.success && response.data?.on_break) {
-      setIsOnBreak(true);
-      setCurrentBreakId(response.data.current_break.id);
-    }
-  };
-
   const handleClockButtonPressed = () => {
     if (!isClockedIn) {
       router.push("/map_costcode_Screen");
@@ -70,78 +53,39 @@ const Clockin_Home = () => {
   };
 
   const handleClockOut = async () => {
-    const time_entry_id = currentTimeEntryId;
-    const body = {
-      time_entry_id,
+    // Collect data needed for the body (e.g., coordinates, notes)
+    const clockOutBody = {
       // latitude=
       // longitude=
       // break_minutes=0
       // notes=
     };
 
-    const response = await apiCall(
-      session.access_token,
-      "time-entries/clock-out",
-      "POST",
-      body
-    );
+    const response = await doClockOut(session, clockOutBody);
 
     if (!response.success) {
       console.error("Clock-out failed:", response.message);
       Alert.alert("Error", response.message || "Failed to clock out");
-      return;
     }
-
-    console.log("Clock-out success:", response);
-    setClockOut();
-
-    // Reset break state on clock out
-    setIsOnBreak(false);
-    setCurrentBreakId(null);
   };
 
   const handleTakeBreak = async () => {
-    if (!session?.access_token) {
-      Alert.alert("Error", "Not authenticated");
-      return;
+    let response;
+    if (!isOnBreak) {
+      response = await doStartBreak(session);
+      if (response.success) {
+        console.log("Break started:", response.data);
+      }
+    } else {
+      response = await doEndBreak(session);
+      if (response.success) {
+        console.log("Break ended:", response.data.break_minutes, "minutes");
+      }
     }
 
-    if (!isOnBreak) {
-      // Start break
-      const response = await apiCall(
-        session.access_token,
-        "time-entries/break/start",
-        "POST",
-        {}
-      );
-
-      if (!response.success) {
-        console.error("Start break failed:", response.message);
-        Alert.alert("Error", response.message || "Failed to start break");
-        return;
-      }
-
-      console.log("Break started:", response.data);
-      setIsOnBreak(true);
-      setCurrentBreakId(response.data.break_id);
-    } else {
-      // End break
-      const response = await apiCall(
-        session.access_token,
-        "time-entries/break/end",
-        "POST",
-        {}
-      );
-
-      if (!response.success) {
-        console.error("End break failed:", response.message);
-        Alert.alert("Error", response.message || "Failed to end break");
-        return;
-      }
-
-      console.log("Break ended:", response.data.break_minutes, "minutes");
-      setIsOnBreak(false);
-      setCurrentBreakId(null);
+    if (!response.success) {
+      console.error("Break action failed:", response.message);
+      Alert.alert("Error", response.message || `Failed to ${isOnBreak ? 'end' : 'start'} break`);
     }
   };
 

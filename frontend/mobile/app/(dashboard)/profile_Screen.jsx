@@ -4,8 +4,6 @@ import { useSession } from "../../utils/ctx";
 const Profile_Screen = () => {
   const { signOut, session, isLoading } = useSession();
 
-  console.log(session);
-
   const userEmail = session?.user?.email ?? "Not logged in";
   const userId = session?.user?.id ?? "";
 
