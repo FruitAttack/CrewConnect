@@ -1,15 +1,25 @@
 import { View, StyleSheet } from "react-native";
-import { Slot, useSegments } from "expo-router";
+import { Slot, usePathname } from "expo-router";
 import { SidebarProvider } from "./components/sidebarComponents/sidebarContext";
 import Sidebar from "./components/sidebarComponents/sidebar";
 import TopBar from "./components/topbarComponents/topbar";
 import { SessionProvider } from "../utils/ctx";
 
 export default function RootLayout() {
-  const segments = useSegments();
-  const page = segments[0] || "Home";
+  const pathname = usePathname(); 
+  const page = pathname.split("/")[1] || "";
 
-  const pageTitleMap = {"": "Home", features: "Features", pricing: "Pricing", support: "Support" };
+  const pageTitleMap = {
+    "": "Home",
+    features: "Features",
+    pricing: "Pricing",
+    support: "Support",
+    laborOverview: "Labor Overview",
+    materialsOverview: "Materials Overview",
+    projectsOverview: "Projects Overview",
+    safetyOverview: "Safety Overview",
+  };
+
   const title = `CrewConnect / ${pageTitleMap[page] || "Home"}`;
 
   return (
