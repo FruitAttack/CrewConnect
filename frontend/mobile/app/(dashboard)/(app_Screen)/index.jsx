@@ -1,0 +1,78 @@
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from 'react-native';
+import React from 'react';
+
+const tiles = [
+  { label: 'Daily Log', icon: require('../../../assets/icons/dailylog.png') },
+  { label: 'Reports', icon: require('../../../assets/icons/reports.png') },
+  { label: 'Schedule', icon: require('../../../assets/icons/schedule.png') },
+  { label: 'Materials', icon: require('../../../assets/icons/materials.png') },
+  { label: 'Equipment', icon: require('../../../assets/icons/equipment.png') },
+  { label: 'My Crew', icon: require('../../../assets/icons/myCrew.png') },
+  { label: 'Toolbox Talk', icon: require('../../../assets/icons/toolbox.png') },
+  { label: 'Observations', icon: require('../../../assets/icons/observation.png') },
+  { label: 'Contacts', icon: require('../../../assets/icons/contacts.png') },
+  { label: 'Change Order', icon: require('../../../assets/icons/change_order.png') },
+  { label: 'DVIR', icon: require('../../../assets/icons/dvir.png') },
+  { label: 'Gallery', icon: require('../../../assets/icons/photos.png') },
+];
+
+export default function AppHome() {
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Image source={require('../../../assets/CC_logo_nobackground.png')} style={styles.logo} />
+
+      <View style={styles.grid}>
+        {tiles.map((tile, i) => (
+          <TouchableOpacity key={i} style={styles.tile}>
+            <Image source={tile.icon} style={styles.icon} />
+            <Text style={styles.label}>{tile.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  logo: {
+    width: 110,
+    height: 110,
+    resizeMode: 'contain',
+    marginBottom: 20,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  tile: {
+    width: 110,
+    height: 110,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    margin: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  icon: {
+    width: 40,
+    height: 40,
+    marginBottom: 8,
+    resizeMode: 'contain',
+  },
+  label: {
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#333',
+  },
+});

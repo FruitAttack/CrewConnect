@@ -34,7 +34,7 @@ const LoginPage = () => {
       const session = await signIn(email, password);
 
       if (session) {
-        router.replace("/");
+        router.replace("/(clockin_Screen)/clockin_home");
       } else {
         setError("Login failed. No session returned.");
       }
