@@ -1,4 +1,4 @@
-import {View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
+import {View, Text, StyleSheet, } from "react-native";
 
 /**
  * This is the features page, where we can describe the functionality of the project to prospective/current users
