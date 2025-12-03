@@ -66,7 +66,9 @@ const DashboardLayout = () => {
             tabBarIcon: ({focused})=>
             (<Ionicons name="person" 
                 size={24} 
-                color={focused ? theme.lava : theme.dustyGrey} />)
+                color={focused ? theme.lava : theme.dustyGrey} />),
+          headerShown: true,
+          headerTitle: "My Profile"
         }
         } />
     </Tabs>

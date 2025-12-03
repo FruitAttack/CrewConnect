@@ -19,12 +19,12 @@ function RootNavigator() {
   return (
     <Stack>
       <Stack.Protected guard={!!session}>
-        <Stack.Screen name="(dashboard)" options={{ title: "My Dashboard" }} />
+        <Stack.Screen name="(dashboard)" options={{ headerShown: false }} />
         <Stack.Screen name="(clockin_Screen)" />
       </Stack.Protected>
 
       <Stack.Protected guard={!session}>
-        <Stack.Screen name="login" />
+        <Stack.Screen name="login" options={{headerShown: false}}/>
       </Stack.Protected>
     </Stack>
   );
