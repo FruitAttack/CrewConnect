@@ -12,7 +12,8 @@ import {
   getSecondsWorkedToday,
   getSecondsWorkedDay,
   getSecondsWorkedWeek,
-  getSecondsWorkedMonth
+  getSecondsWorkedMonth,
+  getSecondsWorkedYear
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -30,6 +31,7 @@ router.get('/seconds-today', getSecondsWorkedToday);
 router.get('/seconds-day', getSecondsWorkedDay);
 router.get('/seconds-week', getSecondsWorkedWeek);
 router.get('/seconds-month', getSecondsWorkedMonth);
+router.get('/seconds-year', getSecondsWorkedYear);
 
 // Geofencing
 router.get('/nearby-projects', getNearbyProjects);

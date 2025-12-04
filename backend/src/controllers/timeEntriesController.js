@@ -878,3 +878,116 @@ export async function getSecondsWorkedMonth(req, res) {
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+/**
+ * Get seconds worked for a year
+ * GET /api/time-entries/seconds-year?year=2025
+ */
+export async function getSecondsWorkedYear(req, res) {
+  try {
+    const userId = req.user?.id;
+    const { year } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const now = new Date();
+    const targetYear = year ? parseInt(year) : now.getFullYear();
+
+    const yearStart = new Date(targetYear, 0, 1);
+    yearStart.setHours(0, 0, 0, 0);
+
+    const yearEnd = new Date(targetYear, 11, 31);
+    yearEnd.setHours(23, 59, 59, 999);
+
+    // Get all time entries that overlap with this year
+    const { data: timeEntries, error: entriesError } = await supabase
+      .from('time_entries')
+      .select('id, clock_in, clock_out')
+      .eq('user_id', userId)
+      .or(`and(clock_in.lte.${yearEnd.toISOString()},clock_out.gte.${yearStart.toISOString()}),and(clock_in.lte.${yearEnd.toISOString()},clock_out.is.null)`);
+
+    if (entriesError) {
+      console.error('Get time entries error:', entriesError);
+      return res.status(500).json({ message: 'Failed to get time entries' });
+    }
+
+    // Get all breaks for these entries
+    const entryIds = timeEntries.map(e => e.id);
+    let breaks = [];
+
+    if (entryIds.length > 0) {
+      const { data: breakData, error: breaksError } = await supabase
+        .from('breaks')
+        .select('time_entry_id, break_start, break_end')
+        .in('time_entry_id', entryIds);
+
+      if (!breaksError && breakData) {
+        breaks = breakData;
+      }
+    }
+
+    // Calculate seconds for each month
+    const months = [];
+    let totalYearSeconds = 0;
+
+    for (let m = 0; m < 12; m++) {
+      const monthStart = new Date(targetYear, m, 1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const monthEnd = new Date(targetYear, m + 1, 0);
+      monthEnd.setHours(23, 59, 59, 999);
+
+      const effectiveEnd = monthEnd > now ? now : monthEnd;
+
+      let monthEntrySeconds = 0;
+      let monthBreakSeconds = 0;
+
+      // Sum entry time for this month
+      for (const entry of timeEntries) {
+        const clockIn = new Date(entry.clock_in);
+        const clockOut = entry.clock_out ? new Date(entry.clock_out) : now;
+
+        const effectiveStart = clockIn < monthStart ? monthStart : clockIn;
+        const entryEnd = clockOut > effectiveEnd ? effectiveEnd : clockOut;
+
+        if (effectiveStart < entryEnd) {
+          monthEntrySeconds += Math.floor((entryEnd - effectiveStart) / 1000);
+        }
+      }
+
+      // Sum break time for this month
+      for (const brk of breaks) {
+        const breakStart = new Date(brk.break_start);
+        const breakEnd = brk.break_end ? new Date(brk.break_end) : now;
+
+        const effectiveStart = breakStart < monthStart ? monthStart : breakStart;
+        const effectiveBrkEnd = breakEnd > effectiveEnd ? effectiveEnd : breakEnd;
+
+        if (effectiveStart < effectiveBrkEnd) {
+          monthBreakSeconds += Math.floor((effectiveBrkEnd - effectiveStart) / 1000);
+        }
+      }
+
+      const monthSeconds = monthEntrySeconds - monthBreakSeconds;
+      totalYearSeconds += monthSeconds;
+
+      months.push({
+        month: m + 1,
+        name: new Date(targetYear, m, 1).toLocaleString('default', { month: 'long' }),
+        seconds_worked: monthSeconds
+      });
+    }
+
+    return res.status(200).json({
+      year: targetYear,
+      total_seconds: totalYearSeconds,
+      months
+    });
+
+  } catch (err) {
+    console.error('Get seconds worked year error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
