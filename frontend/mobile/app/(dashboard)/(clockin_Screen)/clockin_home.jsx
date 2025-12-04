@@ -11,13 +11,12 @@ const Clockin_Home = () => {
   const { session } = useSession();
   const {
     isClockedIn,
-    currentTimeEntryId, // Still useful for context/debugging, though not used in API calls anymore
     isOnBreak,
-    doClockOut, // Use the new store actions
+    doClockOut,
     doStartBreak,
     doEndBreak,
     hydrateFromServer,
-    getElapsedSeconds,
+    getSecondsWorkedToday,
   } = useTimeStore();
 
   const [tick, setTick] = useState(0);
@@ -41,7 +40,7 @@ const Clockin_Home = () => {
     return () => clearInterval(intervalRef.current);
   }, [isClockedIn, isOnBreak]);
 
-  const secondsElapsed = getElapsedSeconds();
+  const secondsWorked = getSecondsWorkedToday();
 
   const handleClockButtonPressed = () => {
     if (!isClockedIn) {
@@ -89,19 +88,33 @@ const Clockin_Home = () => {
     }
   };
 
-  const handleSwitchJob = () => {
-    console.log("Switch Job pressed");
+  const handleSwitchJob = async () => {
+    // Collect data needed for the body (e.g., coordinates, notes)
+    const clockOutBody = {
+      // latitude=
+      // longitude=
+      // break_minutes=0
+      // notes=
+    };
+
+    const response = await doClockOut(session, clockOutBody);
+
+    if (!response.success) {
+      console.error("Clock-out failed:", response.message);
+      Alert.alert("Error", response.message || "Failed to clock out");
+    }
+    
     router.push("/map_costcode_Screen");
   };
 
   const formatTime = () => {
-    const hours = Math.floor(secondsElapsed / 3600)
+    const hours = Math.floor(secondsWorked / 3600)
       .toString()
       .padStart(2, "0");
-    const minutes = Math.floor((secondsElapsed % 3600) / 60)
+    const minutes = Math.floor((secondsWorked % 3600) / 60)
       .toString()
       .padStart(2, "0");
-    const seconds = (secondsElapsed % 60).toString().padStart(2, "0");
+    const seconds = (secondsWorked % 60).toString().padStart(2, "0");
 
     return `${hours}:${minutes}:${seconds}`;
   };

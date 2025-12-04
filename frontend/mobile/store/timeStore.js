@@ -4,17 +4,50 @@ import { apiCall } from "../utils/api";
 export const useTimeStore = create((set, get) => ({
   isClockedIn: false,
   currentTimeEntryId: null,
-  clockInTimestamp: null,
+
   isOnBreak: false,
   currentBreakId: null,
 
+  secondsWorkedToday: 0,
+  secondsWorkedShift: 0,
+
+  lastServerUpdateTimestamp: null,
+
   // --- Internal State Setters ---
-  _setClockInState: (entryId, timestamp) => {
-    console.log("⏰ STATE: Clocked In (ID:", entryId, ") at", timestamp);
+  _fetchWorkedSeconds: async (session) => {
+    if (!session?.access_token) return;
+
+    try {
+      // const shiftResp = await apiCall(
+      //   session.access_token,
+      //   "time-entries/seconds-worked-shift",
+      //   "GET"
+      // );
+      // const todayResp = await apiCall(
+      //   session.access_token,
+      //   "time-entries/seconds-worked-today",
+      //   "GET"
+      // );
+
+      // if (shiftResp.success)
+      //   set({ secondsWorkedShift: shiftResp.data.seconds });
+      // if (todayResp.success)
+      //   set({ secondsWorkedToday: todayResp.data.seconds });
+      set({
+      secondsWorkedShift: 120,
+      secondsWorkedToday: 60,
+      lastServerUpdateTimestamp: Date.now(),
+    });
+    } catch (err) {
+      console.error("Failed to fetch worked seconds:", err);
+    }
+  },
+
+  _setClockInState: (entryId) => {
+    console.log("⏰ STATE: Clocked In (ID:", entryId, ")");
     set({
       isClockedIn: true,
       currentTimeEntryId: entryId,
-      clockInTimestamp: timestamp,
     });
   },
 
@@ -23,10 +56,10 @@ export const useTimeStore = create((set, get) => ({
     set({
       isClockedIn: false,
       currentTimeEntryId: null,
-      clockInTimestamp: null,
-      // Also reset break state on clock out
       isOnBreak: false,
       currentBreakId: null,
+      secondsWorkedShift: 0,
+      lastServerUpdateTimestamp: null,
     });
   },
 
@@ -46,15 +79,30 @@ export const useTimeStore = create((set, get) => ({
     });
   },
 
-  // --- Utility Getters ---
-  getElapsedSeconds: () => {
-    const state = get(); // Use get() instead of useTimeStore.getState()
-    if (!state.clockInTimestamp) {
-      return 0;
-    }
+  getSecondsWorkedShift: () => {
+    const state = get();
+    if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
+      return state.secondsWorkedShift;
+
+    // If on break, do NOT add delta
+    if (state.isOnBreak) return state.secondsWorkedShift;
+
     const now = Date.now();
-    const start = new Date(state.clockInTimestamp).getTime();
-    return Math.floor((now - start) / 1000);
+    const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
+    return state.secondsWorkedShift + delta;
+  },
+
+  getSecondsWorkedToday: () => {
+    const state = get();
+    if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
+      return state.secondsWorkedToday;
+
+    // If on break, do NOT add delta
+    if (state.isOnBreak) return state.secondsWorkedToday;
+
+    const now = Date.now();
+    const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
+    return state.secondsWorkedToday + delta;
   },
 
   // --- API / ASYNC Actions ---
@@ -63,37 +111,27 @@ export const useTimeStore = create((set, get) => ({
   hydrateFromServer: async (session) => {
     if (!session?.access_token) return;
 
-    console.log("hydrateFromServer");
-
-    // Fetch current time entry status
-    const timeEntryResponse = await apiCall(
+    // Get current time entry
+    const entryResp = await apiCall(
       session.access_token,
       "time-entries/current",
       "GET"
     );
+    const breakResp = await apiCall(
+      session.access_token,
+      "time-entries/break/current",
+      "GET"
+    );
 
-    if (
-      timeEntryResponse.success &&
-      timeEntryResponse.data.current_entry?.clock_in
-    ) {
-      const entry = timeEntryResponse.data.current_entry;
-      get()._setClockInState(entry.id, entry.clock_in);
+    set({
+      isClockedIn: !!entryResp.data?.current_entry,
+      currentTimeEntryId: entryResp.data?.current_entry?.id || null,
+      isOnBreak: !!breakResp.data?.on_break,
+      currentBreakId: breakResp.data?.current_break?.id || null,
+    });
 
-      // Check break status if clocked in
-      const breakResponse = await apiCall(
-        session.access_token,
-        "time-entries/break/current",
-        "GET"
-      );
-
-      if (breakResponse.success && breakResponse.data?.on_break) {
-        get()._setBreakStartState(breakResponse.data.current_break.id);
-      } else {
-        get()._setBreakEndState();
-      }
-    } else {
-      get()._setClockOutState();
-    }
+    // Fetch authoritative worked seconds
+    await get()._fetchWorkedSeconds(session);
   },
 
   // 2. Clock In Action
@@ -109,13 +147,8 @@ export const useTimeStore = create((set, get) => ({
     );
 
     if (response.success) {
-      const timeEntryId = response.data?.time_entry_id;
-      const startTimestamp = response.data?.clock_in;
-      // You should use the timestamp from the server response if provided, otherwise Date.now().
-      get()._setClockInState(
-        timeEntryId,
-        startTimestamp || new Date().toISOString()
-      );
+      get()._setClockInState(response.data.time_entry_id);
+      await get()._fetchWorkedSeconds(session);
     }
     return response;
   },
@@ -124,6 +157,7 @@ export const useTimeStore = create((set, get) => ({
   doClockOut: async (session, body) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
+
     const state = get();
 
     if (!state.currentTimeEntryId)
@@ -139,6 +173,7 @@ export const useTimeStore = create((set, get) => ({
 
     if (response.success) {
       get()._setClockOutState();
+      await get()._fetchWorkedSeconds(session);
     }
     return response;
   },
@@ -157,6 +192,7 @@ export const useTimeStore = create((set, get) => ({
 
     if (response.success && response.data.break_id) {
       get()._setBreakStartState(response.data.break_id);
+      await get()._fetchWorkedSeconds(session);
     }
     return response;
   },
@@ -175,6 +211,7 @@ export const useTimeStore = create((set, get) => ({
 
     if (response.success) {
       get()._setBreakEndState();
+      await get()._fetchWorkedSeconds(session);
     }
     return response;
   },

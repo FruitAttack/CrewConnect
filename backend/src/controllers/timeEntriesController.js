@@ -218,6 +218,9 @@ export async function getTimeEntries(req, res) {
       query = query.lte('clock_in', end_date);
     }
 
+    console.log(start_date);
+    console.log(end_date);
+
     const { data, error } = await query;
 
     if (error) {
