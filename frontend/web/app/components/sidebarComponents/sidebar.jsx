@@ -1,27 +1,37 @@
 import React, { useRef, useEffect } from "react";
-import { View, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Easing,
+  useWindowDimensions,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSidebar } from "./sidebarContext";
 import { useSession } from "../../../utils/ctx";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COLLAPSED_WIDTH = 80;
-const EXPANDED_WIDTH = 240;
+const EXPANDED_MIN = 100;
+const EXPANDED_MAX = 220;
 const ANIM_DURATION = 220;
+const ICON_COLLAPSED_SIZE = 25;
+const LABEL_RESERVE = 80;
 
-/**
- * this is the sidebar for navigation
- * @returns a sidebar UI component
- */
 export default function Sidebar() {
   const router = useRouter();
   const { isExpanded, toggleSidebar } = useSidebar();
   const { session } = useSession();
 
   const homeRoute = session ? "/(app)/dashboard" : "/";
-
   const anim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
+
+  const { width: windowWidth } = useWindowDimensions();
+  const expandedWidth = Math.max(
+    EXPANDED_MIN,
+    Math.min(Math.floor(windowWidth * 0.32), EXPANDED_MAX)
+  );
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -32,22 +42,46 @@ export default function Sidebar() {
     }).start();
   }, [isExpanded, anim]);
 
+  // Animated values derived from the anim value and expandedWidth
   const sidebarWidth = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [COLLAPSED_WIDTH, EXPANDED_WIDTH],
+    outputRange: [COLLAPSED_WIDTH, expandedWidth],
   });
+
+  // Logo height scales with expandedWidth
+  const logoMaxHeight = Math.min(140, Math.round(expandedWidth * 0.55));
   const logoHeight = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [48, 140],
+    outputRange: [48, logoMaxHeight],
   });
-  const labelOpacity = anim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.3, 1],
-  });
+
+  // Label width grows from 0 to (expandedWidth - reserved space)
   const labelWidth = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, EXPANDED_WIDTH - 80],
+    outputRange: [0, Math.max(0, expandedWidth - LABEL_RESERVE)],
   });
+
+  // Label opacity
+  const labelOpacity = anim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 0.35, 1],
+  });
+
+  // Icon scaling
+  const iconExpandedSize = Math.round(Math.max(28, expandedWidth * 0.08));
+  const iconScale = iconExpandedSize / ICON_COLLAPSED_SIZE;
+  const animatedIconScale = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, iconScale],
+  });
+
+  // Animated font size for labels
+  const fontSizeExpanded = Math.round(Math.min(16, expandedWidth * 0.065));
+  const animatedFontSize = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, fontSizeExpanded],
+  });
+
   const paddingLeft = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 12],
@@ -80,10 +114,11 @@ export default function Sidebar() {
   return (
     <Animated.View style={[styles.sideBar, { width: sidebarWidth }]}>
       <View style={styles.sideBarItems}>
+        {/* Logo */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={onPressLogo}
-          style={{ width: "100%", alignItems: "center" }}
+          style={styles.logoWrap}
         >
           <Animated.Image
             source={require("../../../assets/images/CC_logo_nobackground.png")}
@@ -98,11 +133,26 @@ export default function Sidebar() {
           {navItems.map((item, idx) => (
             <TouchableOpacity
               key={idx}
-              style={styles.sideButton}
+              style={[
+                styles.sideButton,
+                isExpanded ? styles.sideButtonExpanded : styles.sideButtonCollapsed,
+              ]}
               onPress={() => onPressLink(item.route)}
               activeOpacity={0.7}
             >
-              <Ionicons name={item.icon} size={25} color="#FBFBFB" />
+              {/* Icon wrapper also scales and animates */}
+              <Animated.View
+                style={[
+                  styles.iconWrap,
+                  {
+                    transform: [{ scale: animatedIconScale }],
+                  },
+                ]}
+              >
+                <Ionicons name={item.icon} size={ICON_COLLAPSED_SIZE} color="#FBFBFB" />
+              </Animated.View>
+
+              {/* Animated label area */}
               <Animated.View
                 style={{
                   overflow: "hidden",
@@ -112,7 +162,10 @@ export default function Sidebar() {
                 }}
               >
                 <Animated.Text
-                  style={[styles.sideButtonText, { opacity: labelOpacity }]}
+                  style={[
+                    styles.sideButtonText,
+                    { opacity: labelOpacity, fontSize: animatedFontSize },
+                  ]}
                   numberOfLines={1}
                 >
                   {item.label}
@@ -124,6 +177,7 @@ export default function Sidebar() {
 
         <View style={{ flex: 1 }} />
 
+        {/* Toggle sidebar button */}
         <View style={styles.toggleWrap}>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -151,9 +205,6 @@ export default function Sidebar() {
   );
 }
 
-/**
- * sidebar styles
- */
 const styles = StyleSheet.create({
   sideBar: {
     backgroundColor: "#161519",
@@ -164,6 +215,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: "center",
     height: "100%",
+  },
+  logoWrap: {
+    width: "100%",
+    alignItems: "center",
   },
   logo: {
     width: "70%",
@@ -178,10 +233,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 8,
   },
+  sideButtonCollapsed: {
+    justifyContent: "center",
+  },
+  sideButtonExpanded: {
+    justifyContent: "flex-start",
+  },
+  iconWrap: {
+    width: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sideButtonText: {
     color: "#FBFBFB",
     marginLeft: 12,
-    fontSize: 16,
   },
   toggleWrap: {
     width: "100%",

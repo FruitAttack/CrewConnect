@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, Slot } from "expo-router";
 import { useSession } from "../../utils/ctx.jsx";
 
 export default function ProtectedLayout({ children }) {
@@ -16,5 +16,5 @@ export default function ProtectedLayout({ children }) {
     return null;
   }
 
-  return <>{children}</>;
+  return <Slot/>;
 }

@@ -22,7 +22,7 @@ export default function Support() {
             Learn the basics of navigating the system, creating content, and exploring
             the different features our app will offer. These placeholder steps represent
             what our real onboarding tutorial will become:
-            {"\n\n"}• Step 1: Create an account (coming soon!){"\n"}
+            {"\n\n"}• Step 1: Create an account{"\n"}
             • Step 2: Explore your dashboard{"\n"}
             • Step 3: Manage your projects{"\n"}
             • Step 4: Customize your workspace
@@ -34,24 +34,17 @@ export default function Support() {
           <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
 
           <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>✨ When will full support be available?</Text>
+            <Text style={styles.faqQuestion}>When will full support be available?</Text>
             <Text style={styles.faqAnswer}>
-              Once we finalize the core features and roll out our first public deployment.
+              Over the next semester, support functionality will be implemented.
             </Text>
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>🚧 Is this the final version of the app?</Text>
+            <Text style={styles.faqQuestion}>How do I report bugs?</Text>
             <Text style={styles.faqAnswer}>
-              Nope! This is an early dev build. Many features are being actively developed.
-            </Text>
-          </View>
-
-          <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>🐞 How do I report bugs?</Text>
-            <Text style={styles.faqAnswer}>
-              For now, bug reporting will be through direct messages or in-person communication.
-              The in-app reporting system will be added soon.
+              How did you get access to this? This isn't being run on a server! Anyway bug reporting isn't
+              implemented yet.
             </Text>
           </View>
         </View>
@@ -61,8 +54,7 @@ export default function Support() {
           <Text style={styles.sectionTitle}>Contact the Developers</Text>
           <Text style={styles.paragraph}>
             In the final version, this section will include support tickets,
-            automated logs, and ways to submit feature suggestions.  
-            For now, these buttons are placeholders.
+            feedback forms and contact information, for now these are placeholders and do nothing.
           </Text>
 
           <TouchableOpacity style={styles.button}>
