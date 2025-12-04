@@ -382,3 +382,73 @@ export async function deleteTimeEntry(req, res) {
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+/**
+ * Get total seconds worked for current/active shift
+ * GET /api/time-entries/seconds-shift
+ */
+export async function getSecondsWorkedShift(req, res) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const now = new Date();
+
+    // Get the active time entry (no clock_out)
+    const { data: activeEntry, error: entryError } = await supabase
+      .from('time_entries')
+      .select('id, clock_in, clock_out')
+      .eq('user_id', userId)
+      .is('clock_out', null)
+      .order('clock_in', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // No active shift
+    if (entryError || !activeEntry) {
+      return res.status(200).json({
+        seconds_worked_shift: 0,
+        total_entry_seconds: 0,
+        total_break_seconds: 0,
+        is_clocked_in: false
+      });
+    }
+
+    // Calculate shift seconds
+    const clockIn = new Date(activeEntry.clock_in);
+    const totalEntrySeconds = Math.floor((now - clockIn) / 1000);
+
+    // Get breaks for this shift
+    const { data: breaks, error: breaksError } = await supabase
+      .from('breaks')
+      .select('break_start, break_end')
+      .eq('time_entry_id', activeEntry.id);
+
+    let totalBreakSeconds = 0;
+
+    if (!breaksError && breaks) {
+      for (const brk of breaks) {
+        const breakStart = new Date(brk.break_start);
+        const breakEnd = brk.break_end ? new Date(brk.break_end) : now;
+        totalBreakSeconds += Math.floor((breakEnd - breakStart) / 1000);
+      }
+    }
+
+    const secondsWorkedShift = totalEntrySeconds - totalBreakSeconds;
+
+    return res.status(200).json({
+      seconds_worked_shift: secondsWorkedShift,
+      total_entry_seconds: totalEntrySeconds,
+      total_break_seconds: totalBreakSeconds,
+      is_clocked_in: true,
+      shift_start: activeEntry.clock_in
+    });
+
+  } catch (err) {
+    console.error('Get seconds worked shift error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
