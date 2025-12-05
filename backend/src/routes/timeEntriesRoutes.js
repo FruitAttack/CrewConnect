@@ -7,7 +7,13 @@ import {
   getNearbyProjects,
   validateGeofence,
   updateTimeEntry,
-  deleteTimeEntry
+  deleteTimeEntry,
+  getSecondsWorkedShift,
+  getSecondsWorkedToday,
+  getSecondsWorkedDay,
+  getSecondsWorkedWeek,
+  getSecondsWorkedMonth,
+  getSecondsWorkedYear
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -20,6 +26,12 @@ router.use(authenticate);
 router.post('/clock-in', clockIn);
 router.post('/clock-out', clockOut);
 router.get('/current', getCurrentTimeEntry);
+router.get('/seconds-shift', getSecondsWorkedShift);
+router.get('/seconds-today', getSecondsWorkedToday);
+router.get('/seconds-day', getSecondsWorkedDay);
+router.get('/seconds-week', getSecondsWorkedWeek);
+router.get('/seconds-month', getSecondsWorkedMonth);
+router.get('/seconds-year', getSecondsWorkedYear);
 
 // Geofencing
 router.get('/nearby-projects', getNearbyProjects);
