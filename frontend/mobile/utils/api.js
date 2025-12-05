@@ -1,32 +1,46 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
-const API_URL = "http://192.168.86.22:5001"
+// const API_URL = "http://10.18.146.193:5001"
 
-export async function apiCall(route, method = 'GET', body = null) {
+export async function apiCall(token, route, method = 'GET', body = null) {
   try {
-    const options = { method, headers: { 'Content-Type': 'application/json' } }
+    const headers = { 'Content-Type': 'application/json' }
+
+    // Add Authorization header only if token provided
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const options = { method, headers }
     if (body) options.body = JSON.stringify(body)
 
-    const response = await fetch(`${API_URL}/api/${route}`, options)
+    const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/api/${route}`, options)
 
-    // Try to parse the JSON body even if response is not OK
+    // Attempt JSON parse always
     let data = {}
     try {
       data = await response.json()
-    } catch (err) {
-      // Ignore JSON parse errors
-    }
+    } catch {}
 
     if (!response.ok) {
       return {
         success: false,
-        message: data.message || `HTTP error ${response.status}: ${response.statusText}`
+        message:
+          data.message ||
+          `HTTP error ${response.status}: ${response.statusText}`
       }
     }
 
-    return { success: true, message: "Successfully got data", data }
+    return {
+      success: true,
+      message: 'Successfully got data',
+      data
+    }
 
   } catch (error) {
-    return { success: false, message: "Error fetching data: " + error.message }
+    return {
+      success: false,
+      message: 'Error fetching data: ' + error.message
+    }
   }
 }

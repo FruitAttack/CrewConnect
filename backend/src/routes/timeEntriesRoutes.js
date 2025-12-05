@@ -13,7 +13,11 @@ import {
   getSecondsWorkedDay,
   getSecondsWorkedWeek,
   getSecondsWorkedMonth,
-  getSecondsWorkedYear
+  getSecondsWorkedYear,
+  startBreak,
+  endBreak,
+  getCurrentBreak,
+  updateCostCode
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -33,11 +37,19 @@ router.get('/seconds-week', getSecondsWorkedWeek);
 router.get('/seconds-month', getSecondsWorkedMonth);
 router.get('/seconds-year', getSecondsWorkedYear);
 
+// Break management
+router.post('/break/start', startBreak);
+router.post('/break/end', endBreak);
+router.get('/break/current', getCurrentBreak);
+
+// Cost code management - MUST BE BEFORE /:id routes!
+router.put('/update-cost-code', updateCostCode);
+
 // Geofencing
 router.get('/nearby-projects', getNearbyProjects);
 router.post('/validate-geofence', validateGeofence);
 
-// CRUD operations
+// CRUD operations - parameterized routes go LAST
 router.get('/', getTimeEntries);
 router.put('/:id', updateTimeEntry);
 router.delete('/:id', deleteTimeEntry);

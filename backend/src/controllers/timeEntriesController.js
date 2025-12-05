@@ -21,12 +21,12 @@ export async function clockIn(req, res) {
       notes 
     } = req.body;
 
-    // Validate required fields
-    if (!project_id || !cost_code_id) {
+    // Validate required fields - cost_code_id is now optional
+    if (!project_id) {
       return res.status(400).json({ 
-        message: 'project_id and cost_code_id are required' 
+        message: 'project_id is required' 
       });
-    }
+}
 
     // Get user ID from authenticated request
     const userId = req.user?.id;
@@ -84,6 +84,7 @@ export async function clockIn(req, res) {
  */
 export async function clockOut(req, res) {
   try {
+    const userId = req.user?.id;  // Make sure this exists
     const { 
       time_entry_id,
       latitude,
@@ -91,6 +92,10 @@ export async function clockOut(req, res) {
       break_minutes,
       notes
     } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
 
     if (!time_entry_id) {
       return res.status(400).json({ 
@@ -102,6 +107,7 @@ export async function clockOut(req, res) {
     const { data, error } = await supabase
       .schema('app')
       .rpc('clock_out', {
+        p_user_id: userId,  // ADD THIS LINE
         p_time_entry_id: time_entry_id,
         p_lat: latitude || null,
         p_lng: longitude || null,
@@ -211,6 +217,9 @@ export async function getTimeEntries(req, res) {
     if (end_date) {
       query = query.lte('clock_in', end_date);
     }
+
+    console.log(start_date);
+    console.log(end_date);
 
     const { data, error } = await query;
 
@@ -988,6 +997,192 @@ export async function getSecondsWorkedYear(req, res) {
 
   } catch (err) {
     console.error('Get seconds worked year error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Start a break
+ * POST /api/time-entries/break/start
+ */
+export async function startBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+    const { break_type } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('start_break', {
+        p_user_id: userId,
+        p_break_type: break_type || 'standard'
+      });
+
+    if (error) {
+      console.error('Start break error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ message: result.error_message });
+    }
+
+    return res.status(201).json({
+      message: 'Break started',
+      break_id: result.break_id
+    });
+
+  } catch (err) {
+    console.error('Start break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * End a break
+ * POST /api/time-entries/break/end
+ */
+export async function endBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('end_break', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('End break error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    const result = data[0];
+
+    if (!result.success) {
+      return res.status(400).json({ message: result.error_message });
+    }
+
+    return res.status(200).json({
+      message: 'Break ended',
+      break_minutes: result.break_minutes
+    });
+
+  } catch (err) {
+    console.error('End break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Get current break status
+ * GET /api/time-entries/break/current
+ */
+export async function getCurrentBreak(req, res) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const { data, error } = await supabase
+      .schema('app')
+      .rpc('get_current_break', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('Get current break error:', error);
+      return res.status(500).json({ message: 'Failed to get break status' });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(200).json({
+        on_break: false,
+        current_break: null
+      });
+    }
+
+    return res.status(200).json({
+      on_break: true,
+      current_break: data[0]
+    });
+
+  } catch (err) {
+    console.error('Get current break error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
+ * Update cost code on open time entry
+ * PUT /api/time-entries/update-cost-code
+ */
+export async function updateCostCode(req, res) {
+  console.log('=== UPDATE COST CODE CALLED ===');
+  console.log('Body:', req.body);
+  console.log('User ID:', req.user?.id);
+  
+  try {
+    const userId = req.user?.id;
+    const { time_entry_id, cost_code_id, equipment_id } = req.body;
+
+    if (!userId || !time_entry_id || !cost_code_id) {
+      console.log('Validation failed');
+      return res.status(400).json({ 
+        message: 'time_entry_id and cost_code_id are required' 
+      });
+    }
+
+    console.log('About to update:', { time_entry_id, cost_code_id, userId });
+
+    // BYPASS RPC - Use direct Supabase update instead
+    const updateData = { cost_code_id: cost_code_id };
+    if (equipment_id) {
+      updateData.equipment_id = equipment_id;
+    }
+
+    const { data, error } = await supabase
+      .from('time_entries')
+      .update(updateData)
+      .eq('id', time_entry_id)
+      .eq('user_id', userId)
+      .is('clock_out', null)
+      .select();
+
+    console.log('Update result - data:', data);
+    console.log('Update result - error:', error);
+
+    if (error) {
+      console.error('Update cost code error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (!data || data.length === 0) {
+      console.log('No rows updated');
+      return res.status(404).json({ 
+        message: 'Time entry not found or already closed' 
+      });
+    }
+
+    console.log('Success! Updated entry:', data[0]);
+    return res.status(200).json({
+      message: 'Cost code updated successfully',
+      updated_entry: data[0]
+    });
+
+  } catch (err) {
+    console.error('Update cost code error:', err);
     return res.status(500).json({ message: 'Server error' });
   }
 }
