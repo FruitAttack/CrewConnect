@@ -84,7 +84,10 @@ const Clockin_Home = () => {
 
     if (!response.success) {
       console.error("Break action failed:", response.message);
-      Alert.alert("Error", response.message || `Failed to ${isOnBreak ? 'end' : 'start'} break`);
+      Alert.alert(
+        "Error",
+        response.message || `Failed to ${isOnBreak ? "end" : "start"} break`
+      );
     }
   };
 
@@ -103,7 +106,7 @@ const Clockin_Home = () => {
       console.error("Clock-out failed:", response.message);
       Alert.alert("Error", response.message || "Failed to clock out");
     }
-    
+
     router.push("/map_costcode_Screen");
   };
 

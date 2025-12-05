@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, TextInput } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, ScrollView } from "react-native";
 import { useSession } from "../../utils/ctx";
 import { Colors } from "../../constants/Colors";
 
@@ -11,7 +11,11 @@ const Profile_Screen = () => {
   const id = user?.id?? "";
   const phoneNum = user?.phone?? "";
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      style={{ flex: 1 }}
+      keyboardShouldPersistTaps="handled"
+    >
       
       {/* ---- Gradient Header ---- */}
      
@@ -48,7 +52,7 @@ const Profile_Screen = () => {
           {isLoading ? "Logging out..." : "Logout"}
         </Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 };
 
@@ -56,7 +60,7 @@ export default Profile_Screen;
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: Colors.light.snowWhite,
     alignItems: "center",
     paddingTop: 80,
