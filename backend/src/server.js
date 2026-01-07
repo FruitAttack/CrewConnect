@@ -10,6 +10,7 @@ import equipmentRoutes from './routes/equipmentRoutes.js';
 import employeeAssignmentsRoutes from './routes/employeeAssignmentsRoutes.js';
 import timeEntriesRoutes from './routes/timeEntriesRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
+import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/equipment", equipmentRoutes);
 app.use("/api/employee-assignments", employeeAssignmentsRoutes);
 app.use("/api/time-entries", timeEntriesRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/daily-production", dailyProductionRoutes);
 
 // Health check
 app.get("/", (req, res) => {
@@ -44,7 +46,8 @@ app.get("/", (req, res) => {
       equipment: "/api/equipment",
       employeeAssignments: "/api/employee-assignments",
       timeEntries: "/api/time-entries",
-      reports: "/api/reports"
+      reports: "/api/reports",
+      dailyProduction: "/api/daily-production"
     }
   });
 });

@@ -197,3 +197,155 @@ export async function getWageHistory(req, res) {
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+// Budget vs Actual report
+export const getBudgetVsActual = async (req, res) => {
+  try {
+    const { company_id } = req.user;
+    const { project_id, cost_code_id } = req.query;
+
+    let query = supabase
+      .from('v_budget_vs_actual')
+      .select('*')
+      .eq('company_id', company_id);
+
+    if (project_id) query = query.eq('project_id', project_id);
+    if (cost_code_id) query = query.eq('cost_code_id', cost_code_id);
+
+    const { data, error } = await query.order('project_name').order('cost_code');
+
+    if (error) throw error;
+
+    // Calculate company-wide totals
+    const totals = data.reduce((acc, row) => {
+      acc.total_budgeted_hours += parseFloat(row.budgeted_hours) || 0;
+      acc.total_budgeted_labor_cost += parseFloat(row.budgeted_labor_cost) || 0;
+      acc.total_budgeted_quantity += parseFloat(row.budgeted_quantity) || 0;
+      acc.total_actual_hours += parseFloat(row.actual_hours) || 0;
+      acc.total_actual_labor_cost += parseFloat(row.actual_labor_cost) || 0;
+      acc.total_actual_quantity += parseFloat(row.actual_quantity) || 0;
+      return acc;
+    }, {
+      total_budgeted_hours: 0,
+      total_budgeted_labor_cost: 0,
+      total_budgeted_quantity: 0,
+      total_actual_hours: 0,
+      total_actual_labor_cost: 0,
+      total_actual_quantity: 0
+    });
+
+    // Calculate variances and percentages
+    totals.hours_variance = totals.total_budgeted_hours - totals.total_actual_hours;
+    totals.labor_cost_variance = totals.total_budgeted_labor_cost - totals.total_actual_labor_cost;
+    totals.hours_percent_complete = totals.total_budgeted_hours > 0
+      ? Math.round((totals.total_actual_hours / totals.total_budgeted_hours) * 100 * 100) / 100
+      : 0;
+    totals.cost_percent_complete = totals.total_budgeted_labor_cost > 0
+      ? Math.round((totals.total_actual_labor_cost / totals.total_budgeted_labor_cost) * 100 * 100) / 100
+      : 0;
+
+    res.json({
+      totals,
+      details: data
+    });
+  } catch (error) {
+    console.error('Get budget vs actual error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Production report (quantities)
+export const getProductionReport = async (req, res) => {
+  try {
+    const { company_id } = req.user;
+    const { project_id, start_date, end_date } = req.query;
+
+    // Get production from view
+    let query = supabase
+      .from('v_actual_production')
+      .select('*')
+      .eq('company_id', company_id);
+
+    if (project_id) query = query.eq('project_id', project_id);
+
+    const { data: productionData, error: productionError } = await query;
+
+    if (productionError) throw productionError;
+
+    // Get daily breakdown if date filters provided
+    let dailyData = null;
+    if (start_date || end_date) {
+      let dailyQuery = supabase
+        .from('daily_production')
+        .select(`
+          *,
+          project:projects(id, name),
+          cost_code:cost_codes(id, code, name, unit_of_measure),
+          entered_by_user:users!daily_production_entered_by_fkey(id, full_name)
+        `)
+        .eq('company_id', company_id)
+        .order('production_date', { ascending: false });
+
+      if (project_id) dailyQuery = dailyQuery.eq('project_id', project_id);
+      if (start_date) dailyQuery = dailyQuery.gte('production_date', start_date);
+      if (end_date) dailyQuery = dailyQuery.lte('production_date', end_date);
+
+      const { data, error } = await dailyQuery;
+      if (error) throw error;
+      dailyData = data;
+    }
+
+    res.json({
+      summary: productionData,
+      daily: dailyData
+    });
+  } catch (error) {
+    console.error('Get production report error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Labor cost report
+export const getLaborCostReport = async (req, res) => {
+  try {
+    const { company_id } = req.user;
+    const { project_id, start_date, end_date } = req.query;
+
+    // Get labor costs from view
+    let query = supabase
+      .from('v_actual_labor_costs')
+      .select('*')
+      .eq('company_id', company_id);
+
+    if (project_id) query = query.eq('project_id', project_id);
+
+    const { data, error } = await query.order('project_name').order('cost_code');
+
+    if (error) throw error;
+
+    // Calculate totals
+    const totals = data.reduce((acc, row) => {
+      acc.total_hours += parseFloat(row.actual_hours) || 0;
+      acc.total_labor_cost += parseFloat(row.actual_labor_cost) || 0;
+      acc.total_workers += parseInt(row.worker_count) || 0;
+      return acc;
+    }, {
+      total_hours: 0,
+      total_labor_cost: 0,
+      total_workers: 0
+    });
+
+    // Calculate average hourly rate
+    totals.average_hourly_rate = totals.total_hours > 0
+      ? Math.round((totals.total_labor_cost / totals.total_hours) * 100) / 100
+      : 0;
+
+    res.json({
+      totals,
+      details: data
+    });
+  } catch (error) {
+    console.error('Get labor cost report error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
