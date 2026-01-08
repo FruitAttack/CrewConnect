@@ -10,45 +10,51 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useSession } from "../utils/ctx";
-import { apiCall } from "../utils/api";
 
-const LoginPage = () => {
+const SignUpPage = () => {
+  const { signUp, isLoading } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { signIn, isLoading } = useSession();
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
   // Setup username and password for ease of testing
   useEffect(() => {
-    setEmail("u0514450@gmail.com");
-    setPassword("123");
+    setEmail("joelemoffatt@gmail.com");
+    setPassword("123456");
+    setConfirmPassword("123456");
   }, []);
 
-  const handleLogin = async () => {
-    console.log("Email:", email);
-    console.log("Password:", password);
-
+  const handleSignUp = async () => {
     setError("");
 
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    // Validate password is not empty
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     try {
-      const session = await signIn(email, password);
+      const session = await signUp(email, password);
 
       if (session) {
         router.replace("/(clockin_Screen)/clockin_home");
       } else {
-        setError("Login failed. No session returned.");
+        setError("Sign up failed. No session returned.");
       }
     } catch (err) {
-      setError(err.message || "Login failed.");
+      setError(err.message || "Sign up failed.");
     }
   };
 
-  const handleForgotPassword = async () => {
-    console.log("handleForgotPassword");
-  };
-
-  const handleSignUp = async () => {
-    router.push("/sign_up");
+  const handleBackToLogin = async () => {
+    router.back();
   };
 
   return (
@@ -93,35 +99,44 @@ const LoginPage = () => {
           />
         </View>
 
+        {/* Confirm Password Field */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Confirm Password</Text>
+          <TextInput
+            style={[styles.input, isLoading && styles.inputDisabled]}
+            placeholder="Confirm Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            editable={!isLoading}
+          />
+        </View>
+
         {error ? (
           <Text style={{ color: "red", marginBottom: 10 }}>{error}</Text>
         ) : null}
 
-        {/* Login Button */}
+        {/* Sign Up Button */}
         <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleLogin}
+          onPress={handleSignUp}
           disabled={isLoading}
         >
           <Text style={styles.buttonText}>
-            {isLoading ? "Logging in..." : "Login"}
+            {isLoading ? "Signing up..." : "Sign Up"}
           </Text>
         </TouchableOpacity>
 
-        {/* Forgot Password */}
-        <TouchableOpacity onPress={handleForgotPassword}>
-          <Text style={styles.linkText}>Forgot Password?</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={handleSignUp}>
-          <Text style={styles.linkText}>Sign Up</Text>
+        <TouchableOpacity onPress={handleBackToLogin}>
+          <Text style={styles.linkText}>Back to Login</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
-export default LoginPage;
+export default SignUpPage;
 
 const styles = StyleSheet.create({
   safeArea: {
