@@ -1,4 +1,4 @@
-import supabase from '../config/supabase.js';
+import { supabase } from '../utils/supabase.js';
 
 // Clock in
 export const clockIn = async (req, res) => {

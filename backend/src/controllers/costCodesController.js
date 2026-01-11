@@ -1,4 +1,4 @@
-import supabase from '../config/supabase.js';
+import { supabase } from '../utils/supabase.js';
 
 // Get all cost codes for the company
 export const getAllCostCodes = async (req, res) => {

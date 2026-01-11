@@ -1,4 +1,4 @@
-import supabase from '../config/supabase.js';
+import { supabase } from '../utils/supabase.js';
 
 // Get all daily production entries for the user's company
 export const getAllDailyProduction = async (req, res) => {

@@ -1,7 +1,6 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
 // const API_URL = "http://10.18.146.193:5001"
-
 export async function apiCall(token, route, method = 'GET', body = null) {
   try {
     const headers = { 'Content-Type': 'application/json' }

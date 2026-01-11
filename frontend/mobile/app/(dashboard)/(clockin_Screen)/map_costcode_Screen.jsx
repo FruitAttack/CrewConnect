@@ -53,43 +53,37 @@ export default function ClockInDetail() {
   const [notes, setNotes] = useState("");
 
   const handleStart = async () => {
-    // Validate you selected a job/costCode at least
-    if (!job || !costCode) {
-      alert("Please select a Job and Cost Code.");
-      return;
-    }
+  // Validate you selected a job/costCode at least
+  if (!job || !costCode) {
+    Alert.alert("Validation Error", "Please select a Job and Cost Code.");
+    return;
+  }
 
-    if (!session?.access_token) {
-      alert("You are not logged in.");
-      return;
-    }
+  if (!session?.access_token) {
+    Alert.alert("Authentication Error", "You are not logged in.");
+    return;
+  }
 
-    // const body = {
-    //   project_id: job,
-    //   cost_code_id: costCode,
-    //   equipment_id: equipment ?? null,
-    //   notes: notes ?? null,
-    // };
-    const selectedProjectId = "f190e26e-4544-425d-8b8c-9f27fce5fb87"; // Lot 42 – Phase 1
-    const selectedCostCodeId = "cca3e163-efef-44a3-a46b-ce78cf32934c"; // Sewer
-    const body = {
-      project_id: selectedProjectId,
-      cost_code_id: selectedCostCodeId,
-      // equipment_id: equipmentId ?? null,
-      // latitude: position?.lat ?? null,
-      // longitude: position?.lng ?? null,
-      // notes: noteInput ?? null,
-    };
-
-    const response = await doClockIn(session, body);
-
-    if (!response.success) {
-      console.log("Clock-in failed:", response.message);
-      Alert.alert("Clock-in Failed", response.message || "An unknown error occurred during clock-in.");
-      return;
-    }
-    router.back();
+  // Build the request body
+  const body = {
+    job_id: job,
+    cost_code_id: costCode,
+    equipment_id: equipment || null, 
+    notes: notes.trim() || null, 
   };
+
+  const response = await doClockIn(session, body);
+
+  if (!response.success) {
+    console.log("Clock-in failed:", response.message);
+    Alert.alert("Clock-in Failed", response.message || "An unknown error occurred during clock-in.");
+    return;
+  }
+
+  Alert.alert("Success", "Clocked in successfully!", [
+    { text: "OK", onPress: () => router.back() }
+  ]);
+};
 
   return (
     <SafeAreaView style={styles.safeArea}>
