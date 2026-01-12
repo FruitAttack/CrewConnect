@@ -7,7 +7,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 const DashboardLayout = () => {
   const colorScheme = useColorScheme()
-  const theme = Colors[colorScheme]
+  const theme = Colors[colorScheme] || Colors.light
   return (
     <Tabs
         screenOptions={
