@@ -10,6 +10,7 @@ const DashboardLayout = () => {
   const theme = Colors[colorScheme] || Colors.light
   return (
     <Tabs
+        initialRouteName="(clockin_Screen)"
         screenOptions={
             {
                 headerShown: false, 

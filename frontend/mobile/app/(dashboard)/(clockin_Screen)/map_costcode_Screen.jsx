@@ -42,6 +42,7 @@ export default function ClockInDetail() {
   const [loadingEquip, setLoadingEquip] = useState(true);
 
   const [notes, setNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ------------------ Load Projects ------------------
   useEffect(() => {
@@ -109,10 +110,10 @@ export default function ClockInDetail() {
           if (Array.isArray(costCodesData) && costCodesData.length > 0) {
             setCostItems(
               costCodesData
-.filter(c => c.cost_code && c.cost_code.active !== false)
-.map((c) => ({
-  label: `${c.cost_code.code} - ${c.cost_code.name}`,
-  value: c.cost_code.id,
+                .filter(c => c.cost_code && c.cost_code.active !== false)
+                .map((c) => ({
+                  label: `${c.cost_code.code} - ${c.cost_code.name}`,
+                  value: c.cost_code.id,
                 }))
             );
           } else {
@@ -195,7 +196,12 @@ export default function ClockInDetail() {
       return;
     }
 
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     try {
+      console.log("Clocking in with:", { project_id: job, cost_code_id: costCode });
+      
       const response = await doClockIn(session, {
         project_id: job,
         cost_code_id: costCode,
@@ -203,17 +209,20 @@ export default function ClockInDetail() {
         notes: notes.trim() || null,
       });
 
+      console.log("Clock-in response:", response);
+
       if (!response.success) {
         Alert.alert("Clock-in Failed", response.message || "An error occurred");
+        setIsSubmitting(false);
         return;
       }
 
-      Alert.alert("Success", "Clocked in!", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      // Success - navigate back immediately
+      router.back();
     } catch (error) {
       console.error("Clock-in error:", error);
       Alert.alert("Error", "Failed to clock in. Please try again.");
+      setIsSubmitting(false);
     }
   };
 
@@ -306,11 +315,18 @@ export default function ClockInDetail() {
             />
 
             <Pressable 
-              style={[styles.button, (loadingJobs || loadingEquip) && styles.buttonDisabled]} 
+              style={[
+                styles.button, 
+                (loadingJobs || loadingEquip || isSubmitting) && styles.buttonDisabled
+              ]} 
               onPress={handleStart}
-              disabled={loadingJobs || loadingEquip}
+              disabled={loadingJobs || loadingEquip || isSubmitting}
             >
-              <Text style={styles.buttonText}>Start</Text>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Start</Text>
+              )}
             </Pressable>
           </View>
         </TouchableWithoutFeedback>

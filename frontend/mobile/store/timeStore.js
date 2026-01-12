@@ -7,6 +7,7 @@ export const useTimeStore = create((set, get) => ({
 
   isOnBreak: false,
   currentBreakId: null,
+  breakStartTime: null,
 
   secondsWorkedToday: 0,
   secondsWorkedShift: 0,
@@ -18,28 +19,29 @@ export const useTimeStore = create((set, get) => ({
     if (!session?.access_token) return;
 
     try {
-      // const shiftResp = await apiCall(
-      //   session.access_token,
-      //   "time-entries/seconds-worked-shift",
-      //   "GET"
-      // );
-      // const todayResp = await apiCall(
-      //   session.access_token,
-      //   "time-entries/seconds-worked-today",
-      //   "GET"
-      // );
+      const shiftResp = await apiCall(
+        session.access_token,
+        "time-entries/seconds-shift",
+        "GET"
+      );
+      const todayResp = await apiCall(
+        session.access_token,
+        "time-entries/seconds-today",
+        "GET"
+      );
 
-      // if (shiftResp.success)
-      //   set({ secondsWorkedShift: shiftResp.data.seconds });
-      // if (todayResp.success)
-      //   set({ secondsWorkedToday: todayResp.data.seconds });
       set({
-      secondsWorkedShift: 120,
-      secondsWorkedToday: 60,
-      lastServerUpdateTimestamp: Date.now(),
-    });
+        secondsWorkedShift: shiftResp.success ? shiftResp.data.seconds : 0,
+        secondsWorkedToday: todayResp.success ? todayResp.data.seconds : 0,
+        lastServerUpdateTimestamp: Date.now(),
+      });
     } catch (err) {
       console.error("Failed to fetch worked seconds:", err);
+      set({
+        secondsWorkedShift: 0,
+        secondsWorkedToday: 0,
+        lastServerUpdateTimestamp: Date.now(),
+      });
     }
   },
 
@@ -58,6 +60,7 @@ export const useTimeStore = create((set, get) => ({
       currentTimeEntryId: null,
       isOnBreak: false,
       currentBreakId: null,
+      breakStartTime: null,
       secondsWorkedShift: 0,
       lastServerUpdateTimestamp: null,
     });
@@ -68,6 +71,7 @@ export const useTimeStore = create((set, get) => ({
     set({
       isOnBreak: true,
       currentBreakId: breakId,
+      breakStartTime: Date.now(),
     });
   },
 
@@ -76,6 +80,7 @@ export const useTimeStore = create((set, get) => ({
     set({
       isOnBreak: false,
       currentBreakId: null,
+      breakStartTime: null,
     });
   },
 
@@ -84,9 +89,7 @@ export const useTimeStore = create((set, get) => ({
     if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
       return state.secondsWorkedShift;
 
-    // If on break, do NOT add delta
-    if (state.isOnBreak) return state.secondsWorkedShift;
-
+    // Timer keeps running even on break (break time is tracked separately)
     const now = Date.now();
     const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
     return state.secondsWorkedShift + delta;
@@ -97,12 +100,18 @@ export const useTimeStore = create((set, get) => ({
     if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
       return state.secondsWorkedToday;
 
-    // If on break, do NOT add delta
-    if (state.isOnBreak) return state.secondsWorkedToday;
-
+    // Timer keeps running even on break (break time is tracked separately)
     const now = Date.now();
     const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
     return state.secondsWorkedToday + delta;
+  },
+
+  getSecondsOnBreak: () => {
+    const state = get();
+    if (!state.isOnBreak || !state.breakStartTime) return 0;
+    
+    const now = Date.now();
+    return Math.floor((now - state.breakStartTime) / 1000);
   },
 
   // --- API / ASYNC Actions ---
@@ -123,11 +132,12 @@ export const useTimeStore = create((set, get) => ({
       "GET"
     );
 
+    // API returns the entry/break directly in data, not nested
     set({
-      isClockedIn: !!entryResp.data?.current_entry,
-      currentTimeEntryId: entryResp.data?.current_entry?.id || null,
-      isOnBreak: !!breakResp.data?.on_break,
-      currentBreakId: breakResp.data?.current_break?.id || null,
+      isClockedIn: !!entryResp.data,
+      currentTimeEntryId: entryResp.data?.id || null,
+      isOnBreak: !!breakResp.data,
+      currentBreakId: breakResp.data?.id || null,
     });
 
     // Fetch authoritative worked seconds
@@ -146,33 +156,35 @@ export const useTimeStore = create((set, get) => ({
       body
     );
 
+    console.log("Clock-in response:", response);
+
     if (response.success) {
-      get()._setClockInState(response.data.time_entry_id);
+      // API returns the time entry directly with 'id' field
+      get()._setClockInState(response.data.id);
+      // Fetch fresh seconds from server
       await get()._fetchWorkedSeconds(session);
     }
     return response;
   },
 
   // 3. Clock Out Action
-  doClockOut: async (session, body) => {
+  doClockOut: async (session, body = {}) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
 
-    const state = get();
-
-    if (!state.currentTimeEntryId)
-      return { success: false, message: "Not clocked in." };
-
-    // The API call uses the body for coordinates/notes/etc.
+    // Don't check currentTimeEntryId - let the API find the open entry
     const response = await apiCall(
       session.access_token,
       "time-entries/clock-out",
-      "POST", // Assuming POST with a body is expected for clock-out
-      { ...body, time_entry_id: state.currentTimeEntryId }
+      "POST",
+      body
     );
+
+    console.log("Clock-out response:", response);
 
     if (response.success) {
       get()._setClockOutState();
+      // Fetch fresh seconds from server after clock out
       await get()._fetchWorkedSeconds(session);
     }
     return response;
@@ -190,8 +202,9 @@ export const useTimeStore = create((set, get) => ({
       {}
     );
 
-    if (response.success && response.data.break_id) {
-      get()._setBreakStartState(response.data.break_id);
+    // API returns the break directly with 'id' field
+    if (response.success && response.data?.id) {
+      get()._setBreakStartState(response.data.id);
       await get()._fetchWorkedSeconds(session);
     }
     return response;
