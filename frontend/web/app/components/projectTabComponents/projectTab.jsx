@@ -142,7 +142,7 @@ export default function ProjectTabBar() {
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 6,
     marginTop: 8,
   },
   container: {
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   tabsContainer: {
     flex: 1,
     backgroundColor: "#878787",
-    borderRadius: 10,
+    borderRadius: 5,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginRight: TAB_GAP,
-    borderRadius: 12,
+    borderRadius: 6,
     backgroundColor: "#FFFFFF",
   },
   tabActive: {

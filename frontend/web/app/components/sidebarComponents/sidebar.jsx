@@ -106,18 +106,25 @@ export default function Sidebar() {
   }
 
   //helper to determine if a nav item should be "active"
-  function isItemActive(route) {
-    if (!pathname) return false;
+function isItemActive(route) {
+  if (!pathname) return false;
 
-    if (route === "/" || route === homeRoute) {
-      return pathname === "/" || pathname.includes("dashboard");
-    }
-    //get last segment of the route
-    const parts = route.split("/").filter(Boolean);
-    const last = parts[parts.length - 1];
-
-    return last && pathname.includes(last);
+  //home page
+  if (route === "/" || route === homeRoute) {
+    return pathname === "/" || pathname.includes("dashboard");
   }
+
+  //special handling for the project folder
+  //since they're all technically different pages
+  if (route.includes("/project/projectsOverview")) {
+    return pathname.startsWith("/(app)/project") || pathname.startsWith("/project");
+  }
+
+  //general fallback: check if last segment of route is included in pathname
+  const parts = route.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last && pathname.includes(last);
+}
 
   return (
     <Animated.View style={[styles.sideBar, { width: sidebarWidth }]}>
