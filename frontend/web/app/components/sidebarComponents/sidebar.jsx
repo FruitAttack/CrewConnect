@@ -95,10 +95,9 @@ export default function Sidebar() {
   ];
 
   const privateNavItems = [
-    { icon: "construct-outline", label: "Labor", route: "/(app)/laborOverview" },
-    { icon: "cube-outline", label: "Materials", route: "/(app)/materialsOverview" },
-    { icon: "briefcase-outline", label: "Projects", route: "/(app)/projectsOverview" },
-    { icon: "shield-checkmark-outline", label: "Safety", route: "/(app)/safetyOverview" },
+    { icon: "layers-outline", label: "Projects", route: "/(app)/project/projectsOverview" },
+    { icon: "briefcase-outline", label: "Company", route: "/(app)/company" },
+    { icon: "people-outline", label: "Workforce", route: "/(app)/workforce" },
   ];
 
   const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
