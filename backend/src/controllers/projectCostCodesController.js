@@ -4,8 +4,10 @@ import { supabase } from '../utils/supabase.js';
 export const getProjectCostCodes = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.default_company_id;
     const { active_only = 'true' } = req.query;
+
+console.log('DEBUG: projectId =', projectId, 'company_id =', company_id);
 
     // Verify project belongs to company
     const { data: project, error: projectError } = await supabase
@@ -14,6 +16,8 @@ export const getProjectCostCodes = async (req, res) => {
       .eq('id', projectId)
       .eq('company_id', company_id)
       .single();
+
+console.log('DEBUG: project =', project, 'projectError =', projectError);
 
     if (projectError || !project) {
       return res.status(404).json({ error: 'Project not found' });
@@ -53,7 +57,7 @@ export const getProjectCostCodes = async (req, res) => {
 export const assignCostCodeToProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.default_company_id;
     const { 
       cost_code_id,
       budgeted_hours,
@@ -127,7 +131,7 @@ export const assignCostCodeToProject = async (req, res) => {
 export const updateProjectCostCodeBudget = async (req, res) => {
   try {
     const { projectId, costCodeId } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.default_company_id;
     const {
       budgeted_hours,
       budgeted_labor_cost,
@@ -191,7 +195,7 @@ export const updateProjectCostCodeBudget = async (req, res) => {
 export const removeCostCodeFromProject = async (req, res) => {
   try {
     const { projectId, costCodeId } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.default_company_id;
 
     // Verify project belongs to company
     const { data: project, error: projectError } = await supabase
@@ -231,7 +235,7 @@ export const removeCostCodeFromProject = async (req, res) => {
 export const getProjectBudgetSummary = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.default_company_id;
 
     // First verify project belongs to company
     const { data: project, error: projectError } = await supabase

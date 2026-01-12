@@ -97,7 +97,7 @@ export default function ClockInDetail() {
       try {
         const res = await apiCall(
           session.access_token,
-          `project-cost-codes?project_id=${job}`,
+          `projects/${job}/cost-codes`,
           "GET"
         );
 
@@ -109,12 +109,10 @@ export default function ClockInDetail() {
           if (Array.isArray(costCodesData) && costCodesData.length > 0) {
             setCostItems(
               costCodesData
-                .filter(c => c.active !== false) // Only show active cost codes
-                .map((c) => ({
-                  label: c.display_code 
-                    ? `${c.display_code} - ${c.name}` 
-                    : `${c.code} - ${c.name}`,
-                  value: c.id,
+.filter(c => c.cost_code && c.cost_code.active !== false)
+.map((c) => ({
+  label: `${c.cost_code.code} - ${c.cost_code.name}`,
+  value: c.cost_code.id,
                 }))
             );
           } else {

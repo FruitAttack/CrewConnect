@@ -23,7 +23,7 @@ export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
     detectSessionInUrl: false
   },
   db: {
-    schema: 'app' // Set default schema to 'app'
+    schema: 'app'
   }
 });
 
