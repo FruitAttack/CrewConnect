@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Keyboard,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,141 +21,297 @@ import { useTimeStore } from "../../../store/timeStore";
 
 export default function ClockInDetail() {
   const { session } = useSession();
-  const doClockIn = useTimeStore((s) => s.doClockIn); // Use the new async action
+  const doClockIn = useTimeStore((s) => s.doClockIn);
 
-  // Job Dropdown
+  // ------------------ Project (Job) ------------------
   const [jobOpen, setJobOpen] = useState(false);
   const [job, setJob] = useState(null);
-  const [jobItems, setJobItems] = useState([
-    { label: "Item 1", value: "item1" },
-    { label: "Item 2", value: "item2" },
-    { label: "Item 3", value: "item3" },
-  ]);
+  const [jobItems, setJobItems] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
 
-  // Cost Code Dropdown
+  // ------------------ Cost Code ------------------
   const [costOpen, setCostOpen] = useState(false);
   const [costCode, setCostCode] = useState(null);
-  const [costItems, setCostItems] = useState([
-    { label: "Code 001", value: "001" },
-    { label: "Code 002", value: "002" },
-    { label: "Code 003", value: "003" },
-  ]);
+  const [costItems, setCostItems] = useState([]);
+  const [loadingCosts, setLoadingCosts] = useState(false);
 
-  // Equipment Dropdown
+  // ------------------ Equipment ------------------
   const [equipOpen, setEquipOpen] = useState(false);
   const [equipment, setEquipment] = useState(null);
-  const [equipmentItems, setEquipmentItems] = useState([
-    { label: "Excavator", value: "excavator" },
-    { label: "Truck", value: "truck" },
-    { label: "Forklift", value: "forklift" },
-  ]);
+  const [equipmentItems, setEquipmentItems] = useState([]);
+  const [loadingEquip, setLoadingEquip] = useState(true);
 
-  // Notes Input Field
   const [notes, setNotes] = useState("");
 
-  const handleStart = async () => {
-  // Validate you selected a job/costCode at least
-  if (!job || !costCode) {
-    Alert.alert("Validation Error", "Please select a Job and Cost Code.");
-    return;
-  }
+  // ------------------ Load Projects ------------------
+  useEffect(() => {
+    if (!session?.access_token) return;
 
-  if (!session?.access_token) {
-    Alert.alert("Authentication Error", "You are not logged in.");
-    return;
-  }
+    (async () => {
+      setLoadingJobs(true);
+      try {
+        const res = await apiCall(session.access_token, "projects", "GET");
+        
+        if (res.success && res.data) {
+          // Your API returns data directly, could be array or object with projects property
+          const projectsData = Array.isArray(res.data) ? res.data : (res.data.projects || []);
+          
+          console.log("Projects loaded:", projectsData.length);
+          
+          if (Array.isArray(projectsData) && projectsData.length > 0) {
+            setJobItems(
+              projectsData
+                .map((p) => ({
+                  label: p.name,
+                  value: p.id,
+                }))
+            );
+          } else {
+            console.warn("No projects found");
+            Alert.alert("No Projects", "No active projects available.");
+          }
+        } else {
+          console.error("Failed to load projects:", res.message);
+          Alert.alert("Error", `Unable to load projects: ${res.message}`);
+        }
+      } catch (error) {
+        console.error("Error loading projects:", error);
+        Alert.alert("Error", "Unable to load projects. Please check your connection.");
+      } finally {
+        setLoadingJobs(false);
+      }
+    })();
+  }, [session]);
 
-  // Build the request body
-  const body = {
-    job_id: job,
-    cost_code_id: costCode,
-    equipment_id: equipment || null, 
-    notes: notes.trim() || null, 
+  // ------------------ Load Cost Codes (by Project) ------------------
+  useEffect(() => {
+    if (!session?.access_token || !job) {
+      setCostItems([]);
+      return;
+    }
+
+    setCostCode(null);
+    setLoadingCosts(true);
+
+    (async () => {
+      try {
+        const res = await apiCall(
+          session.access_token,
+          `project-cost-codes?project_id=${job}`,
+          "GET"
+        );
+
+        if (res.success && res.data) {
+          const costCodesData = Array.isArray(res.data) ? res.data : (res.data.cost_codes || []);
+          
+          console.log("Cost codes loaded:", costCodesData.length);
+          
+          if (Array.isArray(costCodesData) && costCodesData.length > 0) {
+            setCostItems(
+              costCodesData
+                .filter(c => c.active !== false) // Only show active cost codes
+                .map((c) => ({
+                  label: c.display_code 
+                    ? `${c.display_code} - ${c.name}` 
+                    : `${c.code} - ${c.name}`,
+                  value: c.id,
+                }))
+            );
+          } else {
+            console.warn("No cost codes found for this project");
+            setCostItems([]);
+          }
+        } else {
+          console.error("Failed to load cost codes:", res.message);
+          setCostItems([]);
+        }
+      } catch (error) {
+        console.error("Error loading cost codes:", error);
+        setCostItems([]);
+      } finally {
+        setLoadingCosts(false);
+      }
+    })();
+  }, [job, session]);
+
+  // ------------------ Load Equipment ------------------
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    (async () => {
+      setLoadingEquip(true);
+      try {
+        const res = await apiCall(session.access_token, "equipment", "GET");
+        
+        if (res.success && res.data) {
+          const equipmentData = Array.isArray(res.data) ? res.data : (res.data.equipment || []);
+          
+          console.log("Equipment loaded:", equipmentData.length);
+          
+          if (Array.isArray(equipmentData) && equipmentData.length > 0) {
+            setEquipmentItems(
+              equipmentData
+                .filter(e => e.active !== false) // Only show active equipment
+                .map((e) => ({
+                  // Equipment has: type, label, model
+                  label: e.type && e.label 
+                    ? `${e.type} - ${e.label}` 
+                    : e.label || e.type || "Unknown",
+                  value: e.id,
+                }))
+            );
+          } else {
+            console.warn("No equipment found");
+          }
+        } else {
+          console.error("Failed to load equipment:", res.message);
+        }
+      } catch (error) {
+        console.error("Error loading equipment:", error);
+      } finally {
+        setLoadingEquip(false);
+      }
+    })();
+  }, [session]);
+
+  // ------------------ Dropdown Coordination ------------------
+  const onJobOpen = () => {
+    setCostOpen(false);
+    setEquipOpen(false);
   };
 
-  const response = await doClockIn(session, body);
+  const onCostOpen = () => {
+    setJobOpen(false);
+    setEquipOpen(false);
+  };
 
-  if (!response.success) {
-    console.log("Clock-in failed:", response.message);
-    Alert.alert("Clock-in Failed", response.message || "An unknown error occurred during clock-in.");
-    return;
-  }
+  const onEquipOpen = () => {
+    setJobOpen(false);
+    setCostOpen(false);
+  };
 
-  Alert.alert("Success", "Clocked in successfully!", [
-    { text: "OK", onPress: () => router.back() }
-  ]);
-};
+  // ------------------ Submit ------------------
+  const handleStart = async () => {
+    if (!job || !costCode) {
+      Alert.alert("Validation Error", "Please select a Project and Cost Code.");
+      return;
+    }
 
+    try {
+      const response = await doClockIn(session, {
+        project_id: job,
+        cost_code_id: costCode,
+        equipment_id: equipment || null,
+        notes: notes.trim() || null,
+      });
+
+      if (!response.success) {
+        Alert.alert("Clock-in Failed", response.message || "An error occurred");
+        return;
+      }
+
+      Alert.alert("Success", "Clocked in!", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (error) {
+      console.error("Clock-in error:", error);
+      Alert.alert("Error", "Failed to clock in. Please try again.");
+    }
+  };
+
+  // ------------------ UI ------------------
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Keyboard Avoiding View for better UX when keyboard is open */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.container}>
-            {/* Job Dropdown */}
-            <Text style={styles.label}>Job</Text>
+            <Text style={styles.label}>Project</Text>
             <View style={{ zIndex: 3000 }}>
-              <DropDownPicker
-                open={jobOpen}
-                value={job}
-                items={jobItems}
-                setOpen={setJobOpen}
-                setValue={setJob}
-                setItems={setJobItems}
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
-                placeholder="Select Job"
-              />
+              {loadingJobs ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading projects...</Text>
+                </View>
+              ) : (
+                <DropDownPicker
+                  open={jobOpen}
+                  onOpen={onJobOpen}
+                  value={job}
+                  items={jobItems}
+                  setOpen={setJobOpen}
+                  setValue={setJob}
+                  setItems={setJobItems}
+                  placeholder="Select Project"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                />
+              )}
             </View>
 
-            {/* Cost Code Dropdown */}
             <Text style={styles.label}>Cost Code</Text>
             <View style={{ zIndex: 2000 }}>
-              <DropDownPicker
-                open={costOpen}
-                value={costCode}
-                items={costItems}
-                setOpen={setCostOpen}
-                setValue={setCostCode}
-                setItems={setCostItems}
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
-                placeholder="Select Cost Code"
-              />
+              {loadingCosts ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading cost codes...</Text>
+                </View>
+              ) : (
+                <DropDownPicker
+                  open={costOpen}
+                  onOpen={onCostOpen}
+                  value={costCode}
+                  items={costItems}
+                  setOpen={setCostOpen}
+                  setValue={setCostCode}
+                  setItems={setCostItems}
+                  placeholder={job ? "Select Cost Code" : "Select a project first"}
+                  disabled={!job}
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                />
+              )}
             </View>
 
-            {/* Equipment Dropdown */}
-            <Text style={styles.label}>Equipment</Text>
+            <Text style={styles.label}>Equipment (Optional)</Text>
             <View style={{ zIndex: 1000 }}>
-              <DropDownPicker
-                open={equipOpen}
-                value={equipment}
-                items={equipmentItems}
-                setOpen={setEquipOpen}
-                setValue={setEquipment}
-                setItems={setEquipmentItems}
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
-                placeholder="Select Equipment"
-              />
+              {loadingEquip ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading equipment...</Text>
+                </View>
+              ) : (
+                <DropDownPicker
+                  open={equipOpen}
+                  onOpen={onEquipOpen}
+                  value={equipment}
+                  items={equipmentItems}
+                  setOpen={setEquipOpen}
+                  setValue={setEquipment}
+                  setItems={setEquipmentItems}
+                  placeholder="Select Equipment"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                />
+              )}
             </View>
 
-            {/* Notes Input Field */}
-            <Text style={styles.label}>Notes</Text>
+            <Text style={styles.label}>Notes (Optional)</Text>
             <TextInput
               style={styles.notesInput}
               multiline
-              placeholder="Enter notes here"
+              placeholder="Add any notes..."
               value={notes}
               onChangeText={setNotes}
-              returnKeyType="done"
             />
 
-            {/* Start Button */}
-            <Pressable style={styles.button} onPress={handleStart}>
+            <Pressable 
+              style={[styles.button, (loadingJobs || loadingEquip) && styles.buttonDisabled]} 
+              onPress={handleStart}
+              disabled={loadingJobs || loadingEquip}
+            >
               <Text style={styles.buttonText}>Start</Text>
             </Pressable>
           </View>
@@ -165,29 +322,24 @@ export default function ClockInDetail() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "white",
-  },
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 16,
-  },
-  label: {
-    marginTop: 15,
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  dropdown: {
+  safeArea: { flex: 1, backgroundColor: "white" },
+  container: { flex: 1, padding: 16, justifyContent: "center" },
+  label: { marginTop: 14, fontWeight: "600", fontSize: 16 },
+  dropdown: { borderColor: "#aaa", borderWidth: 1, borderRadius: 6 },
+  dropdownContainer: { borderColor: "#aaa", borderWidth: 1 },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
     borderColor: "#aaa",
     borderWidth: 1,
     borderRadius: 6,
+    backgroundColor: "#f9f9f9",
   },
-  dropdownContainer: {
-    borderColor: "#aaa",
-    borderWidth: 1,
-    borderRadius: 6,
+  loadingText: {
+    marginLeft: 10,
+    color: "#666",
+    fontSize: 14,
   },
   notesInput: {
     marginTop: 10,
@@ -196,7 +348,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     minHeight: 80,
-    textAlignVertical: "top",
   },
   button: {
     marginTop: 30,
@@ -205,9 +356,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
   },
-  buttonText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 16,
+  buttonDisabled: {
+    backgroundColor: "#ccc",
   },
+  buttonText: { color: "white", fontWeight: "600", fontSize: 16 },
 });
