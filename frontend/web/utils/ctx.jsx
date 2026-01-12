@@ -3,6 +3,7 @@ import { supabase } from '../utils/supabase.js';
 
 const AuthContext = createContext({
   signIn: () => null,
+  signUp: () => null,
   signOut: () => null,
   session: null,
   isLoading: false,
@@ -45,6 +46,16 @@ export function SessionProvider({ children }) {
     return data.session;
   };
 
+  const signUp = async (email, password) => {
+    setIsLoading(true);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    setIsLoading(false);
+
+    if (error) throw error;
+    setSession(data.session);
+    return data.session;
+  };
+
   const signOut = async () => {
     setIsLoading(true);
     await supabase.auth.signOut();
@@ -53,7 +64,7 @@ export function SessionProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, isLoading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

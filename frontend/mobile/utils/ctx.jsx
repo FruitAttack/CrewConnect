@@ -29,10 +29,6 @@ export function SessionProvider({ children }) {
     // Listen for auth changes (login/logout)
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
-        // wait 3 seconds
-        setTimeout(() => {
-          setSession(newSession);
-        }, 3000);
       }
     );
 

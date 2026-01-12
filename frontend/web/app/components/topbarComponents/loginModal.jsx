@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal, View, Text, StyleSheet, TextInput, TouchableOpacity, TouchableWithoutFeedback } from "react-native";
 import { useSession } from "../../../utils/ctx";
 import { useRouter } from "expo-router"
+import SignUpModal from "./signUpModal";
 
 /**
  *  This is the popup for the log in screen
@@ -13,6 +14,7 @@ export default function LoginModal({ visible, onClose }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [signUpModalVisible, setSignUpModalVisible] = useState(false);
   const router = useRouter();
 
   async function handleLogin() {
@@ -32,8 +34,13 @@ export default function LoginModal({ visible, onClose }) {
     onClose();
   }
 
+  function handleSignUp() {
+    setSignUpModalVisible(true);
+  }
+
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <>
+      <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           
@@ -83,7 +90,7 @@ export default function LoginModal({ visible, onClose }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity><Text style={styles.link}>Forgot Password?</Text></TouchableOpacity>
-                  <TouchableOpacity><Text style={styles.link}>Sign Up</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleSignUp}><Text style={styles.link}>Sign Up</Text></TouchableOpacity>
                 </>
               )}
 
@@ -93,6 +100,8 @@ export default function LoginModal({ visible, onClose }) {
         </View>
       </TouchableWithoutFeedback>
     </Modal>
+    <SignUpModal visible={signUpModalVisible} onClose={() => setSignUpModalVisible(false)} />
+    </>
   );
 }
 
