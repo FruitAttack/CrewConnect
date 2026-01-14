@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import { useSidebar } from "./sidebarContext";
 import { useSession } from "../../../utils/ctx";
 
@@ -21,6 +21,7 @@ const LABEL_RESERVE = 80;
 
 export default function Sidebar() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isExpanded, toggleSidebar } = useSidebar();
   const { session } = useSession();
 
@@ -42,32 +43,27 @@ export default function Sidebar() {
     }).start();
   }, [isExpanded, anim]);
 
-  // Animated values derived from the anim value and expandedWidth
   const sidebarWidth = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [COLLAPSED_WIDTH, expandedWidth],
   });
 
-  // Logo height scales with expandedWidth
   const logoMaxHeight = Math.min(140, Math.round(expandedWidth * 0.55));
   const logoHeight = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [48, logoMaxHeight],
   });
 
-  // Label width grows from 0 to (expandedWidth - reserved space)
   const labelWidth = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, Math.max(0, expandedWidth - LABEL_RESERVE)],
   });
 
-  // Label opacity
   const labelOpacity = anim.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0, 0.35, 1],
   });
 
-  // Icon scaling
   const iconExpandedSize = Math.round(Math.max(28, expandedWidth * 0.08));
   const iconScale = iconExpandedSize / ICON_COLLAPSED_SIZE;
   const animatedIconScale = anim.interpolate({
@@ -75,7 +71,6 @@ export default function Sidebar() {
     outputRange: [1, iconScale],
   });
 
-  // Animated font size for labels
   const fontSizeExpanded = Math.round(Math.min(16, expandedWidth * 0.065));
   const animatedFontSize = anim.interpolate({
     inputRange: [0, 1],
@@ -95,10 +90,9 @@ export default function Sidebar() {
   ];
 
   const privateNavItems = [
-    { icon: "construct-outline", label: "Labor", route: "/(app)/laborOverview" },
-    { icon: "cube-outline", label: "Materials", route: "/(app)/materialsOverview" },
-    { icon: "briefcase-outline", label: "Projects", route: "/(app)/projectsOverview" },
-    { icon: "shield-checkmark-outline", label: "Safety", route: "/(app)/safetyOverview" },
+    { icon: "layers-outline", label: "Projects", route: "/(app)/project/projectsOverview" },
+    { icon: "briefcase-outline", label: "Company", route: "/(app)/company" },
+    { icon: "people-outline", label: "Workforce", route: "/(app)/workforce" },
   ];
 
   const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
@@ -110,6 +104,27 @@ export default function Sidebar() {
   function onPressLogo() {
     router.push(homeRoute);
   }
+
+  //helper to determine if a nav item should be "active"
+function isItemActive(route) {
+  if (!pathname) return false;
+
+  //home page
+  if (route === "/" || route === homeRoute) {
+    return pathname === "/" || pathname.includes("dashboard");
+  }
+
+  //special handling for the project folder
+  //since they're all technically different pages
+  if (route.includes("/project/projectsOverview")) {
+    return pathname.startsWith("/(app)/project") || pathname.startsWith("/project");
+  }
+
+  //general fallback: check if last segment of route is included in pathname
+  const parts = route.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last && pathname.includes(last);
+}
 
   return (
     <Animated.View style={[styles.sideBar, { width: sidebarWidth }]}>
@@ -130,49 +145,60 @@ export default function Sidebar() {
         <View style={{ height: 12 }} />
 
         <View style={{ width: "100%" }}>
-          {navItems.map((item, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={[
-                styles.sideButton,
-                isExpanded ? styles.sideButtonExpanded : styles.sideButtonCollapsed,
-              ]}
-              onPress={() => onPressLink(item.route)}
-              activeOpacity={0.7}
-            >
-              {/* Icon wrapper also scales and animates */}
-              <Animated.View
+          {navItems.map((item, idx) => {
+            const active = isItemActive(item.route);
+            return (
+              <TouchableOpacity
+                key={idx}
                 style={[
-                  styles.iconWrap,
-                  {
-                    transform: [{ scale: animatedIconScale }],
-                  },
+                  styles.sideButton,
+                  isExpanded ? styles.sideButtonExpanded : styles.sideButtonCollapsed,
+                  active && styles.sideButtonActive,
                 ]}
+                onPress={() => onPressLink(item.route)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !!active }}
               >
-                <Ionicons name={item.icon} size={ICON_COLLAPSED_SIZE} color="#FBFBFB" />
-              </Animated.View>
-
-              {/* Animated label area */}
-              <Animated.View
-                style={{
-                  overflow: "hidden",
-                  width: labelWidth,
-                  paddingLeft,
-                  justifyContent: "center",
-                }}
-              >
-                <Animated.Text
+                {/* Icons */}
+                <Animated.View
                   style={[
-                    styles.sideButtonText,
-                    { opacity: labelOpacity, fontSize: animatedFontSize },
+                    styles.iconWrap,
+                    {
+                      transform: [{ scale: animatedIconScale }],
+                    },
                   ]}
-                  numberOfLines={1}
                 >
-                  {item.label}
-                </Animated.Text>
-              </Animated.View>
-            </TouchableOpacity>
-          ))}
+                  <Ionicons
+                    name={item.icon}
+                    size={ICON_COLLAPSED_SIZE}
+                    color={active ? "#161519" : "#FBFBFB"}
+                  />
+                </Animated.View>
+
+                {/* Animated label */}
+                <Animated.View
+                  style={{
+                    overflow: "hidden",
+                    width: labelWidth,
+                    paddingLeft,
+                    justifyContent: "center",
+                  }}
+                >
+                  <Animated.Text
+                    style={[
+                      styles.sideButtonText,
+                      { opacity: labelOpacity, fontSize: animatedFontSize },
+                      active && styles.sideButtonTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Animated.Text>
+                </Animated.View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={{ flex: 1 }} />
@@ -239,6 +265,9 @@ const styles = StyleSheet.create({
   sideButtonExpanded: {
     justifyContent: "flex-start",
   },
+  sideButtonActive: {
+    backgroundColor: "#FBFBFB",
+  },
   iconWrap: {
     width: 36,
     alignItems: "center",
@@ -247,6 +276,10 @@ const styles = StyleSheet.create({
   sideButtonText: {
     color: "#FBFBFB",
     marginLeft: 12,
+  },
+  sideButtonTextActive: {
+    color: "#161519",
+    fontWeight: "600",
   },
   toggleWrap: {
     width: "100%",
