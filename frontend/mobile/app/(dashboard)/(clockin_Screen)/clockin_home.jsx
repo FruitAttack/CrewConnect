@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { StyleSheet, Text, View, TouchableOpacity, Alert } from "react-native";
 import Octicons from "@expo/vector-icons/Octicons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { apiCall } from "../../../utils/api";
 import { useTimeStore } from "../../../store/timeStore";
 import { useSession } from "../../../utils/ctx";
@@ -17,19 +17,27 @@ const Clockin_Home = () => {
     doEndBreak,
     hydrateFromServer,
     getSecondsWorkedToday,
+    getSecondsWorkedShift,
+    getSecondsOnBreak,
   } = useTimeStore();
 
   const [tick, setTick] = useState(0);
   const intervalRef = useRef(null);
 
-  // Hydrate Zustand store on mount
-  useEffect(() => {
-    hydrateFromServer(session);
-  }, []);
+  // Hydrate from server on focus to catch any state changes
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Clock screen focused - hydrating from server");
+      if (session?.access_token) {
+        hydrateFromServer(session);
+      }
+    }, [session])
+  );
 
-  // Start local 1-second re-render loop when clocked in and off break
+  // Timer keeps running when clocked in (even during breaks)
   useEffect(() => {
-    const shouldTick = isClockedIn && !isOnBreak;
+    const shouldTick = isClockedIn;
+    console.log("Tick effect - isClockedIn:", isClockedIn, "isOnBreak:", isOnBreak, "shouldTick:", shouldTick);
 
     if (shouldTick) {
       intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000);
@@ -38,9 +46,10 @@ const Clockin_Home = () => {
     }
 
     return () => clearInterval(intervalRef.current);
-  }, [isClockedIn, isOnBreak]);
+  }, [isClockedIn]);
 
-  const secondsWorked = getSecondsWorkedToday();
+  const secondsToday = getSecondsWorkedToday();
+  const secondsShift = getSecondsWorkedShift();
 
   const handleClockButtonPressed = () => {
     if (!isClockedIn) {
@@ -52,13 +61,7 @@ const Clockin_Home = () => {
   };
 
   const handleClockOut = async () => {
-    // Collect data needed for the body (e.g., coordinates, notes)
-    const clockOutBody = {
-      // latitude=
-      // longitude=
-      // break_minutes=0
-      // notes=
-    };
+    const clockOutBody = {};
 
     const response = await doClockOut(session, clockOutBody);
 
@@ -92,13 +95,7 @@ const Clockin_Home = () => {
   };
 
   const handleSwitchJob = async () => {
-    // Collect data needed for the body (e.g., coordinates, notes)
-    const clockOutBody = {
-      // latitude=
-      // longitude=
-      // break_minutes=0
-      // notes=
-    };
+    const clockOutBody = {};
 
     const response = await doClockOut(session, clockOutBody);
 
@@ -110,21 +107,83 @@ const Clockin_Home = () => {
     router.push("/map_costcode_Screen");
   };
 
-  const formatTime = () => {
-    const hours = Math.floor(secondsWorked / 3600)
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600)
       .toString()
       .padStart(2, "0");
-    const minutes = Math.floor((secondsWorked % 3600) / 60)
+    const minutes = Math.floor((seconds % 3600) / 60)
       .toString()
       .padStart(2, "0");
-    const seconds = (secondsWorked % 60).toString().padStart(2, "0");
+    const secs = (seconds % 60).toString().padStart(2, "0");
 
-    return `${hours}:${minutes}:${seconds}`;
+    return `${hours}:${minutes}:${secs}`;
   };
 
+  // ==================== ON BREAK UI ====================
+  if (isClockedIn && isOnBreak) {
+    const secondsBreak = getSecondsOnBreak();
+    
+    return (
+      <View style={[styles.container, styles.breakContainer]}>
+        {/* Today's Total Time */}
+        <View style={styles.timerSection}>
+          <Text style={[styles.timerLabel, { color: "#ffffffaa" }]}>Today's Total</Text>
+          <Text style={[styles.todayTime, { color: "#fff" }]}>{formatTime(secondsToday)}</Text>
+        </View>
+
+        {/* Current Break Time */}
+        <View style={styles.timerSection}>
+          <Text style={[styles.timerLabel, { color: "#ffffffaa" }]}>Current Break</Text>
+          <Text style={[styles.shiftTime, { color: "#fff" }]}>{formatTime(secondsBreak)}</Text>
+        </View>
+
+        {/* Resume Button - same position as clock button */}
+        <TouchableOpacity
+          style={[styles.circleButton, { backgroundColor: "#fff" }]}
+          onPress={handleTakeBreak}
+        >
+          <FontAwesome6 name="play" size={90} color="#ff9500" />
+          <Text style={[styles.buttonText, { color: "#ff9500" }]}>Resume</Text>
+        </TouchableOpacity>
+
+        {/* Bottom Buttons - same as working state */}
+        <View style={styles.bottomButtonRow}>
+          <TouchableOpacity
+            style={styles.bottomButton}
+            onPress={handleClockOut}
+          >
+            <FontAwesome6 name="circle-stop" size={28} color="#ee0000" />
+            <Text style={styles.bottomButtonText}>End Shift</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.bottomButton}
+            onPress={handleSwitchJob}
+          >
+            <FontAwesome6 name="right-left" size={28} color="#000" />
+            <Text style={styles.bottomButtonText}>Switch Job</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ==================== NORMAL UI ====================
   return (
     <View style={styles.container}>
-      <Text style={styles.clockText}>{formatTime()}</Text>
+      {/* Today's Total Time */}
+      <View style={styles.timerSection}>
+        <Text style={styles.timerLabel}>Today's Total</Text>
+        <Text style={styles.todayTime}>{formatTime(secondsToday)}</Text>
+      </View>
+
+      {/* Current Shift Time - only show when clocked in */}
+      {isClockedIn && (
+        <View style={styles.timerSection}>
+          <Text style={styles.timerLabel}>Current Shift</Text>
+          <Text style={styles.shiftTime}>{formatTime(secondsShift)}</Text>
+        </View>
+      )}
 
       {/* Main Clock Button */}
       <TouchableOpacity
@@ -151,14 +210,8 @@ const Clockin_Home = () => {
             style={styles.bottomButton}
             onPress={handleTakeBreak}
           >
-            <FontAwesome6
-              name={isOnBreak ? "play" : "pause"}
-              size={28}
-              color={isOnBreak ? "#00cc00" : "#ff9500"}
-            />
-            <Text style={styles.bottomButtonText}>
-              {isOnBreak ? "Resume" : "Take Break"}
-            </Text>
+            <FontAwesome6 name="pause" size={28} color="#ff9500" />
+            <Text style={styles.bottomButtonText}>Take Break</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -183,16 +236,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  clockText: {
-    fontSize: 70,
+  breakContainer: {
+    backgroundColor: "#ff9500",
+  },
+  timerSection: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  timerLabel: {
+    fontSize: 16,
     fontWeight: "500",
-    marginBottom: 40,
+    color: "#666",
+    marginBottom: 4,
+  },
+  todayTime: {
+    fontSize: 50,
+    fontWeight: "500",
     color: "#333",
+  },
+  shiftTime: {
+    fontSize: 36,
+    fontWeight: "400",
+    color: "#0F96F5",
   },
   circleButton: {
     width: 225,
     height: 225,
-    borderRadius: 112.5, // Fixed: 225/2 for perfect circle
+    borderRadius: 112.5,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -201,6 +271,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     marginBottom: 40,
+    marginTop: 20,
   },
   buttonText: {
     color: "#fff",

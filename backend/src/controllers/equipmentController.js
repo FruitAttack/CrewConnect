@@ -6,10 +6,12 @@ import { supabase } from '../utils/supabase.js';
  */
 export async function getAllEquipment(req, res) {
   try {
-    const { company_id, active, type } = req.query;
+    const { active, type } = req.query;
+    
+    const company_id = req.query.company_id || req.user?.default_company_id;
 
     if (!company_id) {
-      return res.status(400).json({ message: 'company_id is required' });
+      return res.status(400).json({ message: 'company_id is required' });   
     }
 
     let query = supabase
@@ -271,12 +273,12 @@ export async function activateEquipment(req, res) {
  */
 export async function getEquipmentTypes(req, res) {
   try {
-    const { company_id } = req.query;
+    const company_id = req.query.company_id || req.user?.default_company_id;
 
     if (!company_id) {
-      return res.status(400).json({ message: 'company_id is required' });
+      return res.status(400).json({ message: 'company_id is required' });   
     }
-
+    
     const { data, error } = await supabase
       .from('equipment')
       .select('type')

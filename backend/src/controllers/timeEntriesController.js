@@ -3,11 +3,11 @@ import { supabase } from '../utils/supabase.js';
 // Clock in
 export const clockIn = async (req, res) => {
   try {
-    const { company_id, id: user_id } = req.user;
-    const { 
-      project_id, 
-      cost_code_id, 
-      equipment_id, 
+    const { id: user_id } = req.user;
+    const {
+      project_id,
+      cost_code_id,
+      equipment_id,
       notes,
       lat,
       lng,
@@ -20,6 +20,19 @@ export const clockIn = async (req, res) => {
       return res.status(400).json({ error: 'project_id and cost_code_id are required' });
     }
 
+    // Get project and its company_id
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id, company_id')
+      .eq('id', project_id)
+      .single();
+
+    if (projectError || !project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const company_id = project.company_id;
+
     // Check for existing open time entry
     const { data: existingEntry } = await supabase
       .from('time_entries')
@@ -29,25 +42,13 @@ export const clockIn = async (req, res) => {
       .single();
 
     if (existingEntry) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: 'Already clocked in. Please clock out first.',
         existing_entry_id: existingEntry.id
       });
     }
 
-    // Verify project belongs to company
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .select('id, company_id')
-      .eq('id', project_id)
-      .eq('company_id', company_id)
-      .single();
-
-    if (projectError || !project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-
-    // Verify cost code belongs to company
+    // Verify cost code belongs to same company
     const { data: costCode, error: costCodeError } = await supabase
       .from('cost_codes')
       .select('id, company_id')
@@ -105,10 +106,10 @@ export const clockIn = async (req, res) => {
 export const clockOut = async (req, res) => {
   try {
     const { id: user_id } = req.user;
-    const { 
-      lat, 
-      lng, 
-      accuracy, 
+    const {
+      lat,
+      lng,
+      accuracy,
       notes,
       quantity,
       unit_of_measure
@@ -202,16 +203,19 @@ export const getCurrentTimeEntry = async (req, res) => {
 // Get time entries with filters
 export const getTimeEntries = async (req, res) => {
   try {
-    const { company_id, id: user_id, role } = req.user;
-    const { 
-      start_date, 
-      end_date, 
-      project_id, 
+    const { id: user_id, default_company_id } = req.user;
+    const {
+      start_date,
+      end_date,
+      project_id,
       cost_code_id,
       target_user_id,
       limit = 100,
       offset = 0
     } = req.query;
+
+    // Use query param company_id or fall back to default
+    const company_id = req.query.company_id || default_company_id;
 
     let query = supabase
       .from('time_entries')
@@ -226,13 +230,9 @@ export const getTimeEntries = async (req, res) => {
       .order('clock_in', { ascending: false })
       .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-    // Role-based filtering
-    if (['admin', 'owner'].includes(role)) {
-      if (target_user_id) query = query.eq('user_id', target_user_id);
-    } else if (role === 'foreman') {
-      if (target_user_id) {
-        query = query.eq('user_id', target_user_id);
-      }
+    // For now, filter by user (role-based filtering can be added later)
+    if (target_user_id) {
+      query = query.eq('user_id', target_user_id);
     } else {
       query = query.eq('user_id', user_id);
     }
@@ -255,7 +255,6 @@ export const getTimeEntries = async (req, res) => {
 // Get nearby projects for clock-in
 export const getNearbyProjects = async (req, res) => {
   try {
-    const { company_id } = req.user;
     const { lat, lng, max_distance_km = 50 } = req.query;
 
     if (!lat || !lng) {
@@ -280,7 +279,6 @@ export const getNearbyProjects = async (req, res) => {
 // Validate geofence
 export const validateGeofence = async (req, res) => {
   try {
-    const { company_id } = req.user;
     const { project_id, lat, lng } = req.body;
 
     if (!project_id || !lat || !lng) {
@@ -292,7 +290,6 @@ export const validateGeofence = async (req, res) => {
       .from('projects')
       .select('id, name, lat, lng, geofence_m')
       .eq('id', project_id)
-      .eq('company_id', company_id)
       .single();
 
     if (projectError || !project) {
@@ -335,7 +332,7 @@ export const validateGeofence = async (req, res) => {
 export const updateTimeEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id, id: user_id, role } = req.user;
+    const { id: user_id } = req.user;
     const {
       project_id,
       cost_code_id,
@@ -348,20 +345,19 @@ export const updateTimeEntry = async (req, res) => {
       unit_of_measure
     } = req.body;
 
-    // First check if entry exists
+    // First check if entry exists and get its company_id
     const { data: existing, error: fetchError } = await supabase
       .from('time_entries')
       .select('*')
       .eq('id', id)
-      .eq('company_id', company_id)
       .single();
 
     if (fetchError || !existing) {
       return res.status(404).json({ error: 'Time entry not found' });
     }
 
-    // Check permissions
-    if (existing.user_id !== user_id && !['admin', 'owner', 'foreman'].includes(role)) {
+    // Check permissions - user can only edit their own entries for now
+    if (existing.user_id !== user_id) {
       return res.status(403).json({ error: 'Not authorized to edit this time entry' });
     }
 
@@ -405,27 +401,32 @@ export const updateTimeEntry = async (req, res) => {
 export const deleteTimeEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id, role } = req.user;
+    const { id: user_id } = req.user;
 
-    // Only admins can delete
-    if (!['admin', 'owner'].includes(role)) {
-      return res.status(403).json({ error: 'Only admins can delete time entries' });
+    // Get the entry first to verify ownership
+    const { data: existing, error: fetchError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Time entry not found' });
+    }
+
+    // For now, only allow users to delete their own entries
+    if (existing.user_id !== user_id) {
+      return res.status(403).json({ error: 'Not authorized to delete this time entry' });
     }
 
     const { data, error } = await supabase
       .from('time_entries')
       .delete()
       .eq('id', id)
-      .eq('company_id', company_id)
       .select()
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ error: 'Time entry not found' });
-      }
-      throw error;
-    }
+    if (error) throw error;
 
     res.json({ message: 'Time entry deleted', data });
   } catch (error) {
@@ -523,7 +524,7 @@ export const getSecondsWorkedDay = async (req, res) => {
 export const getSecondsWorkedWeek = async (req, res) => {
   try {
     const { id: user_id } = req.user;
-    
+
     // Get start of week (Sunday)
     const now = new Date();
     const startOfWeek = new Date(now);
@@ -539,7 +540,7 @@ export const getSecondsWorkedWeek = async (req, res) => {
     if (error) throw error;
 
     const seconds = calculateSecondsWorked(data || []);
-    res.json({ 
+    res.json({
       seconds: Math.round(seconds),
       week_start: startOfWeek.toISOString().split('T')[0]
     });
@@ -553,7 +554,7 @@ export const getSecondsWorkedWeek = async (req, res) => {
 export const getSecondsWorkedMonth = async (req, res) => {
   try {
     const { id: user_id } = req.user;
-    
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -566,7 +567,7 @@ export const getSecondsWorkedMonth = async (req, res) => {
     if (error) throw error;
 
     const seconds = calculateSecondsWorked(data || []);
-    res.json({ 
+    res.json({
       seconds: Math.round(seconds),
       month_start: startOfMonth.toISOString().split('T')[0]
     });
@@ -580,7 +581,7 @@ export const getSecondsWorkedMonth = async (req, res) => {
 export const getSecondsWorkedYear = async (req, res) => {
   try {
     const { id: user_id } = req.user;
-    
+
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
@@ -593,7 +594,7 @@ export const getSecondsWorkedYear = async (req, res) => {
     if (error) throw error;
 
     const seconds = calculateSecondsWorked(data || []);
-    res.json({ 
+    res.json({
       seconds: Math.round(seconds),
       year_start: startOfYear.toISOString().split('T')[0]
     });
@@ -606,13 +607,13 @@ export const getSecondsWorkedYear = async (req, res) => {
 // Start break
 export const startBreak = async (req, res) => {
   try {
-    const { company_id, id: user_id } = req.user;
+    const { id: user_id } = req.user;
     const { break_type = 'standard' } = req.body;
 
-    // Find current open time entry
+    // Find current open time entry (includes company_id)
     const { data: timeEntry, error: findError } = await supabase
       .from('time_entries')
-      .select('id')
+      .select('id, company_id')
       .eq('user_id', user_id)
       .is('clock_out', null)
       .single();
@@ -630,7 +631,7 @@ export const startBreak = async (req, res) => {
       .single();
 
     if (existingBreak) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: 'Already on break',
         existing_break_id: existingBreak.id
       });
@@ -640,7 +641,7 @@ export const startBreak = async (req, res) => {
       .from('breaks')
       .insert({
         time_entry_id: timeEntry.id,
-        company_id,
+        company_id: timeEntry.company_id,
         user_id,
         break_start: new Date().toISOString(),
         break_type
@@ -696,8 +697,8 @@ export const endBreak = async (req, res) => {
 
     await supabase
       .from('time_entries')
-      .update({ 
-        break_minutes: (timeEntry?.break_minutes || 0) + breakMinutes 
+      .update({
+        break_minutes: (timeEntry?.break_minutes || 0) + breakMinutes
       })
       .eq('id', openBreak.time_entry_id);
 
@@ -748,35 +749,35 @@ export const getCurrentBreak = async (req, res) => {
 // Update cost code for current time entry
 export const updateCostCode = async (req, res) => {
   try {
-    const { company_id, id: user_id } = req.user;
+    const { id: user_id } = req.user;
     const { cost_code_id } = req.body;
 
     if (!cost_code_id) {
       return res.status(400).json({ error: 'cost_code_id is required' });
     }
 
-    // Verify cost code belongs to company
-    const { data: costCode, error: costCodeError } = await supabase
-      .from('cost_codes')
-      .select('id')
-      .eq('id', cost_code_id)
-      .eq('company_id', company_id)
-      .single();
-
-    if (costCodeError || !costCode) {
-      return res.status(404).json({ error: 'Cost code not found' });
-    }
-
-    // Find current open time entry
+    // Find current open time entry (includes company_id)
     const { data: timeEntry, error: findError } = await supabase
       .from('time_entries')
-      .select('id')
+      .select('id, company_id')
       .eq('user_id', user_id)
       .is('clock_out', null)
       .single();
 
     if (findError || !timeEntry) {
       return res.status(404).json({ error: 'No open time entry found' });
+    }
+
+    // Verify cost code belongs to same company
+    const { data: costCode, error: costCodeError } = await supabase
+      .from('cost_codes')
+      .select('id')
+      .eq('id', cost_code_id)
+      .eq('company_id', timeEntry.company_id)
+      .single();
+
+    if (costCodeError || !costCode) {
+      return res.status(404).json({ error: 'Cost code not found' });
     }
 
     const { data, error } = await supabase

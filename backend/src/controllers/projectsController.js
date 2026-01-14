@@ -7,14 +7,22 @@ import { supabase } from '../utils/supabase.js';
 export async function getAllProjects(req, res) {
   try {
     const { active, customer_id, parent_id } = req.query;
+    
+    // Use query param if provided, otherwise use user's default company
+    const company_id = req.query.company_id || req.user?.default_company_id;
+
+    if (!company_id) {
+      return res.status(400).json({ message: 'company_id is required' });
+    }
 
     let query = supabase
       .from('projects')
       .select(`
         *,
         customers:customer_id(id, name),
-        parent:parent_id(id, name)
+        parent:parent_id(id, name)   
       `)
+      .eq('company_id', company_id)
       .order('name', { ascending: true });
 
     // Filter by active status
