@@ -50,7 +50,7 @@ const DashboardLayout = () => {
         }
       } />
       <Tabs.Screen 
-      name="timecard_Screen" 
+      name="(timecard_Screen)" 
       options={
         {   title: 'Timecard',
             tabBarIcon: ({focused})=>
