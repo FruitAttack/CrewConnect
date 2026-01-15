@@ -1,23 +1,16 @@
-import React, { useRef, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  useWindowDimensions,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname } from "expo-router";
-import { useSidebar } from "./sidebarContext";
-import { useSession } from "../../../utils/ctx";
+import React, { useRef, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Animated, Easing, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, usePathname } from 'expo-router';
+import { useSidebar } from './sidebarContext';
+import { useSession } from '../../../utils/ctx';
+import { colors, spacing, borderRadius, shadows, typography } from '../../../constants/theme';
 
-const COLLAPSED_WIDTH = 80;
+const COLLAPSED_WIDTH = 72;
 const EXPANDED_MIN = 100;
-const EXPANDED_MAX = 220;
-const ANIM_DURATION = 220;
-const ICON_COLLAPSED_SIZE = 25;
-const LABEL_RESERVE = 80;
+const EXPANDED_MAX = 240;
+const ANIM_DURATION = 200;
+const ICON_SIZE = 22;
 
 export default function Sidebar() {
   const router = useRouter();
@@ -25,14 +18,11 @@ export default function Sidebar() {
   const { isExpanded, toggleSidebar } = useSidebar();
   const { session } = useSession();
 
-  const homeRoute = session ? "/(app)/dashboard" : "/";
+  const homeRoute = session ? '/(app)/dashboard' : '/';
   const anim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
 
   const { width: windowWidth } = useWindowDimensions();
-  const expandedWidth = Math.max(
-    EXPANDED_MIN,
-    Math.min(Math.floor(windowWidth * 0.32), EXPANDED_MAX)
-  );
+  const expandedWidth = Math.max(EXPANDED_MIN, Math.min(Math.floor(windowWidth * 0.18), EXPANDED_MAX));
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -43,154 +33,71 @@ export default function Sidebar() {
     }).start();
   }, [isExpanded, anim]);
 
-  const sidebarWidth = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [COLLAPSED_WIDTH, expandedWidth],
-  });
-
-  const logoMaxHeight = Math.min(140, Math.round(expandedWidth * 0.55));
-  const logoHeight = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [48, logoMaxHeight],
-  });
-
-  const labelWidth = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, Math.max(0, expandedWidth - LABEL_RESERVE)],
-  });
-
-  const labelOpacity = anim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.35, 1],
-  });
-
-  const iconExpandedSize = Math.round(Math.max(28, expandedWidth * 0.08));
-  const iconScale = iconExpandedSize / ICON_COLLAPSED_SIZE;
-  const animatedIconScale = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, iconScale],
-  });
-
-  const fontSizeExpanded = Math.round(Math.min(16, expandedWidth * 0.065));
-  const animatedFontSize = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [16, fontSizeExpanded],
-  });
-
-  const paddingLeft = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 12],
-  });
+  const sidebarWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED_WIDTH, expandedWidth] });
+  const logoMaxHeight = Math.min(100, Math.round(expandedWidth * 0.4));
+  const logoHeight = anim.interpolate({ inputRange: [0, 1], outputRange: [40, logoMaxHeight] });
+  const labelOpacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+  const labelWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, expandedWidth - 70] });
 
   const publicNavItems = [
-    { icon: "home-outline", label: "Home", route: homeRoute },
-    { icon: "grid-outline", label: "Features", route: "/features" },
-    { icon: "pricetags-outline", label: "Pricing", route: "/pricing" },
-    { icon: "help-circle-outline", label: "Support", route: "/support" },
+    { icon: 'home-outline', iconFilled: 'home', label: 'Home', route: homeRoute },
+    { icon: 'grid-outline', iconFilled: 'grid', label: 'Features', route: '/features' },
+    { icon: 'pricetags-outline', iconFilled: 'pricetags', label: 'Pricing', route: '/pricing' },
+    { icon: 'help-circle-outline', iconFilled: 'help-circle', label: 'Support', route: '/support' },
   ];
 
   const privateNavItems = [
-    { icon: "layers-outline", label: "Projects", route: "/(app)/project/projectsOverview" },
-    { icon: "briefcase-outline", label: "Company", route: "/(app)/company" },
-    { icon: "people-outline", label: "Workforce", route: "/(app)/workforce" },
+    { icon: 'layers-outline', iconFilled: 'layers', label: 'Projects', route: '/(app)/project/projectsOverview' },
+    { icon: 'briefcase-outline', iconFilled: 'briefcase', label: 'Company', route: '/(app)/company' },
+    { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce' },
   ];
 
   const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
 
-  function onPressLink(route) {
-    router.push(route);
-  }
-
-  function onPressLogo() {
-    router.push(homeRoute);
-  }
-
-  //helper to determine if a nav item should be "active"
-function isItemActive(route) {
-  if (!pathname) return false;
-
-  //home page
-  if (route === "/" || route === homeRoute) {
-    return pathname === "/" || pathname.includes("dashboard");
-  }
-
-  //special handling for the project folder
-  //since they're all technically different pages
-  if (route.includes("/project/projectsOverview")) {
-    return pathname.startsWith("/(app)/project") || pathname.startsWith("/project");
-  }
-
-  //general fallback: check if last segment of route is included in pathname
-  const parts = route.split("/").filter(Boolean);
-  const last = parts[parts.length - 1];
-  return last && pathname.includes(last);
-}
+  const isItemActive = (route) => {
+    if (!pathname) return false;
+    if (route === '/' || route === homeRoute) return pathname === '/' || pathname.includes('dashboard');
+    if (route.includes('/project/projectsOverview')) return pathname.startsWith('/(app)/project') || pathname.startsWith('/project');
+    const parts = route.split('/').filter(Boolean);
+    const last = parts[parts.length - 1];
+    return last && pathname.includes(last);
+  };
 
   return (
-    <Animated.View style={[styles.sideBar, { width: sidebarWidth }]}>
-      <View style={styles.sideBarItems}>
+    <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
+      <View style={styles.sidebarContent}>
         {/* Logo */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={onPressLogo}
-          style={styles.logoWrap}
-        >
+        <TouchableOpacity activeOpacity={0.8} onPress={() => router.push(homeRoute)} style={styles.logoWrap}>
           <Animated.Image
-            source={require("../../../assets/images/CC_logo_nobackground.png")}
+            source={require('../../../assets/images/CC_logo_nobackground.png')}
             style={[styles.logo, { height: logoHeight }]}
             resizeMode="contain"
           />
         </TouchableOpacity>
 
-        <View style={{ height: 12 }} />
+        <View style={styles.divider} />
 
-        <View style={{ width: "100%" }}>
+        {/* Nav Items */}
+        <View style={styles.navSection}>
           {navItems.map((item, idx) => {
             const active = isItemActive(item.route);
             return (
               <TouchableOpacity
                 key={idx}
-                style={[
-                  styles.sideButton,
-                  isExpanded ? styles.sideButtonExpanded : styles.sideButtonCollapsed,
-                  active && styles.sideButtonActive,
-                ]}
-                onPress={() => onPressLink(item.route)}
+                style={[styles.navItem, active && styles.navItemActive]}
+                onPress={() => router.push(item.route)}
                 activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityState={{ selected: !!active }}
               >
-                {/* Icons */}
-                <Animated.View
-                  style={[
-                    styles.iconWrap,
-                    {
-                      transform: [{ scale: animatedIconScale }],
-                    },
-                  ]}
-                >
+                <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
                   <Ionicons
-                    name={item.icon}
-                    size={ICON_COLLAPSED_SIZE}
-                    color={active ? "#161519" : "#FBFBFB"}
+                    name={active ? item.iconFilled : item.icon}
+                    size={ICON_SIZE}
+                    color={active ? colors.primary.orange : colors.neutral.lightGray}
                   />
-                </Animated.View>
-
-                {/* Animated label */}
-                <Animated.View
-                  style={{
-                    overflow: "hidden",
-                    width: labelWidth,
-                    paddingLeft,
-                    justifyContent: "center",
-                  }}
-                >
+                </View>
+                <Animated.View style={{ width: labelWidth, opacity: labelOpacity, overflow: 'hidden' }}>
                   <Animated.Text
-                    style={[
-                      styles.sideButtonText,
-                      { opacity: labelOpacity, fontSize: animatedFontSize },
-                      active && styles.sideButtonTextActive,
-                    ]}
+                    style={[styles.navLabel, active && styles.navLabelActive]}
                     numberOfLines={1}
                   >
                     {item.label}
@@ -201,98 +108,87 @@ function isItemActive(route) {
           })}
         </View>
 
-        <View style={{ flex: 1 }} />
+        <View style={styles.spacer} />
 
-        {/* Toggle sidebar button */}
-        <View style={styles.toggleWrap}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={toggleSidebar}
-            style={styles.toggleButton}
-          >
-            <Animated.View
-              style={{
-                transform: [
-                  {
-                    rotate: anim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["180deg", "0deg"],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Ionicons name="chevron-back-outline" size={28} color="#FBFBFB" />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
+        {/* Toggle Button */}
+        <TouchableOpacity style={styles.toggleButton} onPress={toggleSidebar} activeOpacity={0.8}>
+          <Animated.View style={{ transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '0deg'] }) }] }}>
+            <Ionicons name="chevron-back-outline" size={20} color={colors.neutral.lightGray} />
+          </Animated.View>
+        </TouchableOpacity>
       </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  sideBar: {
-    backgroundColor: "#161519",
-    overflow: "hidden",
+  sidebar: {
+    backgroundColor: colors.neutral.black,
+    borderRightWidth: 1,
+    borderRightColor: colors.neutral.darkGray,
   },
-  sideBarItems: {
-    paddingTop: 10,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    height: "100%",
+  sidebarContent: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
   },
   logoWrap: {
-    width: "100%",
-    alignItems: "center",
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.md,
   },
   logo: {
-    width: "70%",
-    resizeMode: "contain",
+    width: '100%',
+    maxWidth: 140,
   },
-  sideButton: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginTop: 8,
+  divider: {
+    height: 1,
+    backgroundColor: colors.neutral.darkGray,
+    marginHorizontal: spacing.xs,
+    marginBottom: spacing.lg,
   },
-  sideButtonCollapsed: {
-    justifyContent: "center",
+  navSection: {
+    gap: spacing.xs,
   },
-  sideButtonExpanded: {
-    justifyContent: "flex-start",
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
   },
-  sideButtonActive: {
-    backgroundColor: "#FBFBFB",
+  navItemActive: {
+    backgroundColor: 'rgba(246, 112, 17, 0.1)',
   },
   iconWrap: {
-    width: 36,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sideButtonText: {
-    color: "#FBFBFB",
-    marginLeft: 12,
+  iconWrapActive: {
+    backgroundColor: 'rgba(246, 112, 17, 0.15)',
   },
-  sideButtonTextActive: {
-    color: "#161519",
-    fontWeight: "600",
+  navLabel: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.lightGray,
+    marginLeft: spacing.sm,
   },
-  toggleWrap: {
-    width: "100%",
-    paddingHorizontal: 12,
-    paddingBottom: 18,
-    alignItems: "center",
+  navLabelActive: {
+    color: colors.primary.orange,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  spacer: {
+    flex: 1,
   },
   toggleButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#262626",
-    paddingVertical: 10,
-    borderRadius: 8,
-    width: "55%",
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.neutral.darkGray,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    marginHorizontal: spacing.xs,
   },
 });

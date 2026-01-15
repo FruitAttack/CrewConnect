@@ -1,88 +1,81 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import LoginModal from "./loginModal";
-import { useSession } from "../../../utils/ctx";
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import LoginModal from './loginModal';
+import { useSession } from '../../../utils/ctx';
+import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
 
 export default function TopBar({ title }) {
   const [loginVisible, setLoginVisible] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const { session } = useSession();
   const user = session?.user;
 
   const { width: windowWidth } = useWindowDimensions();
+  const isCompact = windowWidth < 600;
 
-  const iconSize = Math.round(Math.max(28, Math.min(46, windowWidth * 0.04)));
+  const userName = user
+    ? user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
+    : null;
 
-  const titleFontSize = Math.round(Math.max(16, Math.min(26, windowWidth * 0.03)));
-
-  const searchWidth = Math.round(Math.max(120, Math.min(420, windowWidth * 0.28)));
-
-  const showIconLabel = windowWidth > 700;
-
-  const label = user
-    ? user.user_metadata?.full_name ||
-      user.user_metadata?.name ||
-      user.email?.split("@")[0]
-    : "Log In";
-
-  const compactLabel = label.length > 18 ? label.slice(0, 15) + "…" : label;
+  const displayName = userName ? (userName.length > 15 ? userName.slice(0, 12) + '...' : userName) : 'Log In';
 
   return (
     <>
       <LoginModal visible={loginVisible} onClose={() => setLoginVisible(false)} />
 
       <LinearGradient
-        colors={["#F67011", "#FF9624"]}
+        colors={[colors.primary.orangeLight, colors.primary.orange]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.topBar}
       >
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[styles.pageTitle, { fontSize: titleFontSize }]}
-            selectable={false}
-          >
-            {title}
-          </Text>
+        {/* Left: Title */}
+        <View style={styles.leftSection}>
+          <Text style={styles.pageTitle} numberOfLines={1}>{title}</Text>
         </View>
 
-        <View style={styles.topBarRight}>
-          {/* Search input */}
-          <TextInput
-            placeholder="Search..."
-            placeholderTextColor="#4C4C4C"
-            style={[
-              styles.searchbar,
-              { width: searchWidth, height: 40 },
-            ]}
-          />
+        {/* Right: Actions */}
+        <View style={styles.rightSection}>
+          {/* Search Bar */}
+          {!isCompact && (
+            <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
+              <Ionicons name="search-outline" size={18} color={colors.neutral.gray} style={styles.searchIcon} />
+              <TextInput
+                placeholder="Search..."
+                placeholderTextColor={colors.neutral.gray}
+                style={styles.searchInput}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+            </View>
+          )}
 
-          {/* Profile icon and label */}
-          <TouchableOpacity
-            style={styles.iconWrapper}
-            onPress={() => setLoginVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="person-circle-outline" size={iconSize} color="#161519" />
-              <Text style={[styles.iconLabel, { fontSize: Math.max(10, iconSize * 0.25) }]}>
-                {compactLabel}
-              </Text>
+          {/* Notifications (placeholder) */}
+          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
+            <View style={styles.notificationBadge}>
+              <Ionicons name="notifications-outline" size={22} color={colors.neutral.black} />
+              <View style={styles.badge} />
+            </View>
           </TouchableOpacity>
 
-          {/* Settings icon */}
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.8}>
-            <Ionicons name="settings-outline" size={iconSize} color="#161519" />
+          {/* User Profile */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => setLoginVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.avatar}>
+              <Ionicons name="person" size={18} color={colors.neutral.white} />
+            </View>
+            {!isCompact && (
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{displayName}</Text>
+                {user && <Text style={styles.profileRole}>Admin</Text>}
+              </View>
+            )}
+            <Ionicons name="chevron-down" size={16} color={colors.neutral.black} />
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -92,43 +85,99 @@ export default function TopBar({ title }) {
 
 const styles = StyleSheet.create({
   topBar: {
-    height: 80,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
   },
-  titleContainer: {
+  leftSection: {
     flex: 1,
-    marginRight: 12,
   },
   pageTitle: {
-    color: "#161519",
-    fontWeight: "bold",
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.black,
   },
-  topBarRight: {
-    flexDirection: "row",
-    alignItems: "center",
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  searchbar: {
-    backgroundColor: "#FBFBFB",
-    borderRadius: 10,
-    marginRight: 12,
-    paddingHorizontal: 10,
-    minWidth: 60,
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.sm,
+    height: 40,
+    minWidth: 200,
+    maxWidth: 300,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  iconWrapper: {
-    alignItems: "center",
-    marginLeft: 6,
-    marginRight: 6,
-    justifyContent: "center",
+  searchContainerFocused: {
+    backgroundColor: colors.neutral.white,
+    borderColor: colors.neutral.black,
   },
-  iconLabel: {
-    marginTop: -4,
-    color: "#161519",
-    fontWeight: "500",
+  searchIcon: {
+    marginRight: spacing.xs,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.fontSize.md,
+    color: colors.neutral.black,
+    outlineStyle: 'none',
   },
   iconButton: {
-    marginLeft: 6,
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadge: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.semantic.error,
+    borderWidth: 1.5,
+    borderColor: colors.primary.orangeLight,
+  },
+  profileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileInfo: {
+    marginHorizontal: spacing.xs,
+  },
+  profileName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.black,
+  },
+  profileRole: {
+    fontSize: typography.fontSize.xs,
+    color: colors.neutral.gray,
   },
 });
