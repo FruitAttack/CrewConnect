@@ -91,19 +91,21 @@ export default function Features() {
             <Text style={styles.sectionSubtitle}>Intuitive tools that work where your crew works—even offline</Text>
           </View>
           {fieldFeatures.map((feature, index) => (
-            <View key={index} style={[styles.featureRow, isLargeScreen && styles.featureRowLarge, isLargeScreen && index % 2 === 1 && styles.featureRowReverse]}>
-              <View style={styles.featureContent}>
-                <View style={styles.featureIconLarge}><Ionicons name={feature.icon} size={28} color={colors.primary.orange} /></View>
-                <Text style={styles.featureRowTitle}>{feature.title}</Text>
-                <Text style={styles.featureRowDescription}>{feature.description}</Text>
-                <View style={styles.featureBullets}>
-                  {feature.bullets.map((bullet, bIndex) => (
-                    <View key={bIndex} style={styles.bulletItem}><View style={styles.bulletDot} /><Text style={styles.bulletText}>{bullet}</Text></View>
-                  ))}
+            <View key={index} style={[styles.featureRowWrapper, index % 2 === 1 && styles.featureRowWrapperAlt]}>
+              <View style={[styles.featureRow, isLargeScreen && styles.featureRowLarge, isLargeScreen && index % 2 === 1 && styles.featureRowReverse]}>
+                <View style={styles.featureContent}>
+                  <View style={styles.featureIconLarge}><Ionicons name={feature.icon} size={28} color={colors.primary.orange} /></View>
+                  <Text style={styles.featureRowTitle}>{feature.title}</Text>
+                  <Text style={styles.featureRowDescription}>{feature.description}</Text>
+                  <View style={styles.featureBullets}>
+                    {feature.bullets.map((bullet, bIndex) => (
+                      <View key={bIndex} style={styles.bulletItem}><View style={styles.bulletDot} /><Text style={styles.bulletText}>{bullet}</Text></View>
+                    ))}
+                  </View>
                 </View>
-              </View>
-              <View style={styles.featureImageContainer}>
-                <View style={styles.phoneFrame}><Image source={feature.image} style={styles.phoneImage} resizeMode="cover" /></View>
+                <View style={styles.featureImageContainer}>
+                  <View style={styles.phoneFrame}><Image source={feature.image} style={styles.phoneImage} resizeMode="cover" /></View>
+                </View>
               </View>
             </View>
           ))}
@@ -192,13 +194,15 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: 'rgba(246, 112, 17, 0.1)' },
   tabText: { fontSize: 15, fontWeight: '500', color: colors.text.secondary },
   tabTextActive: { color: colors.primary.orange, fontWeight: '600' },
-  section: { paddingVertical: 80, paddingHorizontal: spacing.lg, backgroundColor: colors.neutral.white },
+  section: { paddingVertical: 40, paddingHorizontal: spacing.lg, backgroundColor: colors.neutral.white },
   sectionAlt: { paddingVertical: 80, paddingHorizontal: spacing.lg, backgroundColor: '#F8FAFC' },
   sectionHeader: { alignItems: 'center', marginBottom: 60, maxWidth: 600, alignSelf: 'center' },
   sectionLabel: { fontSize: 13, fontWeight: '600', color: colors.primary.orange, letterSpacing: 2, marginBottom: spacing.sm },
   sectionTitle: { fontSize: 40, fontWeight: '700', color: colors.text.primary, textAlign: 'center', marginBottom: spacing.md, letterSpacing: -0.5 },
   sectionSubtitle: { fontSize: 18, color: colors.text.secondary, textAlign: 'center', lineHeight: 28 },
-  featureRow: { marginBottom: 80, maxWidth: 1100, alignSelf: 'center', width: '100%' },
+  featureRowWrapper: { paddingVertical: 60, paddingHorizontal: spacing.lg, backgroundColor: colors.neutral.white },
+  featureRowWrapperAlt: { backgroundColor: '#F8FAFC' },
+  featureRow: { maxWidth: 1100, alignSelf: 'center', width: '100%' },
   featureRowLarge: { flexDirection: 'row', alignItems: 'center', gap: 80 },
   featureRowReverse: { flexDirection: 'row-reverse' },
   featureContent: { flex: 1 },
@@ -210,8 +214,8 @@ const styles = StyleSheet.create({
   bulletDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary.orange },
   bulletText: { fontSize: 15, color: colors.text.secondary },
   featureImageContainer: { alignItems: 'center', marginTop: spacing.xl },
-  phoneFrame: { width: 260, height: 520, borderRadius: 36, backgroundColor: colors.neutral.black, padding: 10, ...shadows.xl },
-  phoneImage: { width: '100%', height: '100%', borderRadius: 28 },
+  phoneFrame: { width: 260, height: 520, borderRadius: 36, overflow: 'hidden', ...shadows.xl },
+  phoneImage: { width: '100%', height: '100%', borderRadius: 36 },
   managementGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
   managementGridLarge: { flexDirection: 'row', flexWrap: 'wrap' },
   managementCard: { flex: 1, minWidth: 300, backgroundColor: colors.neutral.white, borderRadius: borderRadius.xl, padding: spacing.xl, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.06)', transitionDuration: '300ms' },
