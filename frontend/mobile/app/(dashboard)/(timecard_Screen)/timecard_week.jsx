@@ -8,8 +8,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar } from "react-native-calendars";
-
-const TABS = ["Week", "Pay Period", "Time Off"];
+import { router, useFocusEffect } from "expo-router";
+const TABS = ["Pay Period", "Time Off"];
 
 // Helper function to get the start of the week (Sunday)
 const getWeekStart = (dateString) => {
@@ -36,7 +36,7 @@ const generateWeekData = (startDate) => {
     weekData.push({
       date: `${month}/${day}`,
       day: days[currentDate.getDay()],
-      hours: "-",
+      hours: "9",
     });
   }
   
@@ -70,30 +70,72 @@ const Timecard_Screen = () => {
   const [timeData, setTimeData] = useState(generateWeekData(getWeekStart(todayString)));
   const [dateRange, setDateRange] = useState(formatDateRange(getWeekStart(todayString)));
   const [selectedDate, setSelectedDate] = useState(todayString);
-
+  const [selectedRowDate, setSelectedRowDate] = useState(null);
+  const [lastTap, setLastTap] = useState(null);
   const handleDayPress = (day) => {
     const weekStart = getWeekStart(day.dateString);
     setSelectedWeekStart(weekStart);
     setTimeData(generateWeekData(weekStart));
     setDateRange(formatDateRange(weekStart));
     setSelectedDate(day.dateString);
-  };
-
-  const navigateWeek = (direction) => {
-    const newWeekStart = new Date(selectedWeekStart);
-    newWeekStart.setDate(selectedWeekStart.getDate() + (direction * 7));
-    setSelectedWeekStart(newWeekStart);
-    setTimeData(generateWeekData(newWeekStart));
-    setDateRange(formatDateRange(newWeekStart));
-    setSelectedDate(null);
-  };
-
-  const isDateSelected = (dateString) => {
-    if (!selectedDate) return false;
-    const selected = new Date(selectedDate + 'T00:00:00');
+    
+    // Update selected row to match calendar selection
+    const selected = new Date(day.dateString + 'T00:00:00');
     const month = selected.getMonth() + 1;
-    const day = selected.getDate();
-    return dateString === `${month}/${day}`;
+    const dayNum = selected.getDate();
+    setSelectedRowDate(`${month}/${dayNum}`);
+  };
+
+ const handleRowPress = (dateString) => {
+  setSelectedRowDate(dateString);
+  
+  // Update calendar selection to match row click
+  // Convert dateString (e.g., "1/15") back to full date format
+  const [month, day] = dateString.split('/');
+  const year = selectedWeekStart.getFullYear();
+  const fullDateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  setSelectedDate(fullDateString);
+};
+ const navigateWeek = (direction) => {
+  const newWeekStart = new Date(selectedWeekStart);
+  newWeekStart.setDate(selectedWeekStart.getDate() + (direction * 7));
+  setSelectedWeekStart(newWeekStart);
+  setTimeData(generateWeekData(newWeekStart));
+  setDateRange(formatDateRange(newWeekStart));
+  setSelectedDate(null);
+  setSelectedRowDate(null);
+};
+
+const handleRowDoubleTap = (item) => {
+  const now = Date.now();
+  const DOUBLE_TAP_DELAY = 300; // milliseconds
+  
+  if (lastTap && (now - lastTap) < DOUBLE_TAP_DELAY) {
+    // Double tap detected - navigate to detail page
+    handleOpenDetailPage(item);
+  } else {
+    // Single tap - just select the row
+    handleRowPress(item.date);
+  }
+  
+  setLastTap(now);
+};
+
+const handleOpenDetailPage = (item) => {
+  console.log('Opening detail page for:', item);
+  router.push({
+    pathname: "/detailed_day",
+    params: {
+      date: item.date,
+      dayOfWeek: item.day,
+    },
+  });
+ 
+};
+
+
+  const isRowSelected = (dateString) => {
+    return selectedRowDate === dateString;
   };
 
   return (
@@ -156,20 +198,21 @@ const Timecard_Screen = () => {
 
         {/* Rows */}
         {timeData.map((item, index) => (
-          <View 
-            key={`${item.date}-${index}`} 
-            style={[
-              styles.row,
-              isDateSelected(item.date) && styles.selectedRow
-            ]}
-          >
-            <Text style={styles.rowLeft}>
-              {item.date}{"   "}
-              <Text style={styles.day}>{item.day}</Text>
-            </Text>
-            <Text style={styles.hours}>{item.hours}</Text>
-          </View>
-        ))}
+  <Pressable
+    key={`${item.date}-${index}`}
+    onPress={() => handleRowDoubleTap(item)}
+    style={[
+      styles.row,
+      isRowSelected(item.date) && styles.selectedRow
+    ]}
+  >
+    <Text style={styles.rowLeft}>
+      {item.date}{"   "}
+      <Text style={styles.day}>{item.day}</Text>
+    </Text>
+    <Text style={styles.hours}>{item.hours}</Text>
+  </Pressable>
+))}
 
         {/* Total */}
         <View style={styles.totalRow}>
@@ -221,10 +264,12 @@ const styles = StyleSheet.create({
 
   /* Card */
   card: {
-    backgroundColor: "#2b2b2b",
-    borderRadius: 20,
-    padding: 12,
-  },
+  flex: 1,
+  backgroundColor: "#2b2b2b",
+  borderTopLeftRadius: 20,
+  borderTopRightRadius: 20,
+  padding: 12,
+},
 
   cardHeader: {
     flexDirection: "row",
