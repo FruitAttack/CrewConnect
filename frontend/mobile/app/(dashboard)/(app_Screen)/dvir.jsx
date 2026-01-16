@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import SuccessScreen from "../../../components/SuccessScreen";
 import {
   ShortAnswerQuestion,
   LongAnswerQuestion,
@@ -28,6 +28,7 @@ export default function DVIRForm() {
   const [defectDescription, setDefectDescription] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = () => {
     // Validate required fields
@@ -60,21 +61,20 @@ export default function DVIRForm() {
     };
 
     console.log("DVIR Form Submitted:", formData);
-
-    Alert.alert(
-      "Form Submitted",
-      "Daily Vehicle Inspection Report has been recorded.",
-      [
-        {
-          text: "OK",
-          onPress: () => router.back(),
-        },
-      ]
-    );
+    setShowSuccess(true);
   };
 
+  if (showSuccess) {
+    return (
+      <SuccessScreen
+        title="Form submitted"
+        subtitle="Daily Vehicle Inspection Report has been recorded."
+      />
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
           <Text style={styles.title}>Daily Vehicle Inspection Report</Text>
