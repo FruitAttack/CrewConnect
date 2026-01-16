@@ -3,16 +3,21 @@ import { Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import FormBuilder from "../../../components/FormBuilder";
 import SuccessScreen from "../../../components/SuccessScreen";
-import { getFormById } from "../../../utils/sampleForms";
+import { getFormById, submitForm } from "../../../utils/sampleForms";
 
 export default function FormDetailsScreen() {
   const { formId } = useLocalSearchParams();
   const form = getFormById(formId);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const handleSubmit = (formSubmission) => {
-    console.log("Form Submitted:", formSubmission);
-    setShowSuccess(true);
+  const handleSubmit = async (formSubmission) => {
+    try {
+      await submitForm(formSubmission);
+      setShowSuccess(true);
+    } catch (err) {
+      console.log("Submit failed:", err);
+      Alert.alert("Submit failed", "Could not submit the form.");
+    }
   };
 
   if (!form) {

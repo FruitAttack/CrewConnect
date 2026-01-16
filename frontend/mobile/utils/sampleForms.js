@@ -306,19 +306,19 @@ export const SAMPLE_FORMS = [
 ];
 
 /**
- * Get all available forms
+ * Get all available forms. Production: GET /forms
  */
 export const getAllForms = () => SAMPLE_FORMS;
 
 /**
- * Get a specific form by ID
+ * Get a specific form by ID. Production: GET /forms/:formId
  */
 export const getFormById = (formId) => {
   return SAMPLE_FORMS.find((form) => form.id === formId);
 };
 
 /**
- * Search forms by title or description
+ * Search forms by title or description. Production: GET /forms/search?query={query}
  */
 export const searchForms = (query) => {
   const lowerQuery =
@@ -329,4 +329,15 @@ export const searchForms = (query) => {
       form.description.toLowerCase().includes(lowerQuery) ||
       form.category.toLowerCase().includes(lowerQuery)
   );
+};
+
+/**
+ * Submit helper (no network). Production: POST to `/forms/:formId/submissions`.
+ */
+export const submitForm = async (formSubmission) => {
+  console.log("[submit] received submission", formSubmission);
+  return {
+    ok: true,
+    received: formSubmission,
+  };
 };
