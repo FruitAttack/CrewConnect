@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from 'react-native';
 import React from 'react';
+import { router } from 'expo-router';
 
 const tiles = [
   { label: 'Daily Log', icon: require('../../../assets/icons/dailylog.png') },
@@ -17,13 +18,19 @@ const tiles = [
 ];
 
 export default function AppHome() {
+  const handleTilePress = (tile) => {
+    if (tile.route) {
+      router.push(`/(dashboard)/(app_Screen)/${tile.route}`);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Image source={require('../../../assets/CC_logo_nobackground.png')} style={styles.logo} />
 
       <View style={styles.grid}>
         {tiles.map((tile, i) => (
-          <TouchableOpacity key={i} style={styles.tile}>
+          <TouchableOpacity key={i} style={styles.tile} onPress={() => handleTilePress(tile)}>
             <Image source={tile.icon} style={styles.icon} />
             <Text style={styles.label}>{tile.label}</Text>
           </TouchableOpacity>
