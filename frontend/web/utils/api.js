@@ -1,11 +1,31 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
-const API_URL = "http://192.168.86.22:5001"
+// windows command: ipconfig (look for IPv4 Address)
+const API_URL = "http://localhost:5001"
+//const API_URL = "http://192.168.86.22:5001"
 
-export async function apiCall(route, method = 'GET', body = null) {
+/**
+ * Make API call with optional authentication
+ * @param {string} route - API route (without /api/ prefix)
+ * @param {string} token - JWT token for authentication (optional)
+ * @param {string} method - HTTP method (GET, POST, PUT, DELETE, PATCH)
+ * @param {object} body - Request body for POST/PUT requests
+ */
+export async function apiCall(route, token = null, method = 'GET', body = null) {
   try {
-    const options = { method, headers: { 'Content-Type': 'application/json' } }
-    if (body) options.body = JSON.stringify(body)
+    const options = { 
+      method, 
+      headers: { 'Content-Type': 'application/json' } 
+    }
+    
+    // Add auth token if provided
+    if (token) {
+      options.headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    if (body) {
+      options.body = JSON.stringify(body)
+    }
 
     const response = await fetch(`${API_URL}/api/${route}`, options)
 
@@ -29,4 +49,285 @@ export async function apiCall(route, method = 'GET', body = null) {
   } catch (error) {
     return { success: false, message: "Error fetching data: " + error.message }
   }
+}
+
+// ============================================
+// PROJECTS
+// ============================================
+export async function getProjects(token, companyId, filters = {}) {
+  const params = new URLSearchParams({ company_id: companyId, ...filters })
+  return apiCall(`projects?${params}`, token)
+}
+
+export async function getProject(token, projectId) {
+  return apiCall(`projects/${projectId}`, token)
+}
+
+export async function createProject(token, projectData) {
+  return apiCall('projects', token, 'POST', projectData)
+}
+
+export async function updateProject(token, projectId, updates) {
+  return apiCall(`projects/${projectId}`, token, 'PUT', updates)
+}
+
+export async function deleteProject(token, projectId, hardDelete = false) {
+  const params = hardDelete ? '?hard_delete=true' : ''
+  return apiCall(`projects/${projectId}${params}`, token, 'DELETE')
+}
+
+export async function activateProject(token, projectId) {
+  return apiCall(`projects/${projectId}/activate`, token, 'PATCH')
+}
+
+export async function getProjectLaborSummary(token, projectId, startDate, endDate) {
+  const params = new URLSearchParams()
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return apiCall(`projects/${projectId}/labor-summary?${params}`, token)
+}
+
+export async function getProjectCostBreakdown(token, projectId, startDate, endDate) {
+  const params = new URLSearchParams()
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return apiCall(`projects/${projectId}/cost-breakdown?${params}`, token)
+}
+
+// ============================================
+// USERS
+// ============================================
+export async function getUsers(token, companyId) {
+  return apiCall(`users?company_id=${companyId}`, token)
+}
+
+export async function getUser(token, userId) {
+  return apiCall(`users/${userId}`, token)
+}
+
+export async function getUserProfile(token) {
+  return apiCall('users/me', token)
+}
+
+export async function updateUser(token, userId, updates) {
+  return apiCall(`users/${userId}`, token, 'PUT', updates)
+}
+
+export async function getClockedInUsers(token, companyId) {
+  return apiCall(`users/clocked-in?company_id=${companyId}`, token)
+}
+
+// ============================================
+// TIME ENTRIES
+// ============================================
+export async function getTimeEntries(token, companyId, filters = {}) {
+  const params = new URLSearchParams({ company_id: companyId, ...filters })
+  return apiCall(`time-entries?${params}`, token)
+}
+
+export async function getCurrentTimeEntry(token) {
+  return apiCall('time-entries/current', token)
+}
+
+export async function clockIn(token, data) {
+  return apiCall('time-entries/clock-in', token, 'POST', data)
+}
+
+export async function clockOut(token, data) {
+  return apiCall('time-entries/clock-out', token, 'POST', data)
+}
+
+export async function getTimeEntry(token, entryId) {
+  return apiCall(`time-entries/${entryId}`, token)
+}
+
+export async function updateTimeEntry(token, entryId, updates) {
+  return apiCall(`time-entries/${entryId}`, token, 'PUT', updates)
+}
+
+export async function deleteTimeEntry(token, entryId) {
+  return apiCall(`time-entries/${entryId}`, token, 'DELETE')
+}
+
+// ============================================
+// REPORTS
+// ============================================
+export async function getDashboard(token, companyId, date) {
+  const params = new URLSearchParams({ company_id: companyId })
+  if (date) params.append('date', date)
+  return apiCall(`reports/dashboard?${params}`, token)
+}
+
+export async function getDailyCrew(token, companyId, date) {
+  const params = new URLSearchParams({ company_id: companyId })
+  if (date) params.append('date', date)
+  return apiCall(`reports/daily-crew?${params}`, token)
+}
+
+export async function getTimecard(token, userId, startDate, endDate) {
+  const params = new URLSearchParams({
+    user_id: userId,
+    start_date: startDate,
+    end_date: endDate,
+  })
+  return apiCall(`reports/timecard?${params}`, token)
+}
+
+export async function getBudgetVsActual(token, projectId, costCodeId) {
+  const params = new URLSearchParams()
+  if (projectId) params.append('project_id', projectId)
+  if (costCodeId) params.append('cost_code_id', costCodeId)
+  return apiCall(`reports/budget-vs-actual?${params}`, token)
+}
+
+export async function getLaborCostReport(token, projectId, startDate, endDate) {
+  const params = new URLSearchParams()
+  if (projectId) params.append('project_id', projectId)
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return apiCall(`reports/labor-cost?${params}`, token)
+}
+
+export async function getProductionReport(token, projectId, startDate, endDate) {
+  const params = new URLSearchParams()
+  if (projectId) params.append('project_id', projectId)
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return apiCall(`reports/production?${params}`, token)
+}
+
+export async function getEquipmentUtilization(token, companyId, startDate, endDate) {
+  const params = new URLSearchParams({
+    company_id: companyId,
+    start_date: startDate,
+    end_date: endDate,
+  })
+  return apiCall(`reports/equipment-utilization?${params}`, token)
+}
+
+// ============================================
+// CUSTOMERS
+// ============================================
+export async function getCustomers(token, companyId) {
+  return apiCall(`customers?company_id=${companyId}`, token)
+}
+
+export async function getCustomer(token, customerId) {
+  return apiCall(`customers/${customerId}`, token)
+}
+
+export async function createCustomer(token, customerData) {
+  return apiCall('customers', token, 'POST', customerData)
+}
+
+export async function updateCustomer(token, customerId, updates) {
+  return apiCall(`customers/${customerId}`, token, 'PUT', updates)
+}
+
+export async function deleteCustomer(token, customerId) {
+  return apiCall(`customers/${customerId}`, token, 'DELETE')
+}
+
+// ============================================
+// EQUIPMENT
+// ============================================
+export async function getEquipment(token, companyId) {
+  return apiCall(`equipment?company_id=${companyId}`, token)
+}
+
+export async function getEquipmentById(token, equipmentId) {
+  return apiCall(`equipment/${equipmentId}`, token)
+}
+
+export async function createEquipment(token, equipmentData) {
+  return apiCall('equipment', token, 'POST', equipmentData)
+}
+
+export async function updateEquipment(token, equipmentId, updates) {
+  return apiCall(`equipment/${equipmentId}`, token, 'PUT', updates)
+}
+
+export async function deleteEquipment(token, equipmentId) {
+  return apiCall(`equipment/${equipmentId}`, token, 'DELETE')
+}
+
+// ============================================
+// COST CODES
+// ============================================
+export async function getCostCodes(token, companyId) {
+  return apiCall(`cost-codes?company_id=${companyId}`, token)
+}
+
+export async function getCostCode(token, costCodeId) {
+  return apiCall(`cost-codes/${costCodeId}`, token)
+}
+
+export async function createCostCode(token, costCodeData) {
+  return apiCall('cost-codes', token, 'POST', costCodeData)
+}
+
+export async function updateCostCode(token, costCodeId, updates) {
+  return apiCall(`cost-codes/${costCodeId}`, token, 'PUT', updates)
+}
+
+export async function deleteCostCode(token, costCodeId) {
+  return apiCall(`cost-codes/${costCodeId}`, token, 'DELETE')
+}
+
+// ============================================
+// PROJECT COST CODES
+// ============================================
+export async function getProjectCostCodes(token, projectId) {
+  return apiCall(`project-cost-codes?project_id=${projectId}`, token)
+}
+
+export async function assignProjectCostCode(token, data) {
+  return apiCall('project-cost-codes', token, 'POST', data)
+}
+
+export async function updateProjectCostCode(token, id, updates) {
+  return apiCall(`project-cost-codes/${id}`, token, 'PUT', updates)
+}
+
+export async function removeProjectCostCode(token, id) {
+  return apiCall(`project-cost-codes/${id}`, token, 'DELETE')
+}
+
+// ============================================
+// EMPLOYEE ASSIGNMENTS
+// ============================================
+export async function getProjectAssignments(token, projectId) {
+  return apiCall(`employee-assignments?project_id=${projectId}`, token)
+}
+
+export async function getUserAssignments(token, userId) {
+  return apiCall(`employee-assignments?user_id=${userId}`, token)
+}
+
+export async function assignEmployee(token, data) {
+  return apiCall('employee-assignments', token, 'POST', data)
+}
+
+export async function removeAssignment(token, assignmentId) {
+  return apiCall(`employee-assignments/${assignmentId}`, token, 'DELETE')
+}
+
+// ============================================
+// DAILY PRODUCTION
+// ============================================
+export async function getDailyProduction(token, companyId, filters = {}) {
+  const params = new URLSearchParams({ company_id: companyId, ...filters })
+  return apiCall(`daily-production?${params}`, token)
+}
+
+export async function createDailyProhduction(token, data) {
+  return apiCall('daily-production', token, 'POST', data)
+}
+
+export async function updateDailyProduction(token, id, updates) {
+  return apiCall(`daily-production/${id}`, token, 'PUT', updates)
+}
+
+export async function deleteDailyProduction(token, id) {
+  return apiCall(`daily-production/${id}`, token, 'DELETE')
 }

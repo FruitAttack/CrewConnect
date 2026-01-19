@@ -3,21 +3,21 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 
-export default function Workforce() {
+export default function Reports() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Workforce</Text>
-        <Text style={styles.subtitle}>Manage employees, crews, and assignments</Text>
+        <Text style={styles.pageTitle}>Reports & Analytics</Text>
+        <Text style={styles.subtitle}>Labor analytics, exports, and insights</Text>
       </View>
 
       <View style={styles.placeholder}>
         <View style={styles.iconWrap}>
-          <Ionicons name="people-outline" size={48} color={colors.semantic.info} />
+          <Ionicons name="bar-chart-outline" size={48} color={colors.semantic.info} />
         </View>
         <Text style={styles.placeholderTitle}>Coming Soon</Text>
         <Text style={styles.placeholderText}>
-          Employee management, crew assignments, and role permissions will be available here.
+          Labor cost reports, payroll exports, and project analytics will be available here.
         </Text>
       </View>
     </ScrollView>

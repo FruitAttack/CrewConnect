@@ -1,134 +1,221 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import LoginModal from "./loginModal";
-import { useSession } from "../../../utils/ctx";
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import LoginModal from './loginModal';
+import { useSession } from '../../../utils/ctx';
+import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 
 export default function TopBar({ title }) {
   const [loginVisible, setLoginVisible] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [profileHovered, setProfileHovered] = useState(false);
   const { session } = useSession();
   const user = session?.user;
 
   const { width: windowWidth } = useWindowDimensions();
+  const isCompact = windowWidth < 600;
 
-  const iconSize = Math.round(Math.max(28, Math.min(46, windowWidth * 0.04)));
+  const userName = user
+    ? user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
+    : null;
 
-  const titleFontSize = Math.round(Math.max(16, Math.min(26, windowWidth * 0.03)));
-
-  const searchWidth = Math.round(Math.max(120, Math.min(420, windowWidth * 0.28)));
-
-  const showIconLabel = windowWidth > 700;
-
-  const label = user
-    ? user.user_metadata?.full_name ||
-      user.user_metadata?.name ||
-      user.email?.split("@")[0]
-    : "Log In";
-
-  const compactLabel = label.length > 18 ? label.slice(0, 15) + "…" : label;
+  const displayName = userName ? (userName.length > 15 ? userName.slice(0, 12) + '...' : userName) : 'Log In';
 
   return (
     <>
       <LoginModal visible={loginVisible} onClose={() => setLoginVisible(false)} />
 
-      <LinearGradient
-        colors={["#F67011", "#FF9624"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.topBar}
-      >
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[styles.pageTitle, { fontSize: titleFontSize }]}
-            selectable={false}
-          >
-            {title}
-          </Text>
+      <View style={styles.topBar}>
+        {/* Left: Title */}
+        <View style={styles.leftSection}>
+          <Text style={styles.pageTitle} numberOfLines={1}>{title}</Text>
         </View>
 
-        <View style={styles.topBarRight}>
-          {/* Search input */}
-          <TextInput
-            placeholder="Search..."
-            placeholderTextColor="#4C4C4C"
-            style={[
-              styles.searchbar,
-              { width: searchWidth, height: 40 },
-            ]}
-          />
+        {/* Right: Actions */}
+        <View style={styles.rightSection}>
+          {/* Search Bar */}
+          {!isCompact && (
+            <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
+              <Ionicons name="search-outline" size={18} color={colors.text.tertiary} style={styles.searchIcon} />
+              <TextInput
+                placeholder="Search..."
+                placeholderTextColor={colors.text.tertiary}
+                style={styles.searchInput}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+              {!isCompact && (
+                <View style={styles.searchShortcut}>
+                  <Text style={styles.searchShortcutText}>⌘K</Text>
+                </View>
+              )}
+            </View>
+          )}
 
-          {/* Profile icon and label */}
-          <TouchableOpacity
-            style={styles.iconWrapper}
+          {/* Notifications */}
+          <Pressable 
+            style={({ hovered }) => [styles.iconButton, hovered && styles.iconButtonHovered]}
+          >
+            <Ionicons name="notifications-outline" size={20} color={colors.text.secondary} />
+            <View style={styles.notificationDot} />
+          </Pressable>
+
+          {/* User Profile */}
+          <Pressable
+            style={({ hovered }) => [styles.profileButton, hovered && styles.profileButtonHovered]}
             onPress={() => setLoginVisible(true)}
-            activeOpacity={0.8}
+            onHoverIn={() => setProfileHovered(true)}
+            onHoverOut={() => setProfileHovered(false)}
           >
-            <Ionicons name="person-circle-outline" size={iconSize} color="#161519" />
-              <Text style={[styles.iconLabel, { fontSize: Math.max(10, iconSize * 0.25) }]}>
-                {compactLabel}
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {displayName.charAt(0).toUpperCase()}
               </Text>
-          </TouchableOpacity>
-
-          {/* Settings icon */}
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.8}>
-            <Ionicons name="settings-outline" size={iconSize} color="#161519" />
-          </TouchableOpacity>
+            </View>
+            {!isCompact && (
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{displayName}</Text>
+                {user && <Text style={styles.profileRole}>Admin</Text>}
+              </View>
+            )}
+            <Ionicons 
+              name="chevron-down" 
+              size={16} 
+              color={colors.text.tertiary} 
+              style={{ transform: [{ rotate: profileHovered ? '180deg' : '0deg' }] }}
+            />
+          </Pressable>
         </View>
-      </LinearGradient>
+      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
   topBar: {
-    height: 80,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  titleContainer: {
+  leftSection: {
     flex: 1,
-    marginRight: 12,
   },
   pageTitle: {
-    color: "#161519",
-    fontWeight: "bold",
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+    letterSpacing: -0.3,
   },
-  topBarRight: {
-    flexDirection: "row",
-    alignItems: "center",
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  searchbar: {
-    backgroundColor: "#FBFBFB",
-    borderRadius: 10,
-    marginRight: 12,
-    paddingHorizontal: 10,
-    minWidth: 60,
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.sm,
+    height: 40,
+    minWidth: 220,
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    transitionDuration: '200ms',
   },
-  iconWrapper: {
-    alignItems: "center",
-    marginLeft: 6,
-    marginRight: 6,
-    justifyContent: "center",
+  searchContainerFocused: {
+    backgroundColor: colors.neutral.white,
+    borderColor: colors.primary.orange,
+    ...shadows.sm,
   },
-  iconLabel: {
-    marginTop: -4,
-    color: "#161519",
-    fontWeight: "500",
+  searchIcon: {
+    marginRight: spacing.xs,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
+    outlineStyle: 'none',
+  },
+  searchShortcut: {
+    backgroundColor: colors.neutral.white,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.xs,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  searchShortcutText: {
+    fontSize: 11,
+    color: colors.text.tertiary,
+    fontWeight: typography.fontWeight.medium,
   },
   iconButton: {
-    marginLeft: 6,
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    transitionDuration: '200ms',
+  },
+  iconButtonHovered: {
+    backgroundColor: colors.neutral.offWhite,
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary.orange,
+    borderWidth: 2,
+    borderColor: colors.surface.background,
+  },
+  profileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+    transitionDuration: '200ms',
+  },
+  profileButtonHovered: {
+    backgroundColor: colors.neutral.offWhite,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.white,
+  },
+  profileInfo: {
+    marginHorizontal: spacing.xs,
+  },
+  profileName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+  },
+  profileRole: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.tertiary,
   },
 });

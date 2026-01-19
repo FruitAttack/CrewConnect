@@ -1,23 +1,15 @@
-import React, { useRef, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  useWindowDimensions,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname } from "expo-router";
-import { useSidebar } from "./sidebarContext";
-import { useSession } from "../../../utils/ctx";
+import React, { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Animated, Easing, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, usePathname } from 'expo-router';
+import { useSidebar } from './sidebarContext';
+import { useSession } from '../../../utils/ctx';
+import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
 
-const COLLAPSED_WIDTH = 80;
-const EXPANDED_MIN = 100;
-const EXPANDED_MAX = 220;
-const ANIM_DURATION = 220;
-const ICON_COLLAPSED_SIZE = 25;
-const LABEL_RESERVE = 80;
+const COLLAPSED_WIDTH = 68;
+const EXPANDED_WIDTH = 220;
+const ANIM_DURATION = 200;
+const ICON_SIZE = 20;
 
 export default function Sidebar() {
   const router = useRouter();
@@ -25,14 +17,7 @@ export default function Sidebar() {
   const { isExpanded, toggleSidebar } = useSidebar();
   const { session } = useSession();
 
-  const homeRoute = session ? "/(app)/dashboard" : "/";
   const anim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
-
-  const { width: windowWidth } = useWindowDimensions();
-  const expandedWidth = Math.max(
-    EXPANDED_MIN,
-    Math.min(Math.floor(windowWidth * 0.32), EXPANDED_MAX)
-  );
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -43,256 +28,227 @@ export default function Sidebar() {
     }).start();
   }, [isExpanded, anim]);
 
-  const sidebarWidth = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [COLLAPSED_WIDTH, expandedWidth],
-  });
+  const sidebarWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED_WIDTH, EXPANDED_WIDTH] });
+  const labelOpacity = anim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0, 1] });
 
-  const logoMaxHeight = Math.min(140, Math.round(expandedWidth * 0.55));
-  const logoHeight = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [48, logoMaxHeight],
-  });
-
-  const labelWidth = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, Math.max(0, expandedWidth - LABEL_RESERVE)],
-  });
-
-  const labelOpacity = anim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.35, 1],
-  });
-
-  const iconExpandedSize = Math.round(Math.max(28, expandedWidth * 0.08));
-  const iconScale = iconExpandedSize / ICON_COLLAPSED_SIZE;
-  const animatedIconScale = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, iconScale],
-  });
-
-  const fontSizeExpanded = Math.round(Math.min(16, expandedWidth * 0.065));
-  const animatedFontSize = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [16, fontSizeExpanded],
-  });
-
-  const paddingLeft = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 12],
-  });
-
-  const publicNavItems = [
-    { icon: "home-outline", label: "Home", route: homeRoute },
-    { icon: "grid-outline", label: "Features", route: "/features" },
-    { icon: "pricetags-outline", label: "Pricing", route: "/pricing" },
-    { icon: "help-circle-outline", label: "Support", route: "/support" },
+  // Main navigation items for the app
+  const mainNavItems = [
+    { icon: 'grid-outline', iconFilled: 'grid', label: 'Dashboard', route: '/(app)/dashboard', matchPath: '/dashboard' },
+    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/project/projectsOverview', matchPath: '/project/' },
+    { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce', matchPath: '/workforce' },
+    { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
+    { icon: 'shield-checkmark-outline', iconFilled: 'shield-checkmark', label: 'Safety', route: '/(app)/safety', matchPath: '/safety' },
+    { icon: 'stats-chart-outline', iconFilled: 'stats-chart', label: 'Reports', route: '/(app)/reports', matchPath: '/reports' },
   ];
 
-  const privateNavItems = [
-    { icon: "layers-outline", label: "Projects", route: "/(app)/project/projectsOverview" },
-    { icon: "briefcase-outline", label: "Company", route: "/(app)/company" },
-    { icon: "people-outline", label: "Workforce", route: "/(app)/workforce" },
+  // Bottom navigation items
+  const bottomNavItems = [
+    { icon: 'settings-outline', iconFilled: 'settings', label: 'Settings', route: '/(app)/settings', matchPath: '/settings' },
   ];
 
-  const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
+  const isItemActive = (item) => {
+    if (!pathname) return false;
+    
+    // Special case for projects - match /project/ but not /safetyOverview etc
+    if (item.matchPath === '/project/') {
+      return pathname.includes('/project/');
+    }
+    
+    // Special case for safety - only match exact /safety, not /safetyOverview
+    if (item.matchPath === '/safety') {
+      return pathname.endsWith('/safety') || pathname.includes('/safety?');
+    }
+    
+    return pathname.includes(item.matchPath);
+  };
 
-  function onPressLink(route) {
-    router.push(route);
-  }
-
-  function onPressLogo() {
-    router.push(homeRoute);
-  }
-
-  //helper to determine if a nav item should be "active"
-function isItemActive(route) {
-  if (!pathname) return false;
-
-  //home page
-  if (route === "/" || route === homeRoute) {
-    return pathname === "/" || pathname.includes("dashboard");
-  }
-
-  //special handling for the project folder
-  //since they're all technically different pages
-  if (route.includes("/project/projectsOverview")) {
-    return pathname.startsWith("/(app)/project") || pathname.startsWith("/project");
-  }
-
-  //general fallback: check if last segment of route is included in pathname
-  const parts = route.split("/").filter(Boolean);
-  const last = parts[parts.length - 1];
-  return last && pathname.includes(last);
-}
+  const renderNavItem = (item, idx) => {
+    const active = isItemActive(item);
+    return (
+      <Pressable
+        key={idx}
+        style={({ hovered }) => [
+          styles.navItem, 
+          hovered && !active && styles.navItemHovered,
+        ]}
+        onPress={() => router.push(item.route)}
+      >
+        {/* Active Indicator */}
+        <View style={[styles.activeIndicator, active && styles.activeIndicatorVisible]} />
+        
+        <View style={styles.navItemContent}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name={active ? item.iconFilled : item.icon}
+              size={ICON_SIZE}
+              color={active ? colors.primary.orange : colors.neutral.lightGray}
+            />
+          </View>
+          <Animated.Text
+            style={[
+              styles.navLabel, 
+              active && styles.navLabelActive,
+              { opacity: labelOpacity }
+            ]}
+            numberOfLines={1}
+          >
+            {item.label}
+          </Animated.Text>
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
-    <Animated.View style={[styles.sideBar, { width: sidebarWidth }]}>
-      <View style={styles.sideBarItems}>
+    <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
+      <View style={styles.sidebarContent}>
         {/* Logo */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={onPressLogo}
-          style={styles.logoWrap}
-        >
-          <Animated.Image
-            source={require("../../../assets/images/CC_logo_nobackground.png")}
-            style={[styles.logo, { height: logoHeight }]}
+        <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/(app)/dashboard')} style={styles.logoWrap}>
+          <Image
+            source={require('../../../assets/images/CC_logo_nobackground.png')}
+            style={styles.logoIcon}
             resizeMode="contain"
           />
+          <Animated.Text style={[styles.logoText, { opacity: labelOpacity }]} numberOfLines={1}>
+            CrewConnect
+          </Animated.Text>
         </TouchableOpacity>
 
-        <View style={{ height: 12 }} />
+        <View style={styles.divider} />
 
-        <View style={{ width: "100%" }}>
-          {navItems.map((item, idx) => {
-            const active = isItemActive(item.route);
-            return (
-              <TouchableOpacity
-                key={idx}
-                style={[
-                  styles.sideButton,
-                  isExpanded ? styles.sideButtonExpanded : styles.sideButtonCollapsed,
-                  active && styles.sideButtonActive,
-                ]}
-                onPress={() => onPressLink(item.route)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityState={{ selected: !!active }}
-              >
-                {/* Icons */}
-                <Animated.View
-                  style={[
-                    styles.iconWrap,
-                    {
-                      transform: [{ scale: animatedIconScale }],
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={item.icon}
-                    size={ICON_COLLAPSED_SIZE}
-                    color={active ? "#161519" : "#FBFBFB"}
-                  />
-                </Animated.View>
-
-                {/* Animated label */}
-                <Animated.View
-                  style={{
-                    overflow: "hidden",
-                    width: labelWidth,
-                    paddingLeft,
-                    justifyContent: "center",
-                  }}
-                >
-                  <Animated.Text
-                    style={[
-                      styles.sideButtonText,
-                      { opacity: labelOpacity, fontSize: animatedFontSize },
-                      active && styles.sideButtonTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.label}
-                  </Animated.Text>
-                </Animated.View>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Main Nav Items */}
+        <View style={styles.navSection}>
+          {mainNavItems.map(renderNavItem)}
         </View>
 
-        <View style={{ flex: 1 }} />
+        <View style={styles.spacer} />
 
-        {/* Toggle sidebar button */}
-        <View style={styles.toggleWrap}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={toggleSidebar}
-            style={styles.toggleButton}
-          >
-            <Animated.View
-              style={{
-                transform: [
-                  {
-                    rotate: anim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["180deg", "0deg"],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Ionicons name="chevron-back-outline" size={28} color="#FBFBFB" />
-            </Animated.View>
-          </TouchableOpacity>
+        {/* Bottom Nav Items */}
+        <View style={styles.bottomSection}>
+          {bottomNavItems.map(renderNavItem)}
         </View>
+
+        {/* Toggle Button */}
+        <Pressable 
+          style={({ hovered }) => [styles.toggleButton, hovered && styles.toggleButtonHovered]} 
+          onPress={toggleSidebar}
+        >
+          <Animated.View style={{ transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral.lightGray} />
+          </Animated.View>
+        </Pressable>
       </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  sideBar: {
-    backgroundColor: "#161519",
-    overflow: "hidden",
+  sidebar: {
+    backgroundColor: colors.neutral.black,
+    height: '100%',
+    overflow: 'hidden',
   },
-  sideBarItems: {
-    paddingTop: 10,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    height: "100%",
+  sidebarContent: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    width: EXPANDED_WIDTH, // Fixed width container so items don't reflow
   },
   logoWrap: {
-    width: "100%",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48, // Fixed height
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
-  logo: {
-    width: "70%",
-    resizeMode: "contain",
+  logoIcon: {
+    width: 32,
+    height: 32,
+    flexShrink: 0,
   },
-  sideButton: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginTop: 8,
+  logoText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+    marginLeft: spacing.sm,
+    letterSpacing: -0.3,
   },
-  sideButtonCollapsed: {
-    justifyContent: "center",
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
   },
-  sideButtonExpanded: {
-    justifyContent: "flex-start",
+  navSection: {
+    gap: 2,
   },
-  sideButtonActive: {
-    backgroundColor: "#FBFBFB",
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44, // Fixed height for consistent spacing
+    position: 'relative',
+    transitionDuration: '150ms',
+  },
+  navItemHovered: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  navItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  activeIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: 'transparent',
+  },
+  activeIndicatorVisible: {
+    backgroundColor: colors.primary.orange,
   },
   iconWrap: {
-    width: 36,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  sideButtonText: {
-    color: "#FBFBFB",
-    marginLeft: 12,
+  navLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.lightGray,
+    marginLeft: spacing.sm,
   },
-  sideButtonTextActive: {
-    color: "#161519",
-    fontWeight: "600",
+  navLabelActive: {
+    color: colors.neutral.white,
+    fontWeight: typography.fontWeight.semibold,
   },
-  toggleWrap: {
-    width: "100%",
-    paddingHorizontal: 12,
-    paddingBottom: 18,
-    alignItems: "center",
+  spacer: {
+    flex: 1,
+  },
+  bottomSection: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
   },
   toggleButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#262626",
-    paddingVertical: 10,
-    borderRadius: 8,
-    width: "55%",
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginTop: spacing.sm,
+    marginLeft: spacing.md,
+    transitionDuration: '150ms',
+  },
+  toggleButtonHovered: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
 });

@@ -3,6 +3,7 @@ import {
   createUser,
   getAllUsers,
   getUser,
+  getMe,
   updateUser,
   deleteUser,
   activateUser,
@@ -16,6 +17,9 @@ const router = express.Router();
 
 // Apply authentication to all routes
 router.use(authenticate);
+
+// Current user profile (must come before /:id route)
+router.get("/me", getMe);
 
 // Search (must come before /:id route)
 router.get("/search", searchUsers);

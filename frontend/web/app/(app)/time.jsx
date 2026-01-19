@@ -3,21 +3,21 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 
-export default function Workforce() {
+export default function Time() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Workforce</Text>
-        <Text style={styles.subtitle}>Manage employees, crews, and assignments</Text>
+        <Text style={styles.pageTitle}>Time Management</Text>
+        <Text style={styles.subtitle}>Review and approve timecards</Text>
       </View>
 
       <View style={styles.placeholder}>
         <View style={styles.iconWrap}>
-          <Ionicons name="people-outline" size={48} color={colors.semantic.info} />
+          <Ionicons name="time-outline" size={48} color={colors.primary.orange} />
         </View>
         <Text style={styles.placeholderTitle}>Coming Soon</Text>
         <Text style={styles.placeholderText}>
-          Employee management, crew assignments, and role permissions will be available here.
+          Timecard approvals, time entry management, and payroll exports will be available here.
         </Text>
       </View>
     </ScrollView>
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: borderRadius.xl,
-    backgroundColor: colors.semantic.infoLight,
+    backgroundColor: 'rgba(246, 112, 17, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
