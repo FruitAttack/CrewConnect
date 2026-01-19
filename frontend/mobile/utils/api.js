@@ -1,6 +1,6 @@
 
 export async function apiCall(token, route, method = 'GET', body = null) {
-  // Create AbortController for timeout (React Native compatible)
+  // Create AbortController for timeout 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
   
