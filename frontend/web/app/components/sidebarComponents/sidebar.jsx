@@ -1,16 +1,15 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated, Easing, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Animated, Easing, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { useSidebar } from './sidebarContext';
 import { useSession } from '../../../utils/ctx';
-import { colors, spacing, borderRadius, shadows, typography } from '../../../constants/theme';
+import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
 
-const COLLAPSED_WIDTH = 72;
-const EXPANDED_MIN = 100;
-const EXPANDED_MAX = 240;
+const COLLAPSED_WIDTH = 68;
+const EXPANDED_WIDTH = 220;
 const ANIM_DURATION = 200;
-const ICON_SIZE = 22;
+const ICON_SIZE = 20;
 
 export default function Sidebar() {
   const router = useRouter();
@@ -18,11 +17,7 @@ export default function Sidebar() {
   const { isExpanded, toggleSidebar } = useSidebar();
   const { session } = useSession();
 
-  const homeRoute = session ? '/(app)/dashboard' : '/';
   const anim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
-
-  const { width: windowWidth } = useWindowDimensions();
-  const expandedWidth = Math.max(EXPANDED_MIN, Math.min(Math.floor(windowWidth * 0.18), EXPANDED_MAX));
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -33,89 +28,115 @@ export default function Sidebar() {
     }).start();
   }, [isExpanded, anim]);
 
-  const sidebarWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED_WIDTH, expandedWidth] });
-  const logoMaxHeight = Math.min(100, Math.round(expandedWidth * 0.4));
-  const logoHeight = anim.interpolate({ inputRange: [0, 1], outputRange: [40, logoMaxHeight] });
-  const labelOpacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
-  const labelWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, expandedWidth - 70] });
+  const sidebarWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED_WIDTH, EXPANDED_WIDTH] });
+  const labelOpacity = anim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0, 1] });
 
-  const publicNavItems = [
-    { icon: 'home-outline', iconFilled: 'home', label: 'Home', route: homeRoute },
-    { icon: 'grid-outline', iconFilled: 'grid', label: 'Features', route: '/features' },
-    { icon: 'pricetags-outline', iconFilled: 'pricetags', label: 'Pricing', route: '/pricing' },
-    { icon: 'help-circle-outline', iconFilled: 'help-circle', label: 'Support', route: '/support' },
+  // Main navigation items for the app
+  const mainNavItems = [
+    { icon: 'grid-outline', iconFilled: 'grid', label: 'Dashboard', route: '/(app)/dashboard', matchPath: '/dashboard' },
+    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/project/projectsOverview', matchPath: '/project/' },
+    { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce', matchPath: '/workforce' },
+    { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
+    { icon: 'shield-checkmark-outline', iconFilled: 'shield-checkmark', label: 'Safety', route: '/(app)/safety', matchPath: '/safety' },
+    { icon: 'stats-chart-outline', iconFilled: 'stats-chart', label: 'Reports', route: '/(app)/reports', matchPath: '/reports' },
   ];
 
-  const privateNavItems = [
-    { icon: 'layers-outline', iconFilled: 'layers', label: 'Projects', route: '/(app)/project/projectsOverview' },
-    { icon: 'briefcase-outline', iconFilled: 'briefcase', label: 'Company', route: '/(app)/company' },
-    { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce' },
+  // Bottom navigation items
+  const bottomNavItems = [
+    { icon: 'settings-outline', iconFilled: 'settings', label: 'Settings', route: '/(app)/settings', matchPath: '/settings' },
   ];
 
-  const navItems = session ? [...publicNavItems, ...privateNavItems] : publicNavItems;
-
-  const isItemActive = (route) => {
+  const isItemActive = (item) => {
     if (!pathname) return false;
-    if (route === '/' || route === homeRoute) return pathname === '/' || pathname.includes('dashboard');
-    if (route.includes('/project/projectsOverview')) return pathname.startsWith('/(app)/project') || pathname.startsWith('/project');
-    const parts = route.split('/').filter(Boolean);
-    const last = parts[parts.length - 1];
-    return last && pathname.includes(last);
+    
+    // Special case for projects - match /project/ but not /safetyOverview etc
+    if (item.matchPath === '/project/') {
+      return pathname.includes('/project/');
+    }
+    
+    // Special case for safety - only match exact /safety, not /safetyOverview
+    if (item.matchPath === '/safety') {
+      return pathname.endsWith('/safety') || pathname.includes('/safety?');
+    }
+    
+    return pathname.includes(item.matchPath);
+  };
+
+  const renderNavItem = (item, idx) => {
+    const active = isItemActive(item);
+    return (
+      <Pressable
+        key={idx}
+        style={({ hovered }) => [
+          styles.navItem, 
+          hovered && !active && styles.navItemHovered,
+        ]}
+        onPress={() => router.push(item.route)}
+      >
+        {/* Active Indicator */}
+        <View style={[styles.activeIndicator, active && styles.activeIndicatorVisible]} />
+        
+        <View style={styles.navItemContent}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name={active ? item.iconFilled : item.icon}
+              size={ICON_SIZE}
+              color={active ? colors.primary.orange : colors.neutral.lightGray}
+            />
+          </View>
+          <Animated.Text
+            style={[
+              styles.navLabel, 
+              active && styles.navLabelActive,
+              { opacity: labelOpacity }
+            ]}
+            numberOfLines={1}
+          >
+            {item.label}
+          </Animated.Text>
+        </View>
+      </Pressable>
+    );
   };
 
   return (
     <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
       <View style={styles.sidebarContent}>
         {/* Logo */}
-        <TouchableOpacity activeOpacity={0.8} onPress={() => router.push(homeRoute)} style={styles.logoWrap}>
-          <Animated.Image
+        <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/(app)/dashboard')} style={styles.logoWrap}>
+          <Image
             source={require('../../../assets/images/CC_logo_nobackground.png')}
-            style={[styles.logo, { height: logoHeight }]}
+            style={styles.logoIcon}
             resizeMode="contain"
           />
+          <Animated.Text style={[styles.logoText, { opacity: labelOpacity }]} numberOfLines={1}>
+            CrewConnect
+          </Animated.Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
 
-        {/* Nav Items */}
+        {/* Main Nav Items */}
         <View style={styles.navSection}>
-          {navItems.map((item, idx) => {
-            const active = isItemActive(item.route);
-            return (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.navItem, active && styles.navItemActive]}
-                onPress={() => router.push(item.route)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-                  <Ionicons
-                    name={active ? item.iconFilled : item.icon}
-                    size={ICON_SIZE}
-                    color={active ? colors.primary.orange : colors.neutral.lightGray}
-                  />
-                </View>
-                <Animated.View style={{ width: labelWidth, opacity: labelOpacity, overflow: 'hidden' }}>
-                  <Animated.Text
-                    style={[styles.navLabel, active && styles.navLabelActive]}
-                    numberOfLines={1}
-                  >
-                    {item.label}
-                  </Animated.Text>
-                </Animated.View>
-              </TouchableOpacity>
-            );
-          })}
+          {mainNavItems.map(renderNavItem)}
         </View>
 
         <View style={styles.spacer} />
 
+        {/* Bottom Nav Items */}
+        <View style={styles.bottomSection}>
+          {bottomNavItems.map(renderNavItem)}
+        </View>
+
         {/* Toggle Button */}
-        <TouchableOpacity style={styles.toggleButton} onPress={toggleSidebar} activeOpacity={0.8}>
-          <Animated.View style={{ transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '0deg'] }) }] }}>
-            <Ionicons name="chevron-back-outline" size={20} color={colors.neutral.lightGray} />
+        <Pressable 
+          style={({ hovered }) => [styles.toggleButton, hovered && styles.toggleButtonHovered]} 
+          onPress={toggleSidebar}
+        >
+          <Animated.View style={{ transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral.lightGray} />
           </Animated.View>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </Animated.View>
   );
@@ -124,71 +145,110 @@ export default function Sidebar() {
 const styles = StyleSheet.create({
   sidebar: {
     backgroundColor: colors.neutral.black,
-    borderRightWidth: 1,
-    borderRightColor: colors.neutral.darkGray,
+    height: '100%',
+    overflow: 'hidden',
   },
   sidebarContent: {
     flex: 1,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+    width: EXPANDED_WIDTH, // Fixed width container so items don't reflow
   },
   logoWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xs,
-    marginBottom: spacing.md,
+    height: 48, // Fixed height
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
-  logo: {
-    width: '100%',
-    maxWidth: 140,
+  logoIcon: {
+    width: 32,
+    height: 32,
+    flexShrink: 0,
+  },
+  logoText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+    marginLeft: spacing.sm,
+    letterSpacing: -0.3,
   },
   divider: {
     height: 1,
-    backgroundColor: colors.neutral.darkGray,
-    marginHorizontal: spacing.xs,
-    marginBottom: spacing.lg,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
   },
   navSection: {
-    gap: spacing.xs,
+    gap: 2,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: borderRadius.md,
+    height: 44, // Fixed height for consistent spacing
+    position: 'relative',
+    transitionDuration: '150ms',
   },
-  navItemActive: {
-    backgroundColor: 'rgba(246, 112, 17, 0.1)',
+  navItemHovered: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  navItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  activeIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: 'transparent',
+  },
+  activeIndicatorVisible: {
+    backgroundColor: colors.primary.orange,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconWrapActive: {
-    backgroundColor: 'rgba(246, 112, 17, 0.15)',
+    flexShrink: 0,
   },
   navLabel: {
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.neutral.lightGray,
     marginLeft: spacing.sm,
   },
   navLabelActive: {
-    color: colors.primary.orange,
+    color: colors.neutral.white,
     fontWeight: typography.fontWeight.semibold,
   },
   spacer: {
     flex: 1,
   },
+  bottomSection: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
+  },
   toggleButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.neutral.darkGray,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    marginHorizontal: spacing.xs,
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginTop: spacing.sm,
+    marginLeft: spacing.md,
+    transitionDuration: '150ms',
+  },
+  toggleButtonHovered: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
 });

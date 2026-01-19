@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import LoginModal from './loginModal';
 import { useSession } from '../../../utils/ctx';
-import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
+import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 
 export default function TopBar({ title }) {
   const [loginVisible, setLoginVisible] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [profileHovered, setProfileHovered] = useState(false);
   const { session } = useSession();
   const user = session?.user;
 
@@ -25,12 +25,7 @@ export default function TopBar({ title }) {
     <>
       <LoginModal visible={loginVisible} onClose={() => setLoginVisible(false)} />
 
-      <LinearGradient
-        colors={[colors.primary.orangeLight, colors.primary.orange]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.topBar}
-      >
+      <View style={styles.topBar}>
         {/* Left: Title */}
         <View style={styles.leftSection}>
           <Text style={styles.pageTitle} numberOfLines={1}>{title}</Text>
@@ -41,33 +36,41 @@ export default function TopBar({ title }) {
           {/* Search Bar */}
           {!isCompact && (
             <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-              <Ionicons name="search-outline" size={18} color={colors.neutral.gray} style={styles.searchIcon} />
+              <Ionicons name="search-outline" size={18} color={colors.text.tertiary} style={styles.searchIcon} />
               <TextInput
                 placeholder="Search..."
-                placeholderTextColor={colors.neutral.gray}
+                placeholderTextColor={colors.text.tertiary}
                 style={styles.searchInput}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
               />
+              {!isCompact && (
+                <View style={styles.searchShortcut}>
+                  <Text style={styles.searchShortcutText}>⌘K</Text>
+                </View>
+              )}
             </View>
           )}
 
-          {/* Notifications (placeholder) */}
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-            <View style={styles.notificationBadge}>
-              <Ionicons name="notifications-outline" size={22} color={colors.neutral.black} />
-              <View style={styles.badge} />
-            </View>
-          </TouchableOpacity>
+          {/* Notifications */}
+          <Pressable 
+            style={({ hovered }) => [styles.iconButton, hovered && styles.iconButtonHovered]}
+          >
+            <Ionicons name="notifications-outline" size={20} color={colors.text.secondary} />
+            <View style={styles.notificationDot} />
+          </Pressable>
 
           {/* User Profile */}
-          <TouchableOpacity
-            style={styles.profileButton}
+          <Pressable
+            style={({ hovered }) => [styles.profileButton, hovered && styles.profileButtonHovered]}
             onPress={() => setLoginVisible(true)}
-            activeOpacity={0.7}
+            onHoverIn={() => setProfileHovered(true)}
+            onHoverOut={() => setProfileHovered(false)}
           >
             <View style={styles.avatar}>
-              <Ionicons name="person" size={18} color={colors.neutral.white} />
+              <Text style={styles.avatarText}>
+                {displayName.charAt(0).toUpperCase()}
+              </Text>
             </View>
             {!isCompact && (
               <View style={styles.profileInfo}>
@@ -75,10 +78,15 @@ export default function TopBar({ title }) {
                 {user && <Text style={styles.profileRole}>Admin</Text>}
               </View>
             )}
-            <Ionicons name="chevron-down" size={16} color={colors.neutral.black} />
-          </TouchableOpacity>
+            <Ionicons 
+              name="chevron-down" 
+              size={16} 
+              color={colors.text.tertiary} 
+              style={{ transform: [{ rotate: profileHovered ? '180deg' : '0deg' }] }}
+            />
+          </Pressable>
         </View>
-      </LinearGradient>
+      </View>
     </>
   );
 }
@@ -90,14 +98,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
   leftSection: {
     flex: 1,
   },
   pageTitle: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.black,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+    letterSpacing: -0.3,
   },
   rightSection: {
     flexDirection: 'row',
@@ -107,58 +119,79 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: colors.neutral.offWhite,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.sm,
     height: 40,
-    minWidth: 200,
-    maxWidth: 300,
-    borderWidth: 2,
+    minWidth: 220,
+    maxWidth: 280,
+    borderWidth: 1,
     borderColor: 'transparent',
+    transitionDuration: '200ms',
   },
   searchContainerFocused: {
     backgroundColor: colors.neutral.white,
-    borderColor: colors.neutral.black,
+    borderColor: colors.primary.orange,
+    ...shadows.sm,
   },
   searchIcon: {
     marginRight: spacing.xs,
   },
   searchInput: {
     flex: 1,
-    fontSize: typography.fontSize.md,
-    color: colors.neutral.black,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
     outlineStyle: 'none',
+  },
+  searchShortcut: {
+    backgroundColor: colors.neutral.white,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.xs,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  searchShortcutText: {
+    fontSize: 11,
+    color: colors.text.tertiary,
+    fontWeight: typography.fontWeight.medium,
   },
   iconButton: {
     width: 40,
     height: 40,
     borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  notificationBadge: {
     position: 'relative',
+    transitionDuration: '200ms',
   },
-  badge: {
+  iconButtonHovered: {
+    backgroundColor: colors.neutral.offWhite,
+  },
+  notificationDot: {
     position: 'absolute',
-    top: -2,
-    right: -2,
+    top: 10,
+    right: 10,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.semantic.error,
-    borderWidth: 1.5,
-    borderColor: colors.primary.orangeLight,
+    backgroundColor: colors.primary.orange,
+    borderWidth: 2,
+    borderColor: colors.surface.background,
   },
   profileButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'transparent',
     borderRadius: borderRadius.md,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     gap: spacing.xs,
+    transitionDuration: '200ms',
+  },
+  profileButtonHovered: {
+    backgroundColor: colors.neutral.offWhite,
   },
   avatar: {
     width: 32,
@@ -168,16 +201,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.white,
+  },
   profileInfo: {
     marginHorizontal: spacing.xs,
   },
   profileName: {
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.black,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
   },
   profileRole: {
     fontSize: typography.fontSize.xs,
-    color: colors.neutral.gray,
+    color: colors.text.tertiary,
   },
 });

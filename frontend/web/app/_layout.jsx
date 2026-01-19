@@ -6,17 +6,29 @@ import PublicNav from "./components/publicNav/PublicNav";
 export default function RootLayout() {
   const pathname = usePathname() || "/";
   
-  // Check if we're on a public page (not in the (app) group)
-  const isPublicPage = !pathname.startsWith("/(app)") && 
-                       !pathname.includes("/dashboard") && 
-                       !pathname.includes("/company") && 
-                       !pathname.includes("/workforce") && 
-                       !pathname.includes("/project");
+  // App routes that should NOT show PublicNav
+  const appRoutes = [
+    '/dashboard',
+    '/company',
+    '/workforce',
+    '/project',
+    '/time',
+    '/safety',
+    '/reports',
+    '/settings',
+  ];
+  
+  // Check if we're on an app page
+  const isAppPage = pathname.startsWith("/(app)") || 
+                    appRoutes.some(route => pathname.includes(route));
+  
+  // Show PublicNav only on public pages
+  const showPublicNav = !isAppPage;
 
   return (
     <SessionProvider>
       <View style={styles.container}>
-        {isPublicPage && <PublicNav />}
+        {showPublicNav && <PublicNav />}
         <View style={styles.pageArea}>
           <Slot />
         </View>
