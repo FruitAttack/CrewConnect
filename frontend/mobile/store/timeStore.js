@@ -48,6 +48,7 @@ export const useTimeStore = create((set, get) => ({
   _setClockInState: (entryId) => {
     console.log("⏰ STATE: Clocked In (ID:", entryId, ")");
     set({
+      isOnBreak: false,
       isClockedIn: true,
       currentTimeEntryId: entryId,
     });
@@ -167,28 +168,32 @@ export const useTimeStore = create((set, get) => ({
     return response;
   },
 
-  // 3. Clock Out Action
-  doClockOut: async (session, body = {}) => {
-    if (!session?.access_token)
-      return { success: false, message: "Not authenticated." };
+ // 3. Clock Out Action
+doClockOut: async (session, body = {}) => {
+  if (!session?.access_token)
+    return { success: false, message: "Not authenticated." };
 
-    // Don't check currentTimeEntryId - let the API find the open entry
-    const response = await apiCall(
-      session.access_token,
-      "time-entries/clock-out",
-      "POST",
-      body
-    );
+  // If on break, end it first before clocking out
+  if (get().isOnBreak) {
+    console.log("⏰ Ending break before clock out...");
+    await get().doEndBreak(session);
+  }
 
-    console.log("Clock-out response:", response);
+  const response = await apiCall(
+    session.access_token,
+    "time-entries/clock-out",
+    "POST",
+    body
+  );
 
-    if (response.success) {
-      get()._setClockOutState();
-      // Fetch fresh seconds from server after clock out
-      await get()._fetchWorkedSeconds(session);
-    }
-    return response;
-  },
+  console.log("Clock-out response:", response);
+
+  if (response.success) {
+    get()._setClockOutState();
+    await get()._fetchWorkedSeconds(session);
+  }
+  return response;
+},
 
   // 4. Start Break Action
   doStartBreak: async (session) => {
