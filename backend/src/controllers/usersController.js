@@ -223,6 +223,20 @@ export async function getUser(req, res) {
 }
 
 /**
+ * Get current authenticated user's profile
+ * GET /api/users/me
+ */
+export async function getMe(req, res) {
+  try {
+    // req.user is set by auth middleware and includes default_company_id
+    return res.status(200).json({ user: req.user });
+  } catch (err) {
+    console.error('Get me error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+/**
  * Update user profile
  * PUT /api/users/:id
  */
