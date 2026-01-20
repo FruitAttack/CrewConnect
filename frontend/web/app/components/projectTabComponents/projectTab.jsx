@@ -1,23 +1,36 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+} from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import { useProjectTab } from "./projectTabContext";
-import { colors, spacing, borderRadius, typography } from "../../../constants/theme";
 
 const TABS = [
-  { key: "projects", label: "Projects", icon: "folder-outline", route: "/(app)/project/projectsOverview" },
-  { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview" },
-  { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview" },
-  { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview" },
+  { key: "projects", label: "Projects", route: "/(app)/project/projectsOverview" },
+  { key: "labor", label: "Labor", route: "/(app)/project/laborOverview" },
+  { key: "safety", label: "Safety", route: "/(app)/project/safetyOverview" },
+  { key: "materials", label: "Materials", route: "/(app)/project/materialsOverview" },
 ];
+//daily logs
+//budgets
+
+const TAB_GAP = 6;
 
 export default function ProjectTabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const { activeTab, setActiveTab } = useProjectTab();
 
-  // Ensure context has the Projects tab as the initial active tab
+  const indicatorX = useRef(new Animated.Value(0)).current;
+  const tabLayouts = useRef({}).current;
+  const tabWidths = useRef({}).current;
+  const [measuredCount, setMeasuredCount] = useState(0);
+
+  //ensure context has the Projects tab as the initial active tab
   useEffect(() => {
     if (!activeTab) {
       const current = TABS.find(tab => pathname?.includes(tab.key));
@@ -25,59 +38,105 @@ export default function ProjectTabBar() {
     }
   }, []);
 
-  // Sync activeTab from route if route changes
+  //sync activeTab from route if route changes
   useEffect(() => {
     const current = TABS.find(tab => pathname?.includes(tab.key));
     if (current && current.key !== activeTab) setActiveTab(current.key);
   }, [pathname, activeTab, setActiveTab]);
+
+  //helper to animate indicator
+  function animateIndicatorTo(x) {
+    Animated.spring(indicatorX, {
+      toValue: x,
+      useNativeDriver: true,
+      stiffness: 160,
+      damping: 20,
+    }).start();
+  }
+
+  //when active tab changes, animate if we have its layout, otherwise fallback
+  useEffect(() => {
+    const idx = TABS.findIndex(t => t.key === activeTab);
+    if (idx < 0) return;
+
+    const layout = tabLayouts[activeTab];
+    if (layout && typeof layout.x === "number") {
+      animateIndicatorTo(layout.x);
+    } else {
+      const fallbackX = TABS.slice(0, idx).reduce((sum, t) => {
+        return sum + (tabWidths[t.key] || 0) + TAB_GAP;
+      }, 0);
+      animateIndicatorTo(fallbackX);
+    }
+  }, [activeTab]);
+
+  //when all tabs measured, ensure the indicator snaps to the right place
+  useEffect(() => {
+    if (measuredCount === TABS.length && activeTab) {
+      const layout = tabLayouts[activeTab];
+      if (layout) {
+        indicatorX.setValue(layout.x);
+      }
+    }
+  }, [measuredCount, activeTab]);
 
   function onPressTab(tab) {
     setActiveTab(tab.key);
     router.push(tab.route);
   }
 
+  //TODO - create project functionality, probably want a new screen, or a modal to pop up
   function onPressCreate() {
-    // TODO - create project functionality
+
   }
 
   return (
     <View style={styles.wrapper}>
       <View style={styles.container}>
-        {/* Tabs */}
         <View style={styles.tabsContainer}>
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.key;
-            return (
-              <Pressable
+          <View style={styles.tabsRow}>
+            {TABS.map(tab => (
+              <TouchableOpacity
                 key={tab.key}
                 onPress={() => onPressTab(tab)}
-                style={({ hovered }) => [
-                  styles.tab,
-                  isActive && styles.tabActive,
-                  hovered && !isActive && styles.tabHovered,
-                ]}
+                onLayout={e => {
+                  const { x, width } = e.nativeEvent.layout;
+                  const existed = !!tabLayouts[tab.key];
+                  tabLayouts[tab.key] = { x, width };
+                  tabWidths[tab.key] = width;
+                  if (!existed) setMeasuredCount(c => c + 1);
+
+                  //if this is the active tab, snap indicator immediately
+                  if (tab.key === activeTab) {
+                    indicatorX.setValue(x);
+                  }
+                }}
+                style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: activeTab === tab.key }}
               >
-                <Ionicons 
-                  name={tab.icon} 
-                  size={16} 
-                  color={isActive ? colors.primary.orange : colors.text.tertiary} 
-                />
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
                   {tab.label}
                 </Text>
-              </Pressable>
-            );
-          })}
+              </TouchableOpacity>
+            ))}
+
+            <Animated.View
+              style={[
+                styles.indicator,
+                {
+                  width: (tabLayouts[activeTab] && tabLayouts[activeTab].width) || tabWidths[activeTab] || 0,
+                  transform: [{ translateX: indicatorX }],
+                },
+              ]}
+            />
+          </View>
         </View>
 
-        {/* Create Button */}
-        <Pressable 
-          onPress={onPressCreate} 
-          style={({ hovered }) => [styles.createButton, hovered && styles.createButtonHovered]}
-        >
-          <Ionicons name="add" size={18} color={colors.neutral.white} />
-          <Text style={styles.createButtonText}>New Project</Text>
-        </Pressable>
+        <TouchableOpacity onPress={onPressCreate} activeOpacity={0.85} style={styles.createButton}>
+          <Text style={styles.createButtonText}>Create Project</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -85,70 +144,59 @@ export default function ProjectTabBar() {
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: colors.surface.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: 6,
+    marginTop: 8,
   },
   container: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
   tabsContainer: {
+    flex: 1,
+    backgroundColor: "#878787",
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  tabsRow: {
     flexDirection: "row",
-    backgroundColor: colors.neutral.offWhite,
-    borderRadius: borderRadius.lg,
-    padding: 4,
-    gap: 4,
+    position: "relative",
+    alignItems: "center",
   },
   tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.md,
-    transitionDuration: '150ms',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginRight: TAB_GAP,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
   },
   tabActive: {
-    backgroundColor: colors.neutral.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  tabHovered: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: "#FFFFFF",
   },
   tabText: {
-    color: colors.text.tertiary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: "500",
   },
   tabTextActive: {
-    color: colors.text.primary,
-    fontWeight: typography.fontWeight.semibold,
+    fontWeight: "600",
+  },
+  indicator: {
+    position: "absolute",
+    bottom: -6,
+    height: 2,
+    backgroundColor: "#4F46E5",
   },
   createButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.primary.orange,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.md,
-    transitionDuration: '200ms',
-  },
-  createButtonHovered: {
-    backgroundColor: colors.primary.orangeLight,
-    transform: [{ translateY: -1 }],
+    marginLeft: 12,
+    backgroundColor: "#4F46E5",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
   createButtonText: {
-    color: colors.neutral.white,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
