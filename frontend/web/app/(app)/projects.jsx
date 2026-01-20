@@ -5,12 +5,14 @@ import { useRouter } from "expo-router";
 import { useSession } from "../../utils/ctx";
 import { getProjects, getUserProfile } from "../../utils/api";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
+import { useProject } from "../components/projectComponents/projectContext";
 
 export default function ProjectsOverview() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { session } = useSession();
   const isLargeScreen = width >= 1024;
+  const { setSelectedProject, setSelectedProjectID } = useProject();
   
   const [projects, setProjects] = useState([]);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -110,8 +112,17 @@ export default function ProjectsOverview() {
     });
   };
 
+  // Event handler for when a project card is clicked, sets our projectContext, and then sends us to /project/projectsOverview
   const handleProjectPress = (project) => {
-    
+    try {
+      setSelectedProject(project);
+      setSelectedProjectID(project.id);
+    }
+    catch (err) {
+      console.warn("Failed to set project context: ", err);
+    }
+
+    router.push(`/(app)/project/projectsOverview?projectId=${encodeURIComponent(project.id)}`);
   };
 
   const handleCreateProjectPress = () => {
