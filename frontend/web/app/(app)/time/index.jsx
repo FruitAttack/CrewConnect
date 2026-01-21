@@ -405,7 +405,7 @@ export default function TimeOverview() {
                   <View key={p.name} style={s.tableRow}>
                     <Text style={s.tableCell} numberOfLines={1}>{p.name}</Text>
                     <View style={s.progressCell}>
-                      <View style={s.progressTrack}><View style={[s.progressFill, { width: `${(p.hours / maxProj) * 100}%`, backgroundColor: [colors.primary.orange, colors.semantic.info, colors.semantic.success, colors.semantic.warning, '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'][i % 8] }]} /></View>
+                      <View style={s.progressTrack}><View style={[s.progressFill, { width: `${(p.hours / maxProj) * 100}%`, backgroundColor: ['#E07A40', '#5B8DEF', '#4AA87C', '#D4A84B', '#9078D4', '#C76B8F', '#4CA8B7', '#7BAD5A'][i % 8] }]} /></View>
                     </View>
                     <Text style={s.tableCellRight}>{p.hours.toFixed(1)}h</Text>
                   </View>
