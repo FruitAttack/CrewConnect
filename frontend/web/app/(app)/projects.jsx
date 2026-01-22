@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, RefreshControl, ActivityIndicator, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSession } from "../../utils/ctx";
 import { getProjects, getUserProfile } from "../../utils/api";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
 import { useProject } from "../components/projectComponents/projectContext";
+import CreateProjectModal from "../components/projectComponents/createProjectModal";
 
-export default function ProjectsOverview() {
+export default function Projects() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { session } = useSession();
@@ -20,6 +21,10 @@ export default function ProjectsOverview() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [companyId, setCompanyId] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const params = useLocalSearchParams();
+  const [toast, setToast] = useState(null);
 
   const token = session?.access_token;
 
@@ -55,6 +60,18 @@ export default function ProjectsOverview() {
     
     fetchUserProfile();
   }, [token]);
+
+  useEffect(() => {
+    if (params?.toast) {
+      setToast(params.toast);
+
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [params?.toast]);
 
   const fetchProjects = useCallback(async () => {
     console.log('fetchProjects called, token:', !!token, 'companyId:', companyId);
@@ -125,8 +142,9 @@ export default function ProjectsOverview() {
     router.push(`/(app)/project/projectsOverview?projectId=${encodeURIComponent(project.id)}`);
   };
 
+  // Event handler for the create new project button, brings up the new project modal
   const handleCreateProjectPress = () => {
-
+    setCreateOpen(true);
   };
 
   // Combine the two loaders into one UI flag. Show a different message when profile is loading.
@@ -143,7 +161,8 @@ export default function ProjectsOverview() {
   }
 
   return (
-    <ScrollView 
+    <>
+          <ScrollView 
       style={styles.container} 
       contentContainerStyle={styles.scrollContent}
       refreshControl={
@@ -268,7 +287,28 @@ export default function ProjectsOverview() {
           </View>
         </View>
       )}
+
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        visible={createOpen}
+        onClose={() => setCreateOpen(false)}
+        token={token}
+        companyId={companyId}
+        onCreated={(project) => {
+          setSelectedProject(project);
+          setSelectedProjectID(project.id);
+          router.push(`/(app)/project/projectsOverview?projectId=${project.id}`);
+        }}
+      />
     </ScrollView>
+
+    {toast && (
+      <View style={styles.toast}>
+      <Ionicons name="checkmark-circle" size={18} color={colors.semantic.success} />
+      <Text style={styles.toastText}>{toast}</Text>
+      </View>
+    )}
+    </>
   );
 }
 
@@ -354,7 +394,7 @@ function ProjectCard({ project, onPress, formatDate, inactive = false }) {
           <Ionicons name="chevron-forward" size={14} color={colors.primary.orange} />
         </View>
       </View>
-    </Pressable>
+    </Pressable>    
   );
 }
 
@@ -656,4 +696,27 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     color: colors.primary.orange,
   },
+
+  // Project deletion successful message
+  toast: {
+  position: 'absolute',
+  bottom: spacing.lg,
+  right: spacing.lg,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: spacing.sm,
+  backgroundColor: colors.neutral.white,
+  borderRadius: borderRadius.lg,
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.md,
+  borderWidth: 1,
+  borderColor: colors.semantic.success,
+  ...shadows.md,
+  maxWidth: 360,
+},
+toastText: {
+  color: colors.text.primary,
+  fontSize: typography.fontSize.sm,
+  fontWeight: typography.fontWeight.medium,
+},
 });

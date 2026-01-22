@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 import { useProject } from "../../components/projectComponents/projectContext";
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
-import { getProject, updateProject } from '../../../utils/api';
+import { getProject, updateProject, getCustomers, deleteProject } from '../../../utils/api';
 
 function FieldRow({ icon, label, value, editing, onChangeText, placeholder, keyboardType = 'default', multiline = false }) {
   return (
@@ -49,12 +49,21 @@ export default function ProjectOverview() {
 
   const [loading, setLoading] = useState(false);
 
+  const [customers, setCustomers] = useState([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   // edit state
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [deleteError, setDeleteError] = useState(null);
 
   // Load project (same logic you had, just adds local loading flag)
   useEffect(() => {
@@ -111,6 +120,21 @@ export default function ProjectOverview() {
     return nameOk && changed && !saving;
   }, [project, draft, saving]);
 
+  useEffect(() => {
+    if (!token || !project?.company_id) return;
+
+    async function loadCustomers() {
+      setCustomersLoading(true);
+      const res = await getCustomers(token, project.company_id);
+      if (res.success) {
+        setCustomers(res.data.customers || []);
+      }
+      setCustomersLoading(false);
+    }
+
+    loadCustomers();
+  }, [token, project?.company_id]);
+
   const startEditing = () => {
     if (!project) return;
     setSaveError(null);
@@ -132,7 +156,6 @@ export default function ProjectOverview() {
     setSaveError(null);
     setSaveSuccess(false);
 
-    // Only send fields your backend allows updating (it removes id/company_id/created_at anyway)
     const updates = {
       name: draft.name?.trim(),
       address: draft.address?.trim() || null,
@@ -147,8 +170,16 @@ export default function ProjectOverview() {
     const res = await updateProject(token, project.id, updates);
 
     if (res.success && res.data?.project) {
-      setProject(res.data.project);
-      try { setSelectedProject(res.data.project); } catch (err) {}
+      const refreshed = await getProject(token, project.id);
+
+      if (refreshed.success && refreshed.data?.project) {
+        setProject(refreshed.data.project);
+        try { setSelectedProject(refreshed.data.project); } catch (err) {}
+      } else {
+        setProject(res.data.project);
+        try { setSelectedProject(res.data.project); } catch (err) {}
+      }
+
       setIsEditing(false);
       setSaveSuccess(true);
     } else {
@@ -180,7 +211,8 @@ export default function ProjectOverview() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <>
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
@@ -297,26 +329,108 @@ export default function ProjectOverview() {
           <Text style={styles.cardTitle}>Customer</Text>
         </View>
 
-        <FieldRow
-          icon="briefcase-outline"
-          label="Customer"
-          value={project.customers?.name || (project.customer_id ? String(project.customer_id) : '')}
-          editing={false}
-        />
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldLabelWrap}>
+            <View style={styles.fieldIcon}>
+              <Ionicons name="briefcase-outline" size={16} color={colors.text.tertiary} />
+            </View>
+            <Text style={styles.fieldLabel}>Customer</Text>
+          </View>
 
-        <FieldRow
-          icon="mail-outline"
-          label="Contact Email"
-          value={project.customers?.contact_email}
-          editing={false}
-        />
+          <View style={styles.fieldValueWrap}>
+            {!isEditing ? (
+              <Text style={styles.fieldValue}>
+                {project.customers?.name || '—'}
+              </Text>
+            ) : (
+              <>
+                <Pressable
+                  onPress={() => setCustomerOpen(v => !v)}
+                  style={[
+                    styles.dropdownTrigger,
+                    customerOpen && styles.dropdownTriggerOpen,
+                  ]}
+                >
+                  <Text style={styles.dropdownText}>
+                    {customers.find(c => c.id === draft?.customer_id)?.name || 'No customer'}
+                  </Text>
+                  <Ionicons
+                    name={customerOpen ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={colors.text.secondary}
+                  />
+                </Pressable>
 
-        <FieldRow
-          icon="person-outline"
-          label="Contact Name"
-          value={project.customers?.contact_name}
-          editing={false}
-        />
+                {customerOpen && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView style={{ maxHeight: 220 }}>
+                      <Pressable
+                        onPress={() => {
+                          setDraft(d => ({
+                            ...d,
+                            customer_id: null,
+                            customers: null,
+                          }));
+                          setCustomerOpen(false);
+                        }}
+                        style={styles.dropdownItem}
+                      >
+                        <Text style={styles.dropdownItemText}>No customer</Text>
+                      </Pressable>
+
+                      {customers.map(c => (
+                        <Pressable
+                          key={c.id}
+                          onPress={() => {
+                            setDraft(d => ({
+                              ...d,
+                              customer_id: c.id,
+                              customers: {
+                                id: c.id,
+                                name: c.name,
+                                contact_name: c.contact_name || null,
+                                contact_email: c.contact_email || null,
+                              },
+                            }));
+                            setCustomerOpen(false);
+                          }}
+                          style={[
+                            styles.dropdownItem,
+                            draft?.customer_id === c.id && styles.dropdownItemActive,
+                          ]}
+                        >
+                          <Text style={styles.dropdownItemText}>{c.name}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+
+      <FieldRow
+        icon="mail-outline"
+        label="Contact Email"
+        value={
+          isEditing
+            ? draft?.customers?.contact_email
+            : project.customers?.contact_email
+        }
+        editing={false}
+      />
+
+      <FieldRow
+        icon="person-outline"
+        label="Contact Name"
+        value={
+          isEditing
+            ? draft?.customers?.contact_name
+            : project.customers?.contact_name
+        }
+        editing={false}
+      />
       </View>
 
       {/* Location Details */}
@@ -396,9 +510,119 @@ export default function ProjectOverview() {
           </View>
         </View>
       </View>
+
+      {/* Delete Project Button */}
+      {isEditing && (
+        <View style={{ marginTop: spacing.xl }}>
+          <Pressable
+            onPress={() => setDeleteOpen(true)}
+            style={({ pressed }) => [
+              styles.deleteButton,
+              pressed && { transform: [{ scale: 0.98 }] },
+            ]}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.neutral.white} />
+            <Text style={styles.deleteButtonText}>Delete Project</Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
+
+    <Modal
+      visible={deleteOpen}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setDeleteOpen(false)}
+    >
+      <View style={styles.backdrop}>
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmTitle}>Delete Project?</Text>
+          <Text style={styles.confirmText}>
+            This action cannot be undone. The project will be permanently deleted.
+          </Text>
+
+          <View style={styles.confirmActions}>
+            <Pressable
+              onPress={() => setDeleteOpen(false)}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={async () => {
+                if (!token || !project?.id) return;
+                setDeleting(true);
+
+                const res = await deleteProject(token, project.id, true);
+
+                setDeleting(false);
+
+                if (!res?.success) {
+                  const rawMessage = res?.message || '';
+
+                  if (rawMessage.includes('time_entries')) {
+                    setDeleteError(
+                      'This project cannot be permanently deleted because it has time entries associated with it. You can archive it instead.'
+                    );
+                  } else {
+                    setDeleteError(rawMessage || 'Failed to delete project.');
+                  }
+                  return;
+                }
+
+                setDeleteOpen(false);
+                setSelectedProject(null);
+                router.replace({
+                  pathname: '/(app)/projects',
+                  params: {
+                    toast: `"${project.name}" was successfully deleted`,
+                  },
+                });
+              }}
+              style={styles.confirmDeleteButton}
+            >
+              {deleting ? (
+                <ActivityIndicator color={colors.text.inverse} />
+              ) : (
+                <Text style={styles.confirmDeleteText}>Delete</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Deletion Error Modal */}
+    <Modal
+      visible={!!deleteError}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setDeleteError(null)}
+    >
+      <View style={styles.backdrop}>
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmTitle}>Deletion Failed</Text>
+
+          <Text style={styles.confirmText}>
+            {deleteError}
+          </Text>
+
+          <View style={styles.confirmActions}>
+            <Pressable
+              onPress={() => setDeleteError(null)}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface.background },
@@ -589,4 +813,96 @@ const styles = StyleSheet.create({
   toggleDotOn: { backgroundColor: colors.semantic.success },
   toggleDotOff: { backgroundColor: colors.text.tertiary },
   toggleText: { fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.primary },
+  dropdownTrigger: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: spacing.sm,
+  borderWidth: 1,
+  borderColor: colors.border.default,
+  borderRadius: borderRadius.md,
+  backgroundColor: colors.neutral.white,
+},
+dropdownTriggerOpen: {
+  borderColor: colors.primary.orange,
+},
+dropdownText: {
+  fontSize: typography.fontSize.md,
+  color: colors.text.primary,
+},
+dropdownMenu: {
+  marginTop: spacing.xs,
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  borderRadius: borderRadius.md,
+  backgroundColor: colors.surface.card,
+  overflow: 'hidden',
+  ...shadows.sm,
+},
+dropdownItem: {
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.md,
+},
+dropdownItemActive: {
+  backgroundColor: colors.primary.orangeSubtle,
+},
+dropdownItemText: {
+  fontSize: typography.fontSize.sm,
+  color: colors.text.primary,
+},
+deleteButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: spacing.sm,
+  backgroundColor: colors.semantic.error,
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.lg,
+  borderRadius: borderRadius.lg,
+  alignSelf: 'flex-start',
+},
+deleteButtonText: {
+  color: colors.neutral.white,
+  fontWeight: typography.fontWeight.semibold,
+},
+confirmCard: {
+  width: '100%',
+  maxWidth: 420,
+  backgroundColor: colors.surface.card,
+  borderRadius: borderRadius.xl,
+  padding: spacing.lg,
+  ...shadows.lg,
+},
+confirmTitle: {
+  fontSize: typography.fontSize.lg,
+  fontWeight: typography.fontWeight.semibold,
+  marginBottom: spacing.sm,
+},
+confirmText: {
+  fontSize: typography.fontSize.md,
+  color: colors.text.secondary,
+  marginBottom: spacing.lg,
+},
+confirmActions: {
+  flexDirection: 'row',
+  justifyContent: 'flex-end',
+  gap: spacing.sm,
+},
+confirmDeleteButton: {
+  backgroundColor: colors.semantic.error,
+  paddingHorizontal: spacing.lg,
+  paddingVertical: spacing.sm,
+  borderRadius: borderRadius.lg,
+},
+confirmDeleteText: {
+  color: colors.text.inverse,
+  fontWeight: typography.fontWeight.semibold,
+},
+backdrop: {
+  flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: spacing.lg,
+},
 });
