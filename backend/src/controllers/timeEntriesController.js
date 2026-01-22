@@ -203,13 +203,14 @@ export const getCurrentTimeEntry = async (req, res) => {
 // Get time entries with filters
 export const getTimeEntries = async (req, res) => {
   try {
-    const { id: user_id, default_company_id } = req.user;
+    const { id: user_id, default_company_id, role_key } = req.user;
     const {
       start_date,
       end_date,
       project_id,
       cost_code_id,
       target_user_id,
+      all_users, // New param to get all users' entries (for admin/supervisor view)
       limit = 100,
       offset = 0
     } = req.query;
@@ -224,31 +225,41 @@ export const getTimeEntries = async (req, res) => {
         project:projects(id, name),
         cost_code:cost_codes(id, code, name, unit_of_measure),
         equipment:equipment(id, label),
-        user:users(id, full_name)
+        user:users(id, full_name, email)
       `, { count: 'exact' })
       .eq('company_id', company_id)
       .order('clock_in', { ascending: false })
       .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-    // For now, filter by user (role-based filtering can be added later)
+    // Role-based filtering:
+    // - Admins/supervisors can see all entries when all_users=true
+    // - Regular users only see their own entries
+    const isPrivileged = ['admin', 'supervisor', 'foreman'].includes(role_key);
+    
     if (target_user_id) {
+      // Specific user requested
       query = query.eq('user_id', target_user_id);
+    } else if (all_users === 'true' && isPrivileged) {
+      // Show all users' entries (no user filter)
     } else {
+      // Default: show only current user's entries
       query = query.eq('user_id', user_id);
     }
 
     if (project_id) query = query.eq('project_id', project_id);
     if (cost_code_id) query = query.eq('cost_code_id', cost_code_id);
     if (start_date) query = query.gte('clock_in', start_date);
-    if (end_date) query = query.lte('clock_in', end_date);
+    if (end_date) query = query.lte('clock_in', end_date + 'T23:59:59.999Z');
 
     const { data, error, count } = await query;
 
     if (error) throw error;
-    res.json({ data, total: count });
+    
+    // Return { time_entries: [...] } - apiCall wrapper will add success/data
+    res.json({ time_entries: data, total: count });
   } catch (error) {
     console.error('Get time entries error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 

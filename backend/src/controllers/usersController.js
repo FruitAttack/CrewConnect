@@ -148,7 +148,15 @@ export async function getAllUsers(req, res) {
       return res.status(500).json({ message: 'Failed to get users' });
     }
 
-    return res.status(200).json({ users: data });
+    // Transform data to include role_key at top level for easier frontend access
+    const transformedUsers = data.map(user => ({
+      ...user,
+      // Get role_key from user_roles if available (filtered by company)
+      role_key: user.user_roles?.[0]?.role_key || user.role_key || null
+    }));
+
+    // Return { users: [...] } - apiCall wrapper will add success/data
+    return res.status(200).json({ users: transformedUsers });
 
   } catch (err) {
     console.error('Get users error:', err);
@@ -229,6 +237,7 @@ export async function getUser(req, res) {
 export async function getMe(req, res) {
   try {
     // req.user is set by auth middleware and includes default_company_id
+    // Return { user: {...} } - apiCall wrapper will add success/data
     return res.status(200).json({ user: req.user });
   } catch (err) {
     console.error('Get me error:', err);
