@@ -24,8 +24,8 @@ export default function AppLayout() {
   // Build page title from pathname
   const segmentTitleMap = {
     dashboard: "Dashboard",
-    project: "Project",
-    projectsOverview: "Projects",
+    projects: "Projects",
+    projectsOverview: "Project",
     laborOverview: "Labor",
     safetyOverview: "Safety",
     materialsOverview: "Materials",
@@ -37,11 +37,6 @@ export default function AppLayout() {
   const titleParts = segments
     .filter(seg => seg !== "(app)")
     .map(seg => segmentTitleMap[seg] || seg);
-
-  // Special case for project/projectsOverview
-  if (segments.includes("project") && segments.includes("projectsOverview")) {
-    titleParts.splice(0, titleParts.length, "Projects");
-  }
 
   const title = titleParts.length > 0 ? titleParts.join(" / ") : "Dashboard";
 

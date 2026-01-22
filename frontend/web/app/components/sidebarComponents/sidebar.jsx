@@ -34,7 +34,7 @@ export default function Sidebar() {
   // Main navigation items for the app
   const mainNavItems = [
     { icon: 'grid-outline', iconFilled: 'grid', label: 'Dashboard', route: '/(app)/dashboard', matchPath: '/dashboard' },
-    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/project/projectsOverview', matchPath: '/project/' },
+    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/projects', matchPath: '/projects' },
     { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce', matchPath: '/workforce' },
     { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
     { icon: 'shield-checkmark-outline', iconFilled: 'shield-checkmark', label: 'Safety', route: '/(app)/safety', matchPath: '/safety' },
