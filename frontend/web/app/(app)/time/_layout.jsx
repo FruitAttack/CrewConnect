@@ -5,6 +5,7 @@ import { colors, spacing, borderRadius, typography } from '../../../constants/th
 
 const tabs = [
   { key: 'index', label: 'Overview', icon: 'analytics-outline', path: '/time' },
+  { key: 'live', label: 'Live', icon: 'radio-outline', path: '/time/live' },
   { key: 'timecards', label: 'Timecards', icon: 'document-text-outline', path: '/time/timecards' },
   { key: 'reports', label: 'Reports', icon: 'bar-chart-outline', path: '/time/reports' },
 ];
@@ -15,6 +16,7 @@ export default function TimeLayout() {
 
   const getActiveTab = () => {
     if (pathname === '/time' || pathname === '/time/') return 'index';
+    if (pathname.includes('/live')) return 'live';
     if (pathname.includes('/timecards')) return 'timecards';
     if (pathname.includes('/reports')) return 'reports';
     return 'index';
