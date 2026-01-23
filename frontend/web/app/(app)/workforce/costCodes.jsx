@@ -4,12 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
 import { 
-  getAllCostCodes, 
+  getCostCodes, 
   getCostCode, 
   createCostCode, 
   updateCostCode, 
-  deleteCostCode, 
-  activateCostCode,
+  deleteCostCode,
   getUserProfile 
 } from '../../../utils/api';
 import { colors, shadows } from '../../../constants/theme';
@@ -121,11 +120,11 @@ export default function CostCodesPage() {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalMode, setModalMode] = useState('add'); // add, edit
+  const [modalMode, setModalMode] = useState('add');
   const [selectedCostCode, setSelectedCostCode] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
@@ -138,34 +137,41 @@ export default function CostCodesPage() {
     display_order: 0,
   });
 
-  const fetchCostCodes = useCallback(async () => {
+  // Load function - backend gets company_id from token
+  async function load() {
     if (!token) return;
+    setLoading(true);
     try {
-      const res = await getAllCostCodes(token);
-      if (res.success) {
-        setCostCodes(Array.isArray(res.data) ? res.data : []);
-      } else {
-        setError(res.error || 'Failed to load cost codes');
-      }
+      const meRes = await getUserProfile(token);
+      const cid = meRes?.data?.user?.default_company_id;
+      setCompanyId(cid);
+
+      // Backend extracts company_id from authenticated user, no need to pass it
+      const res = await getCostCodes(token);
+      setCostCodes(res?.data || []);
     } catch (err) {
+      console.error('Error loading cost codes:', err);
       setError('Failed to load cost codes');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Refresh function
+  async function refresh() {
+    if (!token) return;
+    setRefreshing(true);
+    try {
+      const res = await getCostCodes(token);
+      setCostCodes(res?.data || []);
+    } catch (err) {
+      console.error('Error refreshing cost codes:', err);
+    } finally {
       setRefreshing(false);
     }
-  }, [token]);
+  }
 
-  useEffect(() => {
-    async function init() {
-      if (!token) return;
-      const res = await getUserProfile(token);
-      if (res.success && res.data?.user?.default_company_id) {
-        setCompanyId(res.data.user.default_company_id);
-      }
-      fetchCostCodes();
-    }
-    init();
-  }, [token, fetchCostCodes]);
+  useEffect(() => { load(); }, [token]);
 
   // Handle URL params for quick actions
   useEffect(() => {
@@ -173,11 +179,6 @@ export default function CostCodesPage() {
       openAddModal();
     }
   }, [params.action]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCostCodes();
-  };
 
   // Filter cost codes
   const filtered = useMemo(() => {
@@ -194,22 +195,11 @@ export default function CostCodesPage() {
     });
   }, [costCodes, search, statusFilter]);
 
-  // Group by parent (CSI divisions)
-  const grouped = useMemo(() => {
-    const parents = filtered.filter(cc => !cc.parent_id);
-    const children = filtered.filter(cc => cc.parent_id);
-    
-    return parents.map(parent => ({
-      ...parent,
-      children: children.filter(c => c.parent_id === parent.id),
-    }));
-  }, [filtered]);
-
-  // Get flat list for non-grouped view
+  // Get flat list sorted
   const flatList = useMemo(() => {
     return filtered.sort((a, b) => {
       if (a.display_order !== b.display_order) return a.display_order - b.display_order;
-      return a.code.localeCompare(b.code);
+      return (a.code || '').localeCompare(b.code || '');
     });
   }, [filtered]);
 
@@ -260,21 +250,21 @@ export default function CostCodesPage() {
       if (modalMode === 'add') {
         const res = await createCostCode(token, formData);
         if (!res.success) {
-          setError(res.error || 'Failed to create cost code');
+          setError(res.message || 'Failed to create cost code');
           setSaving(false);
           return;
         }
       } else {
         const res = await updateCostCode(token, selectedCostCode.id, formData);
         if (!res.success) {
-          setError(res.error || 'Failed to update cost code');
+          setError(res.message || 'Failed to update cost code');
           setSaving(false);
           return;
         }
       }
       
       closeModal();
-      fetchCostCodes();
+      refresh();
     } catch (err) {
       setError('An error occurred');
     } finally {
@@ -284,8 +274,8 @@ export default function CostCodesPage() {
 
   const handleToggleActive = async (cc) => {
     try {
-      await activateCostCode(token, cc.id, { active: !cc.active });
-      fetchCostCodes();
+      await updateCostCode(token, cc.id, { active: !cc.active });
+      refresh();
     } catch (err) {
       setError('Failed to update status');
     }
@@ -296,10 +286,10 @@ export default function CostCodesPage() {
     try {
       const res = await deleteCostCode(token, confirmDelete.id);
       if (!res.success) {
-        setError(res.error || 'Failed to delete cost code');
+        setError(res.message || 'Failed to delete cost code');
       }
       setConfirmDelete(null);
-      fetchCostCodes();
+      refresh();
     } catch (err) {
       setError('Failed to delete cost code');
     }
@@ -378,7 +368,7 @@ export default function CostCodesPage() {
             </View>
 
             {/* Rows */}
-            <ScrollView style={styles.tableBody} contentContainerStyle={styles.tableBodyContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.orange} />}>
+            <ScrollView style={styles.tableBody} contentContainerStyle={styles.tableBodyContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary.orange} />}>
               {flatList.length === 0 ? (
                 <View style={styles.emptyState}>
                   <View style={styles.emptyIcon}>

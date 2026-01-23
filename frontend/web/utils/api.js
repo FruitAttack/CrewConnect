@@ -117,6 +117,28 @@ export async function getClockedInUsers(token, companyId) {
   return apiCall(`users/clocked-in?company_id=${companyId}`, token)
 }
 
+// Create a new user (Admin only)
+export async function createUser(token, userData) {
+  return apiCall('users', token, 'POST', userData)
+}
+
+// Soft delete user (sets is_active = false)
+export async function deleteUser(token, userId, hardDelete = false) {
+  const params = hardDelete ? '?hard_delete=true' : ''
+  return apiCall(`users/${userId}${params}`, token, 'DELETE')
+}
+
+// Reactivate a deactivated user
+export async function activateUser(token, userId) {
+  return apiCall(`users/${userId}/activate`, token, 'PATCH')
+}
+
+// Alias for getAllUsers (matches what employees.jsx expects)
+export async function getAllUsers(token, params = {}) {
+  const query = new URLSearchParams(params).toString()
+  return apiCall(`users${query ? `?${query}` : ''}`, token)
+}
+
 // ============================================
 // TIME ENTRIES
 // ============================================
@@ -285,8 +307,8 @@ export async function deleteEquipment(token, equipmentId) {
 // ============================================
 // COST CODES
 // ============================================
-export async function getCostCodes(token, companyId) {
-  return apiCall(`cost-codes?company_id=${companyId}`, token)
+export async function getCostCodes(token) {
+  return apiCall('cost-codes', token)
 }
 
 export async function getCostCode(token, costCodeId) {
