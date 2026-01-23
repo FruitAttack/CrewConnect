@@ -3,7 +3,7 @@ import { supabase } from '../utils/supabase.js';
 // Get all cost codes for the company
 export const getAllCostCodes = async (req, res) => {
   try {
-    const { company_id } = req.user;
+    const company_id = req.user.company_id || req.user.default_company_id;
     const { active_only = 'false', parent_id } = req.query;
 
     let query = supabase
