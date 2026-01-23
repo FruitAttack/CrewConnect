@@ -26,6 +26,7 @@ export default function AppLayout() {
     dashboard: "Dashboard",
     project: "Project",
     projectsOverview: "Projects",
+    formsOverview: "Forms",
     laborOverview: "Labor",
     safetyOverview: "Safety",
     materialsOverview: "Materials",

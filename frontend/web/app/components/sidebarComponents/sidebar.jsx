@@ -39,6 +39,7 @@ export default function Sidebar() {
     { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
     { icon: 'shield-checkmark-outline', iconFilled: 'shield-checkmark', label: 'Safety', route: '/(app)/safety', matchPath: '/safety' },
     { icon: 'stats-chart-outline', iconFilled: 'stats-chart', label: 'Reports', route: '/(app)/reports', matchPath: '/reports' },
+    { icon: 'document-text-outline', iconFilled: 'document-text', label: 'Forms', route: '/(app)/form/formsOverview', matchPath: '/form/' },
   ];
 
   // Bottom navigation items

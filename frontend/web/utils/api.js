@@ -2,6 +2,7 @@
 // mac terminal command: ipconfig getifaddr en0
 // windows command: ipconfig (look for IPv4 Address)
 const API_URL = "http://localhost:5001"
+import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:5001"
 
 /**
@@ -218,6 +219,35 @@ export async function getCustomer(token, customerId) {
 
 export async function createCustomer(token, customerData) {
   return apiCall('customers', token, 'POST', customerData)
+}
+
+// ============================================
+// FORMS (dummy data from sampleForms)
+// ============================================
+export async function getForms(token, companyId) {
+  // return dummy data structure consistent with API callers
+  return {
+    success: true,
+    message: "OK",
+    data: { forms: SAMPLE_FORMS },
+  }
+}
+
+export async function getForm(token, formId) {
+  const form = SAMPLE_FORMS.find(f => f.id === formId)
+  if (!form) {
+    return { success: false, message: "Form not found" }
+  }
+  return { success: true, message: "OK", data: { form } }
+}
+
+export async function submitForm(token, formId, payload) {
+  // echo submission for now
+  return {
+    success: true,
+    message: "Submission received",
+    data: { formId, payload },
+  }
 }
 
 export async function updateCustomer(token, customerId, updates) {
