@@ -17,7 +17,8 @@ import {
   startBreak,
   endBreak,
   getCurrentBreak,
-  updateCostCode
+  updateCostCode,
+  updateNotes  // ADD THIS
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -52,6 +53,7 @@ router.post('/validate-geofence', validateGeofence);
 // CRUD operations - parameterized routes go LAST
 router.get('/', getTimeEntries);
 router.put('/:id', updateTimeEntry);
+router.put('/:id/notes', updateNotes); 
 router.delete('/:id', deleteTimeEntry);
 
 export default router;

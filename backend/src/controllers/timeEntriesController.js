@@ -799,3 +799,50 @@ export const updateCostCode = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Update notes for a time entry
+export const updateNotes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { id: user_id } = req.user;
+    const { notes } = req.body;
+
+    if (notes === undefined) {
+      return res.status(400).json({ error: 'notes field is required' });
+    }
+
+    // First check if entry exists
+    const { data: existing, error: fetchError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Time entry not found' });
+    }
+
+    // Check permissions - user can only edit their own entries
+    if (existing.user_id !== user_id) {
+      return res.status(403).json({ error: 'Not authorized to edit this time entry' });
+    }
+
+    const { data, error } = await supabase
+      .from('time_entries')
+      .update({ notes })
+      .eq('id', id)
+      .select(`
+        *,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label)
+      `)
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Update notes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
