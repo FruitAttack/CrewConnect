@@ -4,21 +4,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../../constants/theme';
 
 const tabs = [
-  { key: 'index', label: 'Overview', icon: 'analytics-outline', path: '/time' },
-  { key: 'live', label: 'Live', icon: 'radio-outline', path: '/time/live' },
-  { key: 'timecards', label: 'Timecards', icon: 'document-text-outline', path: '/time/timecards' },
-  { key: 'reports', label: 'Reports', icon: 'bar-chart-outline', path: '/time/reports' },
+  { key: 'index', label: 'Overview', icon: 'people-outline', path: '/workforce' },
+  { key: 'employees', label: 'Employees', icon: 'person-outline', path: '/workforce/employees' },
+  { key: 'costCodes', label: 'Cost Codes', icon: 'pricetag-outline', path: '/workforce/costCodes' },
 ];
 
-export default function TimeLayout() {
+export default function WorkforceLayout() {
   const pathname = usePathname() || "";
   const router = useRouter();
 
   const getActiveTab = () => {
-    if (pathname === '/time' || pathname === '/time/') return 'index';
-    if (pathname.includes('/live')) return 'live';
-    if (pathname.includes('/timecards')) return 'timecards';
-    if (pathname.includes('/reports')) return 'reports';
+    if (pathname === '/workforce' || pathname === '/workforce/') return 'index';
+    if (pathname.includes('/employees')) return 'employees';
+    if (pathname.includes('/costCodes')) return 'costCodes';
     return 'index';
   };
 
