@@ -37,7 +37,7 @@ export const getAllCostCodes = async (req, res) => {
 export const getCostCode = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.company_id || req.user.default_company_id;
 
     const { data, error } = await supabase
       .from('cost_codes')
@@ -74,7 +74,7 @@ export const getCostCode = async (req, res) => {
 // Create cost code
 export const createCostCode = async (req, res) => {
   try {
-    const { company_id } = req.user;
+    const company_id = req.user.company_id || req.user.default_company_id;
     const { 
       code, 
       name, 
@@ -135,7 +135,7 @@ export const createCostCode = async (req, res) => {
 export const updateCostCode = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.company_id || req.user.default_company_id;
     const { 
       code, 
       name, 
@@ -205,7 +205,7 @@ export const updateCostCode = async (req, res) => {
 export const deleteCostCode = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user.company_id || req.user.default_company_id;
 
     // Check if cost code has children
     const { data: children } = await supabase
@@ -260,7 +260,7 @@ export const deleteCostCode = async (req, res) => {
 export const activateCostCode = async (req, res) => {
   try {
     const { id } = req.params;
-    const { company_id } = req.user;
+    const company_id = req.user?.company_id || req.user?.default_company_id;
     const { active } = req.body;
 
     if (active === undefined) {
@@ -292,7 +292,7 @@ export const activateCostCode = async (req, res) => {
 // Search cost codes
 export const searchCostCodes = async (req, res) => {
   try {
-    const { company_id } = req.user;
+    const company_id = req.user?.company_id || req.user?.default_company_id;
     const { q, active_only = 'true', limit = 20 } = req.query;
 
     if (!q || q.length < 1) {

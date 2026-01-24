@@ -900,7 +900,7 @@ export const getActiveRoster = async (req, res) => {
       .from("user_employment")
       .select(`
         user_id,
-        user:users(id, full_name, email, is_active)
+        user:users(id, full_name, email, is_active, phone, can_view_rates)
       `)
       .eq("company_id", company_id)
       .eq("is_active", true);
@@ -912,11 +912,26 @@ export const getActiveRoster = async (req, res) => {
     const { data: employments, error: empErr } = await employmentQuery;
     if (empErr) throw empErr;
 
-    // Extract unique active users
+    // Fetch user roles for this company
+    const userIds = (employments || []).map(e => e.user_id).filter(Boolean);
+    const { data: userRoles, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("user_id, role_key")
+      .eq("company_id", company_id)
+      .in("user_id", userIds);
+
+    if (roleErr) throw roleErr;
+
+    const roleByUser = new Map((userRoles || []).map(r => [r.user_id, r.role_key]));
+
+    // Extract unique active users with their roles
     const usersMap = new Map();
     (employments || []).forEach(emp => {
       if (emp.user && emp.user.is_active) {
-        usersMap.set(emp.user.id, emp.user);
+        usersMap.set(emp.user.id, {
+          ...emp.user,
+          role_key: roleByUser.get(emp.user.id) || null
+        });
       }
     });
 
