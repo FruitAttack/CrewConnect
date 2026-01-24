@@ -113,6 +113,10 @@ export async function updateUser(token, userId, updates) {
   return apiCall(`users/${userId}`, token, 'PUT', updates)
 }
 
+export async function updateUserEmployment(token, userId, data) {
+  return apiCall(`users/${userId}/employment`, token, 'POST', data)
+}
+
 export async function getClockedInUsers(token, companyId) {
   return apiCall(`users/clocked-in?company_id=${companyId}`, token)
 }

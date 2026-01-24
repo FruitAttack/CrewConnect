@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef, createContext, useContext } from "react";
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, ActivityIndicator, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from 'expo-router';
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
 import { useSession } from "../../../utils/ctx";
 import {
@@ -315,6 +316,7 @@ const dropdown = StyleSheet.create({
 export default function Live() {
   const { session } = useSession();
   const token = session?.access_token;
+  const params = useLocalSearchParams();
   const [companyId, setCompanyId] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -331,6 +333,20 @@ export default function Live() {
 
   // Dropdown coordination
   const [openDropdown, setOpenDropdown] = useState(null);
+
+  // Sorting
+  const [sortField, setSortField] = useState('full_name');
+  const [sortDirection, setSortDirection] = useState('asc');
+
+  // Status filter - map query param to internal filter value
+  const getInitialFilter = () => {
+    const filterParam = params.filter;
+    if (filterParam === 'clocked_in') return 'active';
+    if (filterParam === 'break') return 'break';
+    if (filterParam === 'clocked_out') return 'out';
+    return 'all';
+  };
+  const [statusFilter, setStatusFilter] = useState(getInitialFilter());
 
   // Form data
   const [projects, setProjects] = useState([]);
@@ -392,14 +408,77 @@ export default function Live() {
     return () => clearInterval(interval);
     }, [companyId, token]);
 
+  const statusCounts = useMemo(() => {
+    return {
+      all: roster.length,
+      active: roster.filter(r => r.is_clocked_in && !r.open_entry?.is_on_break).length,
+      break: roster.filter(r => r.is_clocked_in && r.open_entry?.is_on_break).length,
+      out: roster.filter(r => !r.is_clocked_in).length,
+    };
+  }, [roster]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return roster;
-    return roster.filter(r =>
-      (r.user?.full_name || "").toLowerCase().includes(q) ||
-      (r.user?.email || "").toLowerCase().includes(q)
-    );
-  }, [roster, query]);
+    let result = roster;
+    
+    // Filter by search query
+    if (q) {
+      result = result.filter(r =>
+        (r.user?.full_name || "").toLowerCase().includes(q) ||
+        (r.user?.email || "").toLowerCase().includes(q)
+      );
+    }
+
+    // Filter by status
+    if (statusFilter === 'active') {
+      result = result.filter(r => r.is_clocked_in && !r.open_entry?.is_on_break);
+    } else if (statusFilter === 'break') {
+      result = result.filter(r => r.is_clocked_in && r.open_entry?.is_on_break);
+    } else if (statusFilter === 'out') {
+      result = result.filter(r => !r.is_clocked_in);
+    }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      let aVal, bVal;
+      switch (sortField) {
+        case 'full_name':
+          aVal = (a.user?.full_name || '').toLowerCase();
+          bVal = (b.user?.full_name || '').toLowerCase();
+          break;
+        case 'status':
+          // Sort by: clocked in > on break > clocked out
+          aVal = a.is_clocked_in ? (a.open_entry?.is_on_break ? 1 : 2) : 0;
+          bVal = b.is_clocked_in ? (b.open_entry?.is_on_break ? 1 : 2) : 0;
+          break;
+        case 'task':
+          aVal = (a.open_entry?.project?.name || '').toLowerCase();
+          bVal = (b.open_entry?.project?.name || '').toLowerCase();
+          break;
+        case 'time':
+          aVal = a.is_clocked_in ? new Date(a.open_entry?.clock_in).getTime() : 0;
+          bVal = b.is_clocked_in ? new Date(b.open_entry?.clock_in).getTime() : 0;
+          break;
+        default:
+          aVal = (a.user?.full_name || '').toLowerCase();
+          bVal = (b.user?.full_name || '').toLowerCase();
+      }
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [roster, query, statusFilter, sortField, sortDirection]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const activeCount = roster.filter(r => r.is_clocked_in).length;
   const onBreakCount = roster.filter(r => r.is_clocked_in && r.open_entry?.is_on_break).length;
@@ -574,22 +653,25 @@ export default function Live() {
             )}
           </View>
 
-            <View style={s.statusStats}>
-                <View style={s.statusStat}>
-                    <View style={s.activeDot} />
-                    <Text style={s.statusStatText}>{activeCount} Clocked In</Text>
-                </View>
-                {onBreakCount > 0 && (
-                    <View style={s.statusStat}>
-                    <Ionicons name="pause" size={10} color={mobileColors.break} />
-                    <Text style={s.statusStatTextBreak}>{onBreakCount} On Break</Text>
-                    </View>
-                )}
-                <View style={s.statusStat}>
-                    <View style={s.inactiveDot} />
-                    <Text style={s.statusStatTextMuted}>{totalCount - activeCount} Clocked Out</Text>
-                </View>
-            </View>
+          {/* Status Filter Toggle */}
+          <View style={s.viewToggle}>
+            <Pressable style={[s.viewBtn, statusFilter === 'all' && s.viewBtnActive]} onPress={() => setStatusFilter('all')}>
+              <Text style={[s.viewBtnCount, statusFilter === 'all' && s.viewBtnCountActive]}>{statusCounts.all}</Text>
+              <Text style={[s.viewText, statusFilter === 'all' && s.viewTextActive]}>All</Text>
+            </Pressable>
+            <Pressable style={[s.viewBtn, statusFilter === 'active' && s.viewBtnActive]} onPress={() => setStatusFilter('active')}>
+              <Text style={[s.viewBtnCount, statusFilter === 'active' && s.viewBtnCountActive]}>{statusCounts.active}</Text>
+              <Text style={[s.viewText, statusFilter === 'active' && s.viewTextActive]}>Clocked In</Text>
+            </Pressable>
+            <Pressable style={[s.viewBtn, statusFilter === 'break' && s.viewBtnActive]} onPress={() => setStatusFilter('break')}>
+              <Text style={[s.viewBtnCount, statusFilter === 'break' && s.viewBtnCountActive]}>{statusCounts.break}</Text>
+              <Text style={[s.viewText, statusFilter === 'break' && s.viewTextActive]}>On Break</Text>
+            </Pressable>
+            <Pressable style={[s.viewBtn, statusFilter === 'out' && s.viewBtnActive]} onPress={() => setStatusFilter('out')}>
+              <Text style={[s.viewBtnCount, statusFilter === 'out' && s.viewBtnCountActive]}>{statusCounts.out}</Text>
+              <Text style={[s.viewText, statusFilter === 'out' && s.viewTextActive]}>Clocked Out</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={s.toolbarRight}>
@@ -610,10 +692,22 @@ export default function Live() {
         <ScrollView horizontal showsHorizontalScrollIndicator style={s.horizontalScroll} contentContainerStyle={s.horizontalScrollContent}>
           <View style={s.tableInner}>
             <View style={s.columnHeaderRow}>
-              <View style={s.employeeHeaderCell}><Text style={s.columnLabel}>Employee</Text></View>
-              <View style={s.statusHeaderCell}><Text style={s.columnLabel}>Status</Text></View>
-              <View style={s.taskHeaderCell}><Text style={s.columnLabel}>Current Task</Text></View>
-              <View style={s.timeHeaderCell}><Text style={s.columnLabel}>Time</Text></View>
+              <Pressable style={[s.employeeHeaderCell, { flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => handleSort('full_name')}>
+                <Text style={s.columnLabel}>Employee</Text>
+                {sortField === 'full_name' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
+              </Pressable>
+              <Pressable style={[s.statusHeaderCell, { flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => handleSort('status')}>
+                <Text style={s.columnLabel}>Status</Text>
+                {sortField === 'status' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
+              </Pressable>
+              <Pressable style={[s.taskHeaderCell, { flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => handleSort('task')}>
+                <Text style={s.columnLabel}>Current Task</Text>
+                {sortField === 'task' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
+              </Pressable>
+              <Pressable style={[s.timeHeaderCell, { flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => handleSort('time')}>
+                <Text style={s.columnLabel}>Time</Text>
+                {sortField === 'time' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
+              </Pressable>
               <View style={s.actionsHeaderCell}><Text style={s.columnLabel}>Actions</Text></View>
             </View>
 
@@ -934,6 +1028,16 @@ const s = StyleSheet.create({
   searchContainerFocused: { borderColor: colors.primary.orange },
   searchInput: { flex: 1, fontSize: 13, color: colors.text.primary, outlineStyle: 'none' },
 
+  // Toggle buttons
+  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
+  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
+  viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
+  viewText: { fontSize: 12, fontWeight: '500', color: colors.text.tertiary },
+  viewTextActive: { color: colors.text.primary },
+  viewBtnCount: { fontSize: 11, fontWeight: '600', color: colors.text.tertiary, minWidth: 16, textAlign: 'center' },
+  viewBtnCountActive: { color: colors.primary.orange },
+
+  // Legacy status stats (keeping for reference, can remove)
   statusStats: { 
     flexDirection: 'row', 
     alignItems: 'center', 
