@@ -14,7 +14,8 @@ export async function createUser(req, res) {
       company_id,
       role_key,
       is_active,
-      can_view_rates
+      can_view_rates,
+      hourly_rate
     } = req.body;
 
     // Validate required fields
@@ -53,7 +54,8 @@ export async function createUser(req, res) {
         default_company_id: company_id,
         role_key: role_key || null,
         is_active: is_active !== undefined ? is_active : true,
-        can_view_rates: can_view_rates || false
+        can_view_rates: can_view_rates || false,
+        hourly_rate: hourly_rate || null
       })
       .select()
       .single();
@@ -100,30 +102,18 @@ export async function getAllUsers(req, res) {
   try {
     const { company_id, active, role_key, search } = req.query;
 
+    // Build query without the problematic user_roles join
     let query = supabase
       .from('users')
       .select(`
         *,
-        default_company:default_company_id(id, name),
-        user_roles(
-          role_key,
-          company_id,
-          roles(key, label)
-        ),
-        user_employment(
-          pay_type,
-          hourly_rate,
-          salary_annual,
-          effective_from,
-          effective_to,
-          is_active
-        )
+        default_company:default_company_id(id, name)
       `)
       .order('full_name', { ascending: true });
 
-    // Filter by company through user_roles
+    // Filter by company through default_company_id
     if (company_id) {
-      query = query.eq('user_roles.company_id', company_id);
+      query = query.eq('default_company_id', company_id);
     }
 
     // Filter by active status
@@ -131,14 +121,14 @@ export async function getAllUsers(req, res) {
       query = query.eq('is_active', active === 'true');
     }
 
-    // Filter by role
+    // Filter by role (using role_key on users table)
     if (role_key) {
-      query = query.eq('user_roles.role_key', role_key);
+      query = query.eq('role_key', role_key);
     }
 
-    // Search by name, email, or phone
+    // Search by name or email
     if (search) {
-      query = query.textSearch('search_vector', search);
+      query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
     const { data, error } = await query;
@@ -148,15 +138,53 @@ export async function getAllUsers(req, res) {
       return res.status(500).json({ message: 'Failed to get users' });
     }
 
-    // Transform data to include role_key at top level for easier frontend access
-    const transformedUsers = data.map(user => ({
-      ...user,
-      // Get role_key from user_roles if available (filtered by company)
-      role_key: user.user_roles?.[0]?.role_key || user.role_key || null
-    }));
+    // If we need roles from user_roles table, fetch them separately
+    if (data && data.length > 0 && company_id) {
+      const userIds = data.map(u => u.id);
+      
+      // Fetch roles
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role_key')
+        .eq('company_id', company_id)
+        .in('user_id', userIds);
 
-    // Return { users: [...] } - apiCall wrapper will add success/data
-    return res.status(200).json({ users: transformedUsers });
+      if (!rolesError && rolesData) {
+        // Create a map of user_id -> role_key
+        const roleMap = new Map(rolesData.map(r => [r.user_id, r.role_key]));
+        
+        // Merge role_key into user data (prefer user_roles over users.role_key)
+        data.forEach(user => {
+          user.role_key = roleMap.get(user.id) || user.role_key || null;
+        });
+      }
+
+      // Fetch employment data
+      const { data: employmentData, error: employmentError } = await supabase
+        .from('user_employment')
+        .select('user_id, pay_type, hourly_rate, salary_annual, is_active')
+        .eq('company_id', company_id)
+        .eq('is_active', true)
+        .in('user_id', userIds);
+
+      if (!employmentError && employmentData) {
+        // Create a map of user_id -> employment records
+        const employmentMap = new Map();
+        employmentData.forEach(emp => {
+          if (!employmentMap.has(emp.user_id)) {
+            employmentMap.set(emp.user_id, []);
+          }
+          employmentMap.get(emp.user_id).push(emp);
+        });
+        
+        // Merge employment into user data
+        data.forEach(user => {
+          user.user_employment = employmentMap.get(user.id) || [];
+        });
+      }
+    }
+
+    return res.status(200).json({ users: data });
 
   } catch (err) {
     console.error('Get users error:', err);
@@ -177,23 +205,6 @@ export async function getUser(req, res) {
       .select(`
         *,
         default_company:default_company_id(id, name),
-        user_roles(
-          role_key,
-          company_id,
-          roles(key, label),
-          companies(id, name)
-        ),
-        user_employment(
-          id,
-          pay_type,
-          hourly_rate,
-          salary_annual,
-          ot_after_hours_per_day,
-          ot_multiplier,
-          effective_from,
-          effective_to,
-          is_active
-        ),
         user_addresses(
           id,
           label,
@@ -220,6 +231,29 @@ export async function getUser(req, res) {
         return res.status(404).json({ message: 'User not found' });
       }
       return res.status(500).json({ message: 'Failed to get user' });
+    }
+
+    // Fetch roles separately
+    const { data: rolesData } = await supabase
+      .from('user_roles')
+      .select('role_key, company_id')
+      .eq('user_id', id);
+
+    if (rolesData) {
+      data.user_roles = rolesData;
+      // Set role_key from first role or from users table
+      data.role_key = rolesData[0]?.role_key || data.role_key || null;
+    }
+
+    // Fetch employment separately
+    const { data: employmentData } = await supabase
+      .from('user_employment')
+      .select('id, pay_type, hourly_rate, salary_annual, ot_after_hours_per_day, ot_multiplier, effective_from, effective_to, is_active')
+      .eq('user_id', id)
+      .eq('is_active', true);
+
+    if (employmentData) {
+      data.user_employment = employmentData;
     }
 
     return res.status(200).json({ user: data });
@@ -253,27 +287,55 @@ export async function updateUser(req, res) {
   try {
     const { id } = req.params;
     const updates = req.body;
+    const company_id = req.user?.default_company_id;
+
+    // Extract role_key if present - this goes to user_roles table, not users
+    const newRoleKey = updates.role_key;
+    delete updates.role_key;
 
     // Remove fields that shouldn't be updated directly
     delete updates.id;
     delete updates.created_at;
     delete updates.email; // Email changes should go through Supabase Auth
 
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    // Update users table (if there are any updates left)
+    let userData = null;
+    if (Object.keys(updates).length > 0) {
+      const { data, error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Update user error:', error);
-      return res.status(400).json({ message: error.message });
+      if (error) {
+        console.error('Update user error:', error);
+        return res.status(400).json({ message: error.message });
+      }
+      userData = data;
+    }
+
+    // Update role in user_roles table if role_key was provided
+    if (newRoleKey && company_id) {
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .upsert({
+          user_id: id,
+          company_id: company_id,
+          role_key: newRoleKey
+        }, {
+          onConflict: 'user_id,company_id'
+        });
+
+      if (roleError) {
+        console.error('Update user role error:', roleError);
+        return res.status(400).json({ message: roleError.message });
+      }
     }
 
     return res.status(200).json({
       message: 'User updated successfully',
-      user: data
+      user: userData || { id }
     });
 
   } catch (err) {
@@ -483,18 +545,17 @@ export async function searchUsers(req, res) {
       });
     }
 
+    // Search without embedded user_roles join
     let searchQuery = supabase
       .from('users')
-      .select(`
-        *,
-        user_roles!inner(company_id, role_key, roles(label))
-      `)
+      .select('*')
       .eq('is_active', true)
-      .textSearch('search_vector', query)
+      .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
       .limit(20);
 
+    // Filter by company via default_company_id
     if (company_id) {
-      searchQuery = searchQuery.eq('user_roles.company_id', company_id);
+      searchQuery = searchQuery.eq('default_company_id', company_id);
     }
 
     const { data, error } = await searchQuery;
@@ -502,6 +563,24 @@ export async function searchUsers(req, res) {
     if (error) {
       console.error('Search users error:', error);
       return res.status(500).json({ message: 'Failed to search users' });
+    }
+
+    // Fetch roles separately if needed
+    if (data && data.length > 0 && company_id) {
+      const userIds = data.map(u => u.id);
+      
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role_key')
+        .eq('company_id', company_id)
+        .in('user_id', userIds);
+
+      if (rolesData) {
+        const roleMap = new Map(rolesData.map(r => [r.user_id, r.role_key]));
+        data.forEach(user => {
+          user.role_key = roleMap.get(user.id) || user.role_key || null;
+        });
+      }
     }
 
     return res.status(200).json({ results: data });

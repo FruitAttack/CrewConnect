@@ -2,6 +2,12 @@ import express from 'express';
 import {
   clockIn,
   clockOut,
+  getActiveRoster,
+  clockInForUser,
+  clockOutForUser,
+  switchTaskForUser,
+  startBreakForUser,
+  endBreakForUser,
   getCurrentTimeEntry,
   getTimeEntries,
   getNearbyProjects,
@@ -36,6 +42,14 @@ router.get('/seconds-day', getSecondsWorkedDay);
 router.get('/seconds-week', getSecondsWorkedWeek);
 router.get('/seconds-month', getSecondsWorkedMonth);
 router.get('/seconds-year', getSecondsWorkedYear);
+
+// Foreman/Admin live management
+router.get('/manage/active', getActiveRoster);
+router.post('/manage/:user_id/clock-in', clockInForUser);
+router.post('/manage/:user_id/clock-out', clockOutForUser);
+router.post('/manage/:user_id/switch-task', switchTaskForUser);
+router.post('/manage/:user_id/break/start', startBreakForUser);
+router.post('/manage/:user_id/break/end', endBreakForUser);
 
 // Break management
 router.post('/break/start', startBreak);

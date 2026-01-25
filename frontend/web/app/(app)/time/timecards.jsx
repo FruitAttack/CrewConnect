@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, RefreshControl, ActivityIndicator, TextInput, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, RefreshControl, ActivityIndicator, TextInput, Platform, Modal, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../../utils/ctx';
 import { getTimeEntries, getUserProfile } from '../../../utils/api';
@@ -12,6 +12,69 @@ const DAYS_CONTAINER_WIDTH = DAY_COLUMN_WIDTH * 7; // 364px for all 7 days
 const TOTAL_COLUMN_WIDTH = 70;
 const CHEVRON_WIDTH = 24;
 const SCROLLBAR_WIDTH = 8;
+
+// Emerald green 500 for active status
+const activeColor = "#10b981";
+
+// Pulsing Dot Component for active status
+const PulsingDot = ({ color = activeColor, size = 10 }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.8,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+  
+  return (
+    <View style={{ 
+      position: 'absolute', 
+      bottom: -1, 
+      right: -1, 
+      width: size, 
+      height: size,
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      {/* Pulsing ring */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: size - 4,
+          height: size - 4,
+          borderRadius: (size - 4) / 2,
+          backgroundColor: color,
+          opacity: 0.4,
+          transform: [{ scale: pulseAnim }],
+        }}
+      />
+      {/* Solid dot with white border */}
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: color,
+          borderWidth: 2,
+          borderColor: colors.neutral.white,
+        }}
+      />
+    </View>
+  );
+};
 
 // Date Picker Dropdown
 const DatePickerDropdown = ({ selectedDate, onSelectDate, onClose, view }) => {
@@ -116,133 +179,144 @@ const dpStyles = StyleSheet.create({
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 4 },
   dayCellSelected: { backgroundColor: colors.primary.orange },
-  dayCellToday: { backgroundColor: colors.primary.orangeSubtle },
+  dayCellToday: { borderWidth: 1, borderColor: colors.primary.orange },
   dayText: { fontSize: 12, color: colors.text.primary },
-  dayTextSelected: { color: colors.neutral.white, fontWeight: '600' },
+  dayTextSelected: { color: '#fff', fontWeight: '600' },
   dayTextToday: { color: colors.primary.orange, fontWeight: '600' },
 });
 
-// Status Badge Component
+// Status Badge Component (for approval status)
 const StatusBadge = ({ status }) => {
   const config = {
-    approved: { bg: colors.semantic.successLight, color: colors.semantic.success, label: 'Approved', icon: 'checkmark-circle' },
-    rejected: { bg: colors.semantic.errorLight, color: colors.semantic.error, label: 'Rejected', icon: 'close-circle' },
-    pending_changes: { bg: colors.semantic.warningLight, color: colors.semantic.warning, label: 'Changes', icon: 'create' },
-    pending: { bg: colors.neutral.offWhite, color: colors.text.tertiary, label: 'Pending', icon: 'time-outline' },
+    approved: { icon: 'checkmark-circle', color: activeColor, label: 'Approved' },
+    rejected: { icon: 'close-circle', color: colors.semantic.error, label: 'Rejected' },
+    pending_changes: { icon: 'alert-circle', color: colors.semantic.warning, label: 'Changes Requested' },
   };
-  const c = config[status] || config.pending;
+  const { icon, color, label } = config[status] || {};
+  if (!icon) return null;
   return (
-    <View style={[statusStyles.badge, { backgroundColor: c.bg }]}>
-      <Ionicons name={c.icon} size={12} color={c.color} />
-      <Text style={[statusStyles.badgeText, { color: c.color }]}>{c.label}</Text>
+    <View style={[badgeStyles.badge, { backgroundColor: `${color}15` }]}>
+      <Ionicons name={icon} size={12} color={color} />
+      <Text style={[badgeStyles.text, { color }]}>{label}</Text>
     </View>
   );
 };
 
-const statusStyles = StyleSheet.create({
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeText: { fontSize: 10, fontWeight: '600' },
+const badgeStyles = StyleSheet.create({
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  text: { fontSize: 11, fontWeight: '500' },
 });
 
 // Action Modal Component
 const ActionModal = ({ visible, onClose, selectedCount, onApprove, onReject, onRequestChanges, processing }) => {
-  const [activeAction, setActiveAction] = useState(null);
+  const [step, setStep] = useState('initial'); // initial, reject, changes, success
   const [note, setNote] = useState('');
+  const [successAction, setSuccessAction] = useState('');
 
-  const handleAction = (action) => { setActiveAction(action); if (action === 'approve') onApprove(); };
-  const handleSubmitWithNote = () => {
-    if (activeAction === 'reject') onReject(note);
-    else if (activeAction === 'requestChanges') onRequestChanges(note);
-    setNote(''); setActiveAction(null);
+  const resetAndClose = () => { setStep('initial'); setNote(''); onClose(); };
+
+  const handleApprove = async () => {
+    await onApprove();
+    setSuccessAction('approved');
+    setStep('success');
   };
-  const handleClose = () => { setNote(''); setActiveAction(null); onClose(); };
+
+  const handleReject = async () => {
+    await onReject(note);
+    setSuccessAction('rejected');
+    setStep('success');
+  };
+
+  const handleRequestChanges = async () => {
+    await onRequestChanges(note);
+    setSuccessAction('requested changes for');
+    setStep('success');
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={modalStyles.overlay} onPress={handleClose}>
-        <Pressable style={modalStyles.container} onPress={e => e.stopPropagation()}>
-          {!activeAction ? (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={modalStyles.overlay}>
+        <Pressable style={modalStyles.backdrop} onPress={!processing ? resetAndClose : undefined} />
+        <View style={modalStyles.modal}>
+          {step === 'initial' && (
             <>
               <View style={modalStyles.header}>
                 <Text style={modalStyles.title}>Review Timecards</Text>
-                <Pressable onPress={handleClose} style={modalStyles.closeBtn}><Ionicons name="close" size={20} color={colors.text.secondary} /></Pressable>
+                <Text style={modalStyles.subtitle}>{selectedCount} employee{selectedCount !== 1 ? 's' : ''} selected</Text>
               </View>
-              <Text style={modalStyles.subtitle}>{selectedCount} timecard{selectedCount !== 1 ? 's' : ''} selected</Text>
-              <View style={modalStyles.actions}>
-                <Pressable style={({ hovered }) => [modalStyles.actionBtn, hovered && modalStyles.actionBtnHovered]} onPress={() => handleAction('approve')} disabled={processing}>
-                  <View style={[modalStyles.actionIcon, { backgroundColor: colors.semantic.successLight }]}><Ionicons name="checkmark-circle" size={24} color={colors.semantic.success} /></View>
-                  <View style={modalStyles.actionContent}><Text style={modalStyles.actionTitle}>Approve</Text><Text style={modalStyles.actionDesc}>Mark as approved and ready for payroll</Text></View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+              <View style={modalStyles.body}>
+                <Pressable style={modalStyles.actionBtn} onPress={handleApprove} disabled={processing}>
+                  {processing ? <ActivityIndicator size="small" color={activeColor} /> : <Ionicons name="checkmark-circle" size={24} color={activeColor} />}
+                  <View style={modalStyles.actionText}><Text style={modalStyles.actionTitle}>Approve</Text><Text style={modalStyles.actionDesc}>Mark timecards as approved</Text></View>
                 </Pressable>
-                <Pressable style={({ hovered }) => [modalStyles.actionBtn, hovered && modalStyles.actionBtnHovered]} onPress={() => handleAction('requestChanges')} disabled={processing}>
-                  <View style={[modalStyles.actionIcon, { backgroundColor: colors.semantic.warningLight }]}><Ionicons name="create" size={24} color={colors.semantic.warning} /></View>
-                  <View style={modalStyles.actionContent}><Text style={modalStyles.actionTitle}>Request Changes</Text><Text style={modalStyles.actionDesc}>Send back to employee for edits</Text></View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+                <Pressable style={modalStyles.actionBtn} onPress={() => setStep('reject')} disabled={processing}>
+                  <Ionicons name="close-circle" size={24} color={colors.semantic.error} />
+                  <View style={modalStyles.actionText}><Text style={modalStyles.actionTitle}>Reject</Text><Text style={modalStyles.actionDesc}>Reject with a note</Text></View>
                 </Pressable>
-                <Pressable style={({ hovered }) => [modalStyles.actionBtn, hovered && modalStyles.actionBtnHovered]} onPress={() => handleAction('reject')} disabled={processing}>
-                  <View style={[modalStyles.actionIcon, { backgroundColor: colors.semantic.errorLight }]}><Ionicons name="close-circle" size={24} color={colors.semantic.error} /></View>
-                  <View style={modalStyles.actionContent}><Text style={modalStyles.actionTitle}>Reject</Text><Text style={modalStyles.actionDesc}>Reject and notify employee</Text></View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+                <Pressable style={modalStyles.actionBtn} onPress={() => setStep('changes')} disabled={processing}>
+                  <Ionicons name="alert-circle" size={24} color={colors.semantic.warning} />
+                  <View style={modalStyles.actionText}><Text style={modalStyles.actionTitle}>Request Changes</Text><Text style={modalStyles.actionDesc}>Ask for corrections</Text></View>
                 </Pressable>
               </View>
+              <Pressable style={modalStyles.cancelBtn} onPress={resetAndClose} disabled={processing}><Text style={modalStyles.cancelText}>Cancel</Text></Pressable>
             </>
-          ) : activeAction === 'approve' ? (
-            <View style={modalStyles.processingContainer}>
-              {processing ? (<><ActivityIndicator size="large" color={colors.primary.orange} /><Text style={modalStyles.processingText}>Approving timecards...</Text></>) : (
-                <><View style={modalStyles.successIcon}><Ionicons name="checkmark-circle" size={48} color={colors.semantic.success} /></View>
-                <Text style={modalStyles.successTitle}>Timecards Approved</Text>
-                <Text style={modalStyles.successDesc}>{selectedCount} timecard{selectedCount !== 1 ? 's' : ''} approved successfully</Text>
-                <Pressable style={modalStyles.doneBtn} onPress={handleClose}><Text style={modalStyles.doneBtnText}>Done</Text></Pressable></>
-              )}
-            </View>
-          ) : (
+          )}
+          {(step === 'reject' || step === 'changes') && (
             <>
               <View style={modalStyles.header}>
-                <Pressable onPress={() => setActiveAction(null)} style={modalStyles.backBtn}><Ionicons name="arrow-back" size={20} color={colors.text.secondary} /></Pressable>
-                <Text style={modalStyles.title}>{activeAction === 'reject' ? 'Reject Timecards' : 'Request Changes'}</Text>
-                <Pressable onPress={handleClose} style={modalStyles.closeBtn}><Ionicons name="close" size={20} color={colors.text.secondary} /></Pressable>
+                <Text style={modalStyles.title}>{step === 'reject' ? 'Reject Timecards' : 'Request Changes'}</Text>
               </View>
-              <Text style={modalStyles.noteLabel}>Add a note for the employee{selectedCount > 1 ? 's' : ''} (optional)</Text>
-              <TextInput style={modalStyles.noteInput} placeholder={activeAction === 'reject' ? "Reason for rejection..." : "What needs to be changed..."} placeholderTextColor={colors.text.tertiary} value={note} onChangeText={setNote} multiline numberOfLines={4} />
-              <View style={modalStyles.noteActions}>
-                <Pressable style={modalStyles.cancelBtn} onPress={() => setActiveAction(null)}><Text style={modalStyles.cancelBtnText}>Cancel</Text></Pressable>
-                <Pressable style={[modalStyles.submitBtn, activeAction === 'reject' && modalStyles.submitBtnReject]} onPress={handleSubmitWithNote} disabled={processing}>
-                  {processing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={modalStyles.submitBtnText}>{activeAction === 'reject' ? 'Reject' : 'Send Request'}</Text>}
-                </Pressable>
+              <View style={modalStyles.body}>
+                <Text style={modalStyles.noteLabel}>Add a note (optional)</Text>
+                <TextInput style={modalStyles.noteInput} placeholder="Enter reason or details..." placeholderTextColor={colors.text.tertiary} value={note} onChangeText={setNote} multiline />
+                <View style={modalStyles.noteActions}>
+                  <Pressable style={modalStyles.cancelBtn} onPress={() => { setStep('initial'); setNote(''); }} disabled={processing}><Text style={modalStyles.cancelBtnText}>Back</Text></Pressable>
+                  <Pressable style={[modalStyles.submitBtn, step === 'reject' && modalStyles.submitBtnReject]} onPress={step === 'reject' ? handleReject : handleRequestChanges} disabled={processing}>
+                    {processing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={modalStyles.submitBtnText}>{step === 'reject' ? 'Reject' : 'Request Changes'}</Text>}
+                  </Pressable>
+                </View>
               </View>
             </>
           )}
-        </Pressable>
-      </Pressable>
+          {step === 'success' && (
+            <>
+              <View style={modalStyles.successBody}>
+                <View style={modalStyles.successIcon}><Ionicons name="checkmark-circle" size={48} color={activeColor} /></View>
+                <Text style={modalStyles.successTitle}>Success!</Text>
+                <Text style={modalStyles.successDesc}>You {successAction} {selectedCount} timecard{selectedCount !== 1 ? 's' : ''}.</Text>
+              </View>
+              <Pressable style={modalStyles.doneBtn} onPress={resetAndClose}><Text style={modalStyles.doneBtnText}>Done</Text></Pressable>
+            </>
+          )}
+        </View>
+      </View>
     </Modal>
   );
 };
 
 const modalStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  container: { backgroundColor: colors.neutral.white, borderRadius: 12, padding: 20, width: '100%', maxWidth: 440, ...shadows.xl },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text.primary, flex: 1, textAlign: 'center' },
-  closeBtn: { padding: 4 }, backBtn: { padding: 4 },
-  subtitle: { fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 20 },
-  actions: { gap: 10 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border.light, gap: 12 },
-  actionBtnHovered: { backgroundColor: colors.neutral.offWhite, borderColor: colors.border.medium },
-  actionIcon: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  actionContent: { flex: 1 },
-  actionTitle: { fontSize: 15, fontWeight: '600', color: colors.text.primary, marginBottom: 2 },
-  actionDesc: { fontSize: 13, color: colors.text.tertiary },
-  processingContainer: { alignItems: 'center', paddingVertical: 40 },
-  processingText: { marginTop: 16, fontSize: 15, color: colors.text.secondary },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  modal: { backgroundColor: colors.neutral.white, borderRadius: 12, width: '100%', maxWidth: 400, ...shadows.xl },
+  header: { padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border.light },
+  title: { fontSize: 18, fontWeight: '600', color: colors.text.primary },
+  subtitle: { fontSize: 13, color: colors.text.tertiary, marginTop: 4 },
+  body: { padding: 16 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.neutral.offWhite, borderRadius: 8, marginBottom: 10 },
+  actionText: { flex: 1 },
+  actionTitle: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
+  actionDesc: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.medium, alignItems: 'center' },
+  cancelText: { fontSize: 14, fontWeight: '600', color: colors.text.primary, textAlign: 'center', paddingVertical: 14 },
+  successBody: { padding: 32, alignItems: 'center' },
   successIcon: { marginBottom: 16 },
-  successTitle: { fontSize: 18, fontWeight: '700', color: colors.text.primary, marginBottom: 4 },
-  successDesc: { fontSize: 14, color: colors.text.secondary, marginBottom: 24 },
+  successTitle: { fontSize: 20, fontWeight: '600', color: colors.text.primary, marginBottom: 8 },
+  successDesc: { fontSize: 14, color: colors.text.secondary, textAlign: 'center' },
   doneBtn: { paddingHorizontal: 32, paddingVertical: 10, backgroundColor: colors.primary.orange, borderRadius: 8 },
   doneBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   noteLabel: { fontSize: 14, color: colors.text.secondary, marginBottom: 10 },
   noteInput: { borderWidth: 1, borderColor: colors.border.light, borderRadius: 8, padding: 12, fontSize: 14, color: colors.text.primary, minHeight: 100, textAlignVertical: 'top', marginBottom: 16 },
   noteActions: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.medium, alignItems: 'center' },
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
   submitBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.semantic.warning, alignItems: 'center' },
   submitBtnReject: { backgroundColor: colors.semantic.error },
@@ -259,9 +333,9 @@ const EmployeeRow = ({ employee, weekDays, view, isLargeScreen, isSelected, isEx
         </Pressable>
       </View>
       <View style={styles.employeeCell}>
-        <View style={[styles.avatar, employee.isActive && styles.avatarActive, employee.status === 'approved' && styles.avatarApproved]}>
-          <Text style={[styles.avatarText, employee.isActive && styles.avatarTextActive, employee.status === 'approved' && styles.avatarTextApproved]}>{getInitials(employee.name)}</Text>
-          {employee.isActive && <View style={styles.avatarActiveDot} />}
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{getInitials(employee.name)}</Text>
+          {employee.isActive && <PulsingDot color={activeColor} size={10} />}
         </View>
         <View style={styles.employeeDetails}>
           <View style={styles.employeeNameRow}>
@@ -348,53 +422,81 @@ export default function Timecards() {
       if (response.success && response.data?.time_entries !== undefined) setTimeEntries(response.data.time_entries);
       else setError(response.message || 'Failed to load time entries');
     } catch (err) { setError('Failed to load time entries'); }
-    finally { setLoading(false); }
-  }, [token, companyId, getWeekRange, selectedDate, view]);
+    finally { setLoading(false); setRefreshing(false); }
+  }, [token, companyId, selectedDate, view, getWeekRange]);
 
-  useEffect(() => { if (companyId) { setLoading(true); fetchTimeEntries(); } }, [companyId]);
-  useEffect(() => { if (companyId && !loading) fetchTimeEntries(); }, [selectedDate, view]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchTimeEntries(); setRefreshing(false); }, [fetchTimeEntries]);
+  useEffect(() => { if (companyId) { setLoading(true); fetchTimeEntries(); } }, [companyId, selectedDate, view, fetchTimeEntries]);
 
-  const getWeekKey = useCallback((date) => {
-    const d = new Date(date);
-    d.setDate(d.getDate() - d.getDay());
-    return d.toISOString().split('T')[0];
-  }, []);
+  const onRefresh = () => { setRefreshing(true); fetchTimeEntries(); };
 
-  const currentWeekKey = useMemo(() => getWeekKey(selectedDate), [selectedDate, getWeekKey]);
+  const navigateDate = (direction) => {
+    const newDate = new Date(selectedDate);
+    if (view === 'week') newDate.setDate(newDate.getDate() + direction * 7);
+    else newDate.setDate(newDate.getDate() + direction);
+    setSelectedDate(newDate);
+  };
 
-  const employeeData = useMemo(() => {
+  const formatDateHeader = () => {
+    if (view === 'day') return selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const { startDate, endDate } = getWeekRange(selectedDate);
+    return `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  };
+
+  const currentWeekKey = useMemo(() => {
+    const { startDate } = getWeekRange(selectedDate);
+    return startDate.toISOString().split('T')[0];
+  }, [selectedDate, getWeekRange]);
+
+  const employeesData = useMemo(() => {
     const grouped = {};
     timeEntries.forEach(entry => {
-      const id = entry.user_id;
-      if (!grouped[id]) {
-        // Status key combines employee ID and week
-        const statusKey = `${id}_${currentWeekKey}`;
-        grouped[id] = { id, name: entry.user?.full_name || 'Unknown', email: entry.user?.email, entries: [], dailyHours: {}, totalHours: 0, isActive: false, status: employeeStatuses[statusKey] || 'pending' };
-      }
-      grouped[id].entries.push(entry);
-      if (!entry.clock_out) grouped[id].isActive = true;
-      if (entry.clock_in) {
-        const clockIn = new Date(entry.clock_in);
-        const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
-        const hours = Math.max(0, (clockOut - clockIn) / (1000 * 60 * 60) - (entry.break_minutes || 0) / 60);
-        const dayKey = clockIn.toISOString().split('T')[0];
-        grouped[id].dailyHours[dayKey] = (grouped[id].dailyHours[dayKey] || 0) + hours;
-        grouped[id].totalHours += hours;
-      }
+      const userId = entry.user_id;
+      if (!grouped[userId]) grouped[userId] = { id: userId, name: entry.user?.full_name || 'Unknown', email: entry.user?.email, entries: [], isActive: false };
+      grouped[userId].entries.push(entry);
+      if (!entry.clock_out) grouped[userId].isActive = true;
     });
-    return Object.values(grouped).sort((a, b) => a.isActive === b.isActive ? a.name.localeCompare(b.name) : a.isActive ? -1 : 1);
+    return Object.values(grouped).map(emp => {
+      const totalHours = emp.entries.reduce((sum, e) => {
+        if (!e.clock_out) return sum;
+        const clockIn = new Date(e.clock_in);
+        const clockOut = new Date(e.clock_out);
+        return sum + ((clockOut - clockIn) / (1000 * 60 * 60) - (e.break_minutes || 0) / 60);
+      }, 0);
+      // Look up status by employee ID + current week
+      const statusKey = `${emp.id}_${currentWeekKey}`;
+      return { ...emp, totalHours, status: employeeStatuses[statusKey] || 'pending' };
+    });
   }, [timeEntries, employeeStatuses, currentWeekKey]);
 
-  const filteredEmployees = useMemo(() => employeeData.filter(emp => !searchQuery || emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || emp.email?.toLowerCase().includes(searchQuery.toLowerCase())), [employeeData, searchQuery]);
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery) return employeesData;
+    const q = searchQuery.toLowerCase();
+    return employeesData.filter(emp => emp.name.toLowerCase().includes(q) || emp.email?.toLowerCase().includes(q));
+  }, [employeesData, searchQuery]);
 
-  const navigateDate = (dir) => { const d = new Date(selectedDate); d.setDate(d.getDate() + (view === 'day' ? dir : dir * 7)); setSelectedDate(d); };
-  const formatDateHeader = () => { if (view === 'day') return selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); const { startDate, endDate } = getWeekRange(selectedDate); return `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`; };
-  const toggleEmployeeSelection = (id) => setSelectedEmployees(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const selectAllEmployees = () => setSelectedEmployees(selectedEmployees.size === filteredEmployees.length ? new Set() : new Set(filteredEmployees.map(e => e.id)));
-  const getHoursForDay = (emp, date) => emp.dailyHours[date.toISOString().split('T')[0]] || 0;
-  const formatHours = (h) => h === 0 ? '-' : h.toFixed(1);
-  const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??';
+  const getHoursForDay = (employee, date) => {
+    const dayStr = date.toDateString();
+    return employee.entries.filter(e => new Date(e.clock_in).toDateString() === dayStr).reduce((sum, e) => {
+      if (!e.clock_out) return sum;
+      const clockIn = new Date(e.clock_in);
+      const clockOut = new Date(e.clock_out);
+      return sum + ((clockOut - clockIn) / (1000 * 60 * 60) - (e.break_minutes || 0) / 60);
+    }, 0);
+  };
+
+  const formatHours = (hours) => hours === 0 ? '–' : hours.toFixed(1);
+  const getInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+
+  const toggleEmployeeSelection = (id) => {
+    const newSet = new Set(selectedEmployees);
+    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
+    setSelectedEmployees(newSet);
+  };
+
+  const selectAllEmployees = () => {
+    if (selectedEmployees.size === filteredEmployees.length) setSelectedEmployees(new Set());
+    else setSelectedEmployees(new Set(filteredEmployees.map(e => e.id)));
+  };
 
   const updateStatuses = (status) => {
     const newStatuses = { ...employeeStatuses };
@@ -610,12 +712,7 @@ const styles = StyleSheet.create({
   chevronCell: { width: CHEVRON_WIDTH, alignItems: 'center' },
   
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary.orangeSubtle, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  avatarActive: { backgroundColor: colors.semantic.successLight },
-  avatarApproved: { backgroundColor: colors.semantic.successLight },
   avatarText: { fontSize: 11, fontWeight: '600', color: colors.primary.orange },
-  avatarTextActive: { color: colors.semantic.success },
-  avatarTextApproved: { color: colors.semantic.success },
-  avatarActiveDot: { position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.semantic.success, borderWidth: 2, borderColor: colors.neutral.white },
   employeeDetails: { flex: 1 },
   employeeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   employeeName: { fontSize: 13, fontWeight: '600', color: colors.text.primary },
@@ -634,7 +731,7 @@ const styles = StyleSheet.create({
   entryRight: { alignItems: 'flex-end' },
   entryTime: { fontSize: 11, color: colors.text.secondary },
   entryHours: { fontSize: 12, fontWeight: '600', color: colors.text.primary, marginTop: 2 },
-  entryHoursActive: { color: colors.semantic.success },
+  entryHoursActive: { color: activeColor },
   emptyStateContainer: { flex: 1, padding: 16 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.neutral.white, borderRadius: 8, borderWidth: 1, borderColor: colors.border.light },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.neutral.offWhite, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },

@@ -810,3 +810,535 @@ export const updateCostCode = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// --- Live management helpers ---
+
+const getCompanyId = (req) => req.query.company_id || req.body.company_id || req.user?.default_company_id;
+
+async function assertCanManageUser({ req, targetUserId, companyId }) {
+  const role = req.user?.role_key;
+
+  if (!role) {
+    const err = new Error("Not authenticated");
+    err.status = 401;
+    throw err;
+  }
+
+  // Admin/supervisor can manage anyone in company
+  if (role === "admin" || role === "supervisor") return true;
+
+  // Foreman can manage assigned employees (and optionally themselves)
+  if (role === "foreman") {
+    if (targetUserId === req.user.id) return true;
+
+    const { data, error } = await supabase
+      .from("employee_assignments")
+      .select("foreman_id, employee_id")
+      .eq("foreman_id", req.user.id)
+      .eq("employee_id", targetUserId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      const err = new Error("You can only manage your assigned employees");
+      err.status = 403;
+      throw err;
+    }
+    return true;
+  }
+
+  const err = new Error("Insufficient permissions");
+  err.status = 403;
+  throw err;
+}
+
+// Fetch open entry for a user in a company (if any)
+async function getOpenEntry(company_id, user_id) {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select(`
+      *,
+      project:projects(id, name),
+      cost_code:cost_codes(id, code, name, unit_of_measure),
+      equipment:equipment(id, label),
+      user:users(id, full_name, email)
+    `)
+    .eq("company_id", company_id)
+    .eq("user_id", user_id)
+    .is("clock_out", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+// --- Handlers ---
+
+// GET /api/time-entries/manage/active?company_id=...
+export const getActiveRoster = async (req, res) => {
+  try {
+    const company_id = getCompanyId(req);
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+
+    const role = req.user?.role_key;
+
+    // Determine roster scope
+    let rosterUserIds = null;
+
+    if (role === "foreman") {
+      const { data: assigned, error: aErr } = await supabase
+        .from("employee_assignments")
+        .select("employee_id")
+        .eq("foreman_id", req.user.id);
+
+      if (aErr) throw aErr;
+      rosterUserIds = Array.from(new Set([req.user.id, ...(assigned || []).map(x => x.employee_id)]));
+    }
+
+    // Get users who belong to this company via user_employment
+    let employmentQuery = supabase
+      .from("user_employment")
+      .select(`
+        user_id,
+        user:users(id, full_name, email, is_active, phone, can_view_rates)
+      `)
+      .eq("company_id", company_id)
+      .eq("is_active", true);
+
+    if (rosterUserIds) {
+      employmentQuery = employmentQuery.in("user_id", rosterUserIds);
+    }
+
+    const { data: employments, error: empErr } = await employmentQuery;
+    if (empErr) throw empErr;
+
+    // Fetch user roles for this company
+    const userIds = (employments || []).map(e => e.user_id).filter(Boolean);
+    const { data: userRoles, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("user_id, role_key")
+      .eq("company_id", company_id)
+      .in("user_id", userIds);
+
+    if (roleErr) throw roleErr;
+
+    const roleByUser = new Map((userRoles || []).map(r => [r.user_id, r.role_key]));
+
+    // Extract unique active users with their roles
+    const usersMap = new Map();
+    (employments || []).forEach(emp => {
+      if (emp.user && emp.user.is_active) {
+        usersMap.set(emp.user.id, {
+          ...emp.user,
+          role_key: roleByUser.get(emp.user.id) || null
+        });
+      }
+    });
+
+    const users = Array.from(usersMap.values()).sort((a, b) => 
+      (a.full_name || '').localeCompare(b.full_name || '')
+    );
+
+    // Fetch open breaks
+    const { data: openBreaks, error: bErr } = await supabase
+      .from("breaks")
+      .select("user_id, id, break_start")
+      .eq("company_id", company_id)
+      .is("break_end", null);
+
+    if (bErr) throw bErr;
+
+    const breakByUser = new Map((openBreaks || []).map(b => [b.user_id, b]));
+
+    // Fetch all open entries in company (then map)
+    let openQuery = supabase
+      .from("time_entries")
+      .select(`
+        id, company_id, user_id, project_id, cost_code_id, equipment_id,
+        clock_in, clock_out, break_minutes, notes,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label),
+        user:users(id, full_name, email)
+      `)
+      .eq("company_id", company_id)
+      .is("clock_out", null);
+
+    if (rosterUserIds) openQuery = openQuery.in("user_id", rosterUserIds);
+
+    const { data: openEntries, error: oErr } = await openQuery;
+    if (oErr) throw oErr;
+
+    const openByUser = new Map((openEntries || []).map(e => [e.user_id, e]));
+
+    const roster = users.map(u => {
+      const open = openByUser.get(u.id) || null;
+      const activeBreak = breakByUser.get(u.id) || null;
+      return {
+        user: u,
+        is_clocked_in: !!open,
+        open_entry: open ? {
+          ...open,
+          is_on_break: !!activeBreak,
+          current_break: activeBreak
+        } : null,
+      };
+    });
+
+    res.json({ roster });
+  } catch (error) {
+    console.error("Get active roster error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// POST /api/time-entries/manage/:user_id/clock-in
+export const clockInForUser = async (req, res) => {
+  try {
+    const company_id = getCompanyId(req);
+    const target_user_id = req.params.user_id;
+
+    const {
+      project_id,
+      cost_code_id,
+      equipment_id,
+      notes,
+      quantity,
+      unit_of_measure,
+      lat,
+      lng,
+      accuracy,
+      // optional: allow custom clock_in for corrections
+      clock_in
+    } = req.body;
+
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+    if (!project_id || !cost_code_id) {
+      return res.status(400).json({ error: "project_id and cost_code_id are required" });
+    }
+
+    await assertCanManageUser({ req, targetUserId: target_user_id, companyId: company_id });
+
+    // Prevent double clock-in
+    const existing = await getOpenEntry(company_id, target_user_id);
+    if (existing) return res.status(409).json({ error: "User already has an open time entry", open_entry: existing });
+
+    // Verify project belongs to company
+    const { data: project, error: pErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", project_id)
+      .eq("company_id", company_id)
+      .single();
+    if (pErr || !project) return res.status(404).json({ error: "Project not found" });
+
+    // Verify cost code belongs to company
+    const { data: costCode, error: cErr } = await supabase
+      .from("cost_codes")
+      .select("id")
+      .eq("id", cost_code_id)
+      .eq("company_id", company_id)
+      .single();
+    if (cErr || !costCode) return res.status(404).json({ error: "Cost code not found" });
+
+    // Hourly rate (optional)
+    const { data: employment } = await supabase
+      .from("user_employment")
+      .select("hourly_rate")
+      .eq("user_id", target_user_id)
+      .eq("company_id", company_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    const { data, error } = await supabase
+      .from("time_entries")
+      .insert({
+        company_id,
+        user_id: target_user_id,
+        project_id,
+        cost_code_id,
+        equipment_id: equipment_id || null,
+        clock_in: clock_in || new Date().toISOString(),
+        clock_in_lat: lat,
+        clock_in_lng: lng,
+        clock_in_accuracy: accuracy,
+        hourly_rate: employment?.hourly_rate,
+        notes,
+        quantity,
+        unit_of_measure
+      })
+      .select(`
+        *,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label),
+        user:users(id, full_name, email)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error("Clock in for user error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// POST /api/time-entries/manage/:user_id/clock-out
+export const clockOutForUser = async (req, res) => {
+  try {
+    const company_id = getCompanyId(req);
+    const target_user_id = req.params.user_id;
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+
+    await assertCanManageUser({ req, targetUserId: target_user_id, companyId: company_id });
+
+    // Find open entry in that company
+    const { data: entry, error: findError } = await supabase
+      .from("time_entries")
+      .select("*")
+      .eq("company_id", company_id)
+      .eq("user_id", target_user_id)
+      .is("clock_out", null)
+      .single();
+
+    if (findError || !entry) return res.status(404).json({ error: "No open time entry found" });
+
+    const { lat, lng, accuracy, notes, quantity, unit_of_measure, clock_out } = req.body;
+
+    const updates = {
+      clock_out: clock_out || new Date().toISOString(),
+      clock_out_lat: lat,
+      clock_out_lng: lng,
+      clock_out_accuracy: accuracy,
+    };
+    if (notes !== undefined) updates.notes = notes;
+    if (quantity !== undefined) updates.quantity = quantity;
+    if (unit_of_measure !== undefined) updates.unit_of_measure = unit_of_measure;
+
+    const { data, error } = await supabase
+      .from("time_entries")
+      .update(updates)
+      .eq("id", entry.id)
+      .select(`
+        *,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label),
+        user:users(id, full_name, email)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (error) {
+    console.error("Clock out for user error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// POST /api/time-entries/manage/:user_id/switch-task
+export const switchTaskForUser = async (req, res) => {
+  try {
+    // Switch = clock out current entry + clock in new entry (same day, new task timer)
+    const company_id = getCompanyId(req);
+    const target_user_id = req.params.user_id;
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+
+    await assertCanManageUser({ req, targetUserId: target_user_id, companyId: company_id });
+
+    // 1) Close current entry
+    const closed = await (async () => {
+      const { data: entry } = await supabase
+        .from("time_entries")
+        .select("*")
+        .eq("company_id", company_id)
+        .eq("user_id", target_user_id)
+        .is("clock_out", null)
+        .maybeSingle();
+
+      if (!entry) return null;
+
+      const { error } = await supabase
+        .from("time_entries")
+        .update({ clock_out: new Date().toISOString() })
+        .eq("id", entry.id);
+
+      if (error) throw error;
+      return entry.id;
+    })();
+
+    // 2) Create new entry (requires project & cost code)
+    // Reuse clockInForUser logic by calling it “manually”
+    req.body = { ...req.body, company_id };
+    const { project_id, cost_code_id } = req.body;
+    if (!project_id || !cost_code_id) {
+      return res.status(400).json({ error: "project_id and cost_code_id are required" });
+    }
+
+    // Directly insert (call the same checks)
+    // (If you prefer, you can refactor checks into a shared function)
+    // We'll just call clockInForUser’s core by duplicating minimal checks:
+    const { data: project } = await supabase.from("projects").select("id").eq("id", project_id).eq("company_id", company_id).maybeSingle();
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    const { data: costCode } = await supabase.from("cost_codes").select("id").eq("id", cost_code_id).eq("company_id", company_id).maybeSingle();
+    if (!costCode) return res.status(404).json({ error: "Cost code not found" });
+
+    const { data: employment } = await supabase
+      .from("user_employment")
+      .select("hourly_rate")
+      .eq("user_id", target_user_id)
+      .eq("company_id", company_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+
+    const { data: newEntry, error: insErr } = await supabase
+      .from("time_entries")
+      .insert({
+        company_id,
+        user_id: target_user_id,
+        project_id,
+        cost_code_id,
+        equipment_id: req.body.equipment_id || null,
+        clock_in: now,
+        hourly_rate: employment?.hourly_rate,
+        notes: req.body.notes,
+      })
+      .select(`
+        *,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label),
+        user:users(id, full_name, email)
+      `)
+      .single();
+
+    if (insErr) throw insErr;
+
+    res.status(201).json({ switched_from_entry_id: closed, new_entry: newEntry });
+  } catch (error) {
+    console.error("Switch task for user error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// POST /api/time-entries/manage/:user_id/break/start
+export const startBreakForUser = async (req, res) => {
+  try {
+    const company_id = getCompanyId(req);
+    const target_user_id = req.params.user_id;
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+
+    await assertCanManageUser({ req, targetUserId: target_user_id, companyId: company_id });
+
+    // Find the user's open time entry
+    const { data: timeEntry, error: findError } = await supabase
+      .from("time_entries")
+      .select("id")
+      .eq("company_id", company_id)
+      .eq("user_id", target_user_id)
+      .is("clock_out", null)
+      .single();
+
+    if (findError || !timeEntry) {
+      return res.status(404).json({ error: "User is not clocked in" });
+    }
+
+    // Check if already on break
+    const { data: existingBreak } = await supabase
+      .from("breaks")
+      .select("id")
+      .eq("user_id", target_user_id)
+      .eq("time_entry_id", timeEntry.id)
+      .is("break_end", null)
+      .single();
+
+    if (existingBreak) {
+      return res.status(409).json({ error: "User is already on break" });
+    }
+
+    // Start the break
+    const { data: newBreak, error: breakError } = await supabase
+      .from("breaks")
+      .insert({
+        user_id: target_user_id,
+        company_id: company_id,
+        time_entry_id: timeEntry.id,
+        break_start: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (breakError) throw breakError;
+
+    res.status(201).json(newBreak);
+  } catch (error) {
+    console.error("Start break for user error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// POST /api/time-entries/manage/:user_id/break/end
+export const endBreakForUser = async (req, res) => {
+  try {
+    const company_id = getCompanyId(req);
+    const target_user_id = req.params.user_id;
+    if (!company_id) return res.status(400).json({ error: "company_id is required" });
+
+    await assertCanManageUser({ req, targetUserId: target_user_id, companyId: company_id });
+
+    // Find the user's open break
+    const { data: openBreak, error: findError } = await supabase
+      .from("breaks")
+      .select("*, time_entry_id")
+      .eq("user_id", target_user_id)
+      .is("break_end", null)
+      .single();
+
+    if (findError || !openBreak) {
+      return res.status(404).json({ error: "User is not on break" });
+    }
+
+    // Calculate break duration
+    const breakStart = new Date(openBreak.break_start);
+    const breakEnd = new Date();
+    const breakMinutes = Math.round((breakEnd - breakStart) / (1000 * 60));
+
+    // End the break
+    const { data: updatedBreak, error: breakError } = await supabase
+      .from("breaks")
+      .update({ break_end: breakEnd.toISOString() })
+      .eq("id", openBreak.id)
+      .select()
+      .single();
+
+    if (breakError) throw breakError;
+
+    // Update time entry break_minutes
+    const { data: timeEntry } = await supabase
+      .from("time_entries")
+      .select("break_minutes")
+      .eq("id", openBreak.time_entry_id)
+      .single();
+
+    await supabase
+      .from("time_entries")
+      .update({
+        break_minutes: (timeEntry?.break_minutes || 0) + breakMinutes
+      })
+      .eq("id", openBreak.time_entry_id);
+
+    res.json({
+      ...updatedBreak,
+      break_duration_minutes: breakMinutes
+    });
+  } catch (error) {
+    console.error("End break for user error:", error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};

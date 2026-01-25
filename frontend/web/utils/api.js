@@ -113,8 +113,34 @@ export async function updateUser(token, userId, updates) {
   return apiCall(`users/${userId}`, token, 'PUT', updates)
 }
 
+export async function updateUserEmployment(token, userId, data) {
+  return apiCall(`users/${userId}/employment`, token, 'POST', data)
+}
+
 export async function getClockedInUsers(token, companyId) {
   return apiCall(`users/clocked-in?company_id=${companyId}`, token)
+}
+
+// Create a new user (Admin only)
+export async function createUser(token, userData) {
+  return apiCall('users', token, 'POST', userData)
+}
+
+// Soft delete user (sets is_active = false)
+export async function deleteUser(token, userId, hardDelete = false) {
+  const params = hardDelete ? '?hard_delete=true' : ''
+  return apiCall(`users/${userId}${params}`, token, 'DELETE')
+}
+
+// Reactivate a deactivated user
+export async function activateUser(token, userId) {
+  return apiCall(`users/${userId}/activate`, token, 'PATCH')
+}
+
+// Alias for getAllUsers (matches what employees.jsx expects)
+export async function getAllUsers(token, params = {}) {
+  const query = new URLSearchParams(params).toString()
+  return apiCall(`users${query ? `?${query}` : ''}`, token)
 }
 
 // ============================================
@@ -147,6 +173,37 @@ export async function updateTimeEntry(token, entryId, updates) {
 
 export async function deleteTimeEntry(token, entryId) {
   return apiCall(`time-entries/${entryId}`, token, 'DELETE')
+}
+
+// ============================================
+// FOREMAN/ADMIN MANAGEMENT
+// ============================================
+
+// Get full roster (all employees with their clock status)
+export async function getActiveRoster(token, companyId) {
+  return apiCall(`time-entries/manage/active?company_id=${companyId}`, token)
+}
+
+export async function clockInForUser(token, userId, data) {
+  return apiCall(`time-entries/manage/${userId}/clock-in`, token, 'POST', data)
+}
+
+export async function clockOutForUser(token, userId, data) {
+  return apiCall(`time-entries/manage/${userId}/clock-out`, token, 'POST', data)
+}
+
+export async function switchTaskForUser(token, userId, data) {
+  return apiCall(`time-entries/manage/${userId}/switch-task`, token, 'POST', data)
+}
+
+// Start break for an employee (foreman/admin)
+export async function startBreakForUser(token, userId, data = {}) {
+  return apiCall(`time-entries/manage/${userId}/break/start`, token, 'POST', data)
+}
+
+// End break for an employee (foreman/admin)
+export async function endBreakForUser(token, userId, data = {}) {
+  return apiCall(`time-entries/manage/${userId}/break/end`, token, 'POST', data)
 }
 
 // ============================================
@@ -254,8 +311,8 @@ export async function deleteEquipment(token, equipmentId) {
 // ============================================
 // COST CODES
 // ============================================
-export async function getCostCodes(token, companyId) {
-  return apiCall(`cost-codes?company_id=${companyId}`, token)
+export async function getCostCodes(token) {
+  return apiCall('cost-codes', token)
 }
 
 export async function getCostCode(token, costCodeId) {
@@ -277,20 +334,11 @@ export async function deleteCostCode(token, costCodeId) {
 // ============================================
 // PROJECT COST CODES
 // ============================================
+
+// Get cost codes assigned to a specific project
+// Returns the join table with nested cost_code objects
 export async function getProjectCostCodes(token, projectId) {
-  return apiCall(`project-cost-codes?project_id=${projectId}`, token)
-}
-
-export async function assignProjectCostCode(token, data) {
-  return apiCall('project-cost-codes', token, 'POST', data)
-}
-
-export async function updateProjectCostCode(token, id, updates) {
-  return apiCall(`project-cost-codes/${id}`, token, 'PUT', updates)
-}
-
-export async function removeProjectCostCode(token, id) {
-  return apiCall(`project-cost-codes/${id}`, token, 'DELETE')
+  return apiCall(`projects/${projectId}/cost-codes`, token)
 }
 
 // ============================================
