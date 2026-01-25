@@ -16,13 +16,13 @@ import { apiCall } from "../../../utils/api";
 
 const TABS = ["My Hours", "Time Off"];
 
-// Helper function to get the start of the week (Sunday)
+// Helper function to get the start of the week (Sunday) in local timezone
 const getWeekStart = (dateString) => {
-  const date = new Date(dateString + 'T00:00:00');
-  const day = date.getDay();
-  const diff = date.getDate() - day;
-  const weekStart = new Date(date);
-  weekStart.setDate(diff);
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const dayOfWeek = date.getDay();
+  const diff = date.getDate() - dayOfWeek;
+  const weekStart = new Date(year, month - 1, diff);
   return weekStart;
 };
 
@@ -105,21 +105,23 @@ const Timecard_Screen = () => {
     other: 24,
   });
 
-  // Helper function to calculate seconds for a specific day using database UTC times
+  // Helper function to calculate seconds for a specific day using LOCAL timezone
   const calculateSecondsForDay = (timeEntries, dateString) => {
     if (!timeEntries || timeEntries.length === 0) return 0;
     
-    // Parse date as UTC (midnight to midnight in UTC)
-    const dayStart = new Date(dateString + 'T00:00:00Z');
-    const dayEnd = new Date(dateString + 'T23:59:59Z');
+    // Parse date in LOCAL timezone (midnight to midnight in local time)
+    const [year, month, day] = dateString.split('-').map(Number);
+    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
     
     let totalSeconds = 0;
     
     timeEntries.forEach(entry => {
+      // Parse UTC times from database
       const clockIn = new Date(entry.clock_in);
       const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
       
-      // Calculate overlap with this UTC day
+      // Calculate overlap with this LOCAL day
       const overlapStart = Math.max(clockIn.getTime(), dayStart.getTime());
       const overlapEnd = Math.min(clockOut.getTime(), dayEnd.getTime());
       
@@ -140,32 +142,29 @@ const Timecard_Screen = () => {
     const weekStructure = generateWeekDataStructure(weekStart);
     
     try {
-      // Get the start and end of the week
+      // Get the start and end of the week in LOCAL timezone
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       
-      const startDate = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate());
+      // Create start/end times in local timezone
+      const startDate = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0);
       const endDate = new Date(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate(), 23, 59, 59);
       
-      // Format dates for API (YYYY-MM-DD)
-      const formatDateForAPI = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
+      // Convert to ISO string for API (this will include timezone offset)
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
       
       // Fetch all time entries for the week range
       const response = await apiCall(
         session.access_token,
-        `time-entries?start_date=${formatDateForAPI(startDate)}T00:00:00&end_date=${formatDateForAPI(endDate)}T23:59:59&limit=1000`,
+        `time-entries?start_date=${startISO}&end_date=${endISO}&limit=1000`,
         'GET'
       );
       
       if (response.success && response.data?.data) {
         const timeEntries = response.data.data;
         
-        // Calculate hours for each day using database times directly
+        // Calculate hours for each day using local timezone
         const updatedWeekData = weekStructure.map(dayData => {
           const seconds = calculateSecondsForDay(timeEntries, dayData.fullDate);
           return {
@@ -202,9 +201,8 @@ const Timecard_Screen = () => {
       // Check for double tap
       if (lastCalendarTap && (now - lastCalendarTap) < DOUBLE_TAP_DELAY) {
         // Double tap detected - navigate to detail page
-        const selected = new Date(day.dateString + 'T00:00:00');
-        const month = selected.getMonth() + 1;
-        const dayNum = selected.getDate();
+        const [year, month, dayNum] = day.dateString.split('-').map(Number);
+        const selected = new Date(year, month - 1, dayNum);
         const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const dayOfWeek = days[selected.getDay()];
         
@@ -223,9 +221,7 @@ const Timecard_Screen = () => {
         setSelectedDate(day.dateString);
         
         // Update selected row to match calendar selection
-        const selected = new Date(day.dateString + 'T00:00:00');
-        const month = selected.getMonth() + 1;
-        const dayNum = selected.getDate();
+        const [year, month, dayNum] = day.dateString.split('-').map(Number);
         setSelectedRowDate(`${month}/${dayNum}`);
       }
       
@@ -359,7 +355,8 @@ const Timecard_Screen = () => {
 
   // Format date for display
   const formatDate = (dateStr) => {
-    const date = new Date(dateStr + 'T00:00:00');
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${months[date.getMonth()]} ${date.getDate()}`;
   };
@@ -881,6 +878,6 @@ const styles = StyleSheet.create({
   },
   submittedType: {
     fontSize: 14,
-    color: "#ccc",
+    color: "#ccc"
   },
 });

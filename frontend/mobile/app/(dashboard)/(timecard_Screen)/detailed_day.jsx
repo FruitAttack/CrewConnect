@@ -30,18 +30,18 @@ const Detailed_Day = () => {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  // Format time - use database time directly without timezone conversion
+  // Format time - convert from UTC to local timezone
   const formatTime = (timeString) => {
     if (!timeString) return 'N/A';
     
-    // Parse as UTC to avoid timezone conversion
+    // Parse the UTC time string and convert to local time
     const date = new Date(timeString);
     
     return date.toLocaleTimeString('en-US', { 
       hour: 'numeric', 
       minute: '2-digit',
-      hour12: true,
-      timeZone: 'UTC'
+      hour12: true
+      // Removed timeZone: 'UTC' to use local timezone
     });
   };
 
@@ -77,33 +77,40 @@ const Detailed_Day = () => {
     return `${hours}.${String(minutes).padStart(2, '0')}`;
   };
 
-  // Fetch time entries for the selected day
   const fetchTimeEntries = async () => {
-    if (!session?.access_token) return;
+  if (!session?.access_token) return;
+  
+  setLoading(true);
+  try {
+    const fullDate = getFullDateString();
     
-    setLoading(true);
-    try {
-      const fullDate = getFullDateString();
-      
-      // Fetch all time entries for this specific day
-      const response = await apiCall(
-        session.access_token,
-        `time-entries?start_date=${fullDate}T00:00:00&end_date=${fullDate}T23:59:59&limit=100`,
-        'GET'
-      );
-      
-      if (response.success && response.data?.data) {
-        setTimeEntries(response.data.data);
-      } else {
-        setTimeEntries([]);
-      }
-    } catch (error) {
-      console.error('Error fetching time entries:', error);
+    // Create date objects for start and end of day in LOCAL timezone
+    const [year, month, day] = fullDate.split('-');
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59);
+    
+    // Convert to ISO strings (includes timezone offset)
+    const startDateISO = startOfDay.toISOString();
+    const endDateISO = endOfDay.toISOString();
+    
+    const response = await apiCall(
+      session.access_token,
+      `time-entries?start_date=${startDateISO}&end_date=${endDateISO}&limit=100`,
+      'GET'
+    );
+    
+    if (response.success && response.data?.data) {
+      setTimeEntries(response.data.data);
+    } else {
       setTimeEntries([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching time entries:', error);
+    setTimeEntries([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchTimeEntries();
