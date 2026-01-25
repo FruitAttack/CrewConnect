@@ -1298,6 +1298,7 @@ export const startBreakForUser = async (req, res) => {
 // Update notes for current time entry
 export const updateNotes = async (req, res) => {
   try {
+    const { id } = req.params;
     const { id: user_id } = req.user;
     const { notes } = req.body;
 
@@ -1305,22 +1306,26 @@ export const updateNotes = async (req, res) => {
       return res.status(400).json({ error: 'notes field is required' });
     }
 
-    // Find current open time entry
-    const { data: entry, error: findError } = await supabase
+    // First check if entry exists
+    const { data: existing, error: fetchError } = await supabase
       .from('time_entries')
-      .select('id, company_id')
-      .eq('user_id', user_id)
-      .is('clock_out', null)
+      .select('*')
+      .eq('id', id)
       .single();
 
-    if (findError || !entry) {
-      return res.status(404).json({ error: 'No open time entry found' });
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Time entry not found' });
+    }
+
+    // Check permissions - user can only edit their own entries
+    if (existing.user_id !== user_id) {
+      return res.status(403).json({ error: 'Not authorized to edit this time entry' });
     }
 
     const { data, error } = await supabase
       .from('time_entries')
       .update({ notes })
-      .eq('id', entry.id)
+      .eq('id', id)
       .select(`
         *,
         project:projects(id, name),

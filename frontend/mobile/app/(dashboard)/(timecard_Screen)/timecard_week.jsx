@@ -105,7 +105,22 @@ const Timecard_Screen = () => {
     other: 24,
   });
 
-  // Helper function to calculate seconds for a specific day using LOCAL timezone
+  // Helper function to check if a time entry belongs to a specific day
+  const doesEntryBelongToDay = (entry, dateString) => {
+    // Parse the target date in local timezone
+    const [year, month, day] = dateString.split('-').map(Number);
+    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+    
+    // Parse entry times
+    const clockIn = new Date(entry.clock_in);
+    const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
+    
+    // Check if there's any overlap with this day
+    return clockIn < dayEnd && clockOut > dayStart;
+  };
+
+  // Helper function to calculate seconds for a specific day
   const calculateSecondsForDay = (timeEntries, dateString) => {
     if (!timeEntries || timeEntries.length === 0) return 0;
     
@@ -127,7 +142,11 @@ const Timecard_Screen = () => {
       
       if (overlapStart < overlapEnd) {
         const overlapSeconds = (overlapEnd - overlapStart) / 1000;
-        totalSeconds += overlapSeconds;
+        // Subtract break minutes proportionally if the entry spans this day
+        const entryDuration = (clockOut - clockIn) / 1000;
+        const overlapRatio = overlapSeconds / entryDuration;
+        const breakSeconds = (entry.break_minutes || 0) * 60 * overlapRatio;
+        totalSeconds += Math.max(0, overlapSeconds - breakSeconds);
       }
     });
     
@@ -146,23 +165,19 @@ const Timecard_Screen = () => {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       
-      // Create start/end times in local timezone
-      const startDate = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0);
-      const endDate = new Date(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate(), 23, 59, 59);
-      
-      // Convert to ISO string for API (this will include timezone offset)
-      const startISO = startDate.toISOString();
-      const endISO = endDate.toISOString();
+      // Format dates as YYYY-MM-DD and let backend append time
+      const startDateStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}T00:00:00`;
+      const endDateStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}T23:59:59`;
       
       // Fetch all time entries for the week range
       const response = await apiCall(
         session.access_token,
-        `time-entries?start_date=${startISO}&end_date=${endISO}&limit=1000`,
+        `time-entries?start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`,
         'GET'
       );
       
-      if (response.success && response.data?.data) {
-        const timeEntries = response.data.data;
+      if (response.success && response.data?.time_entries) {
+        const timeEntries = response.data.time_entries;
         
         // Calculate hours for each day using local timezone
         const updatedWeekData = weekStructure.map(dayData => {

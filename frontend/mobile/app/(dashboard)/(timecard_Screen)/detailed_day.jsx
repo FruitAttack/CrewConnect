@@ -41,26 +41,26 @@ const Detailed_Day = () => {
       hour: 'numeric', 
       minute: '2-digit',
       hour12: true
-      // Removed timeZone: 'UTC' to use local timezone
     });
   };
 
-  // Calculate hours using database timestamps directly
+  // Calculate hours for a specific entry, accounting for break minutes
   const calculateHours = (clockIn, clockOut, breakMinutes = 0) => {
-    if (!clockIn) return '0:00';
+    if (!clockIn) return '0.00';
     
     const start = new Date(clockIn);
     const end = clockOut ? new Date(clockOut) : new Date();
     
     const diffMs = end - start;
-    const diffMinutes = Math.floor(diffMs / 60000); 
-    const hours = Math.floor(diffMinutes / 60);
-    const minutes = diffMinutes % 60;
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const breakAdjusted = totalMinutes - (breakMinutes || 0);
+    const hours = Math.floor(breakAdjusted / 60);
+    const minutes = breakAdjusted % 60;
     
     return `${hours}.${String(minutes).padStart(2, '0')}`;
   };
 
-  // Calculate total hours using database timestamps directly
+  // Calculate total hours for all entries
   const calculateTotalHours = () => {
     let totalMinutes = 0;
     
@@ -68,8 +68,9 @@ const Detailed_Day = () => {
       const start = new Date(entry.clock_in);
       const end = entry.clock_out ? new Date(entry.clock_out) : new Date();
       const diffMs = end - start;
-      const diffMinutes = Math.floor(diffMs / 60000);
-      totalMinutes += diffMinutes;
+      const minutes = Math.floor(diffMs / 60000);
+      const breakAdjusted = minutes - (entry.break_minutes || 0);
+      totalMinutes += breakAdjusted;
     });
     
     const hours = Math.floor(totalMinutes / 60);
@@ -78,39 +79,34 @@ const Detailed_Day = () => {
   };
 
   const fetchTimeEntries = async () => {
-  if (!session?.access_token) return;
-  
-  setLoading(true);
-  try {
-    const fullDate = getFullDateString();
+    if (!session?.access_token) return;
     
-    // Create date objects for start and end of day in LOCAL timezone
-    const [year, month, day] = fullDate.split('-');
-    const startOfDay = new Date(year, month - 1, day, 0, 0, 0);
-    const endOfDay = new Date(year, month - 1, day, 23, 59, 59);
-    
-    // Convert to ISO strings (includes timezone offset)
-    const startDateISO = startOfDay.toISOString();
-    const endDateISO = endOfDay.toISOString();
-    
-    const response = await apiCall(
-      session.access_token,
-      `time-entries?start_date=${startDateISO}&end_date=${endDateISO}&limit=100`,
-      'GET'
-    );
-    
-    if (response.success && response.data?.data) {
-      setTimeEntries(response.data.data);
-    } else {
+    setLoading(true);
+    try {
+      const fullDate = getFullDateString();
+      
+      // Format dates as YYYY-MM-DDTHH:MM:SS to match backend expectations
+      const startDateStr = `${fullDate}T00:00:00`;
+      const endDateStr = `${fullDate}T23:59:59`;
+      
+      const response = await apiCall(
+        session.access_token,
+        `time-entries?start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=100`,
+        'GET'
+      );
+      
+      if (response.success && response.data?.time_entries) {
+        setTimeEntries(response.data.time_entries);
+      } else {
+        setTimeEntries([]);
+      }
+    } catch (error) {
+      console.error('Error fetching time entries:', error);
       setTimeEntries([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error fetching time entries:', error);
-    setTimeEntries([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     fetchTimeEntries();
