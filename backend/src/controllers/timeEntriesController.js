@@ -210,10 +210,14 @@ export const getTimeEntries = async (req, res) => {
       project_id,
       cost_code_id,
       target_user_id,
-      all_users, // New param to get all users' entries (for admin/supervisor view)
+      all_users,
       limit = 100,
       offset = 0
     } = req.query;
+
+    // DEBUG: Log the raw end_date value
+    console.log('Raw end_date from query:', end_date);
+    console.log('end_date type:', typeof end_date);
 
     // Use query param company_id or fall back to default
     const company_id = req.query.company_id || default_company_id;
@@ -231,31 +235,40 @@ export const getTimeEntries = async (req, res) => {
       .order('clock_in', { ascending: false })
       .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-    // Role-based filtering:
-    // - Admins/supervisors can see all entries when all_users=true
-    // - Regular users only see their own entries
+    // Role-based filtering
     const isPrivileged = ['admin', 'supervisor', 'foreman'].includes(role_key);
     
     if (target_user_id) {
-      // Specific user requested
       query = query.eq('user_id', target_user_id);
     } else if (all_users === 'true' && isPrivileged) {
-      // Show all users' entries (no user filter)
+      // Show all users' entries
     } else {
-      // Default: show only current user's entries
       query = query.eq('user_id', user_id);
     }
 
     if (project_id) query = query.eq('project_id', project_id);
     if (cost_code_id) query = query.eq('cost_code_id', cost_code_id);
     if (start_date) query = query.gte('clock_in', start_date);
-    if (end_date) query = query.lte('clock_in', end_date + 'T23:59:59.999Z');
+    
+    if (end_date) {
+      // Safely handle end_date
+      let endDateStr;
+      try {
+        // Remove any existing time portion and rebuild
+        const dateOnly = end_date.replace(/T.*$/, '').trim();
+        endDateStr = `${dateOnly}T23:59:59.999Z`;
+        console.log('Constructed end date string:', endDateStr);
+      } catch (e) {
+        console.error('Error constructing end_date:', e);
+        return res.status(400).json({ error: 'Invalid end_date format' });
+      }
+      query = query.lte('clock_in', endDateStr);
+    }
 
     const { data, error, count } = await query;
 
     if (error) throw error;
     
-    // Return { time_entries: [...] } - apiCall wrapper will add success/data
     res.json({ time_entries: data, total: count });
   } catch (error) {
     console.error('Get time entries error:', error);
@@ -1282,7 +1295,47 @@ export const startBreakForUser = async (req, res) => {
     res.status(error.status || 500).json({ error: error.message });
   }
 };
+// Update notes for current time entry
+export const updateNotes = async (req, res) => {
+  try {
+    const { id: user_id } = req.user;
+    const { notes } = req.body;
 
+    if (notes === undefined) {
+      return res.status(400).json({ error: 'notes field is required' });
+    }
+
+    // Find current open time entry
+    const { data: entry, error: findError } = await supabase
+      .from('time_entries')
+      .select('id, company_id')
+      .eq('user_id', user_id)
+      .is('clock_out', null)
+      .single();
+
+    if (findError || !entry) {
+      return res.status(404).json({ error: 'No open time entry found' });
+    }
+
+    const { data, error } = await supabase
+      .from('time_entries')
+      .update({ notes })
+      .eq('id', entry.id)
+      .select(`
+        *,
+        project:projects(id, name),
+        cost_code:cost_codes(id, code, name, unit_of_measure),
+        equipment:equipment(id, label)
+      `)
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Update notes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
 // POST /api/time-entries/manage/:user_id/break/end
 export const endBreakForUser = async (req, res) => {
   try {
