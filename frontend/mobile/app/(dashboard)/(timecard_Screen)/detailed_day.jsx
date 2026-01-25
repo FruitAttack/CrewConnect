@@ -9,7 +9,6 @@ const Detailed_Day = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
   const { session } = useSession();
-  
   const { date, dayOfWeek } = params;
   const [menuVisible, setMenuVisible] = useState(null);
   const [timeEntries, setTimeEntries] = useState([]);
@@ -84,10 +83,15 @@ const Detailed_Day = () => {
     setLoading(true);
     try {
       const fullDate = getFullDateString();
+      const [year, month, day] = fullDate.split('-').map(Number);
       
-      // Format dates as YYYY-MM-DDTHH:MM:SS to match backend expectations
-      const startDateStr = `${fullDate}T00:00:00`;
-      const endDateStr = `${fullDate}T23:59:59`;
+      // Create Date objects in LOCAL timezone for start and end of day
+      const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+      const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+      
+      // Convert to ISO strings (which will include timezone offset)
+      const startDateStr = dayStart.toISOString();
+      const endDateStr = dayEnd.toISOString();
       
       const response = await apiCall(
         session.access_token,
@@ -96,7 +100,16 @@ const Detailed_Day = () => {
       );
       
       if (response.success && response.data?.time_entries) {
-        setTimeEntries(response.data.time_entries);
+        // Filter entries to only include those that overlap with the local day
+        const filteredEntries = response.data.time_entries.filter(entry => {
+          const clockIn = new Date(entry.clock_in);
+          const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
+          
+          // Check if entry overlaps with this local day
+          return clockIn < dayEnd && clockOut > dayStart;
+        });
+        
+        setTimeEntries(filteredEntries);
       } else {
         setTimeEntries([]);
       }
