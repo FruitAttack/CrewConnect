@@ -5,8 +5,7 @@ export default function Layout() {
     <Stack
       initialRouteName="index"
       screenOptions={{
-        headerShown: true, 
-        headerTitle : "App Dashboard"
+        headerShown: false,
       }}
     >
       <Stack.Screen name="index" />
