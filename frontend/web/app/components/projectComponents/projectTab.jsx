@@ -8,8 +8,7 @@ import { colors, spacing, borderRadius, typography } from "../../../constants/th
 const TABS = [
   { key: "project", label: "Project", icon: "folder-outline", route: "/(app)/project/projectsOverview", matchPath: "/project/projectsOverview" },
   { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
-  { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview", matchPath: "/project/safetyOverview" },
-  { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview", matchPath: "/project/materialsOverview" },
+  { key: "costCodes", label: "Cost Codes", icon: "cube-outline", route: "/(app)/project/costCodesOverview", matchPath: "/project/costCodesOverview" },
 ];
 
 export default function ProjectTabBar() {

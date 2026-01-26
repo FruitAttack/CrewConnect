@@ -43,10 +43,9 @@ export default function AppLayout() {
     overview: "Overview",
     
     // Project sub-pages
-    projectsOverview: "Project",
-    laborOverview: "Labor",
-    safetyOverview: "Safety",
-    materialsOverview: "Materials",
+    projectsOverview: "Project Details",
+    laborOverview: "Project Labor",
+    costCodesOverview: "Project Cost Codes",
     
     // Other
     company: "Company",
