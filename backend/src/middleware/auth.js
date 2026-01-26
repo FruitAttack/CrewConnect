@@ -50,6 +50,22 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found or inactive' });
     }
 
+    // Get user's role for their default company
+    let role_key = user.role_key || null;
+    if (user.default_company_id) {
+      const { data: userRole } = await supabase
+        .schema('app')
+        .from('user_roles')
+        .select('role_key')
+        .eq('user_id', user.id)
+        .eq('company_id', user.default_company_id)
+        .single();
+      
+      if (userRole) {
+        role_key = userRole.role_key;
+      }
+    }
+
     // Attach user to request
     req.user = {
       id: user.id,
@@ -57,6 +73,7 @@ export const authenticate = async (req, res, next) => {
       full_name: user.full_name,
       default_company_id: user.default_company_id,
       can_view_rates: user.can_view_rates,
+      role_key: role_key,
       roles: [] // Empty for now - can add role lookup separately if needed
     };
 

@@ -6,10 +6,10 @@ import { useProjectTab } from "./projectTabContext";
 import { colors, spacing, borderRadius, typography } from "../../../constants/theme";
 
 const TABS = [
-  { key: "projects", label: "Projects", icon: "folder-outline", route: "/(app)/project/projectsOverview" },
-  { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview" },
-  { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview" },
-  { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview" },
+  { key: "project", label: "Project", icon: "folder-outline", route: "/(app)/project/projectsOverview", matchPath: "/project/projectsOverview" },
+  { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
+  { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview", matchPath: "/project/safetyOverview" },
+  { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview", matchPath: "/project/materialsOverview" },
 ];
 
 export default function ProjectTabBar() {
@@ -17,28 +17,24 @@ export default function ProjectTabBar() {
   const pathname = usePathname();
   const { activeTab, setActiveTab } = useProjectTab();
 
-  // Ensure context has the Projects tab as the initial active tab
-  useEffect(() => {
-    if (!activeTab) {
-      const current = TABS.find(tab => pathname?.includes(tab.key));
-      setActiveTab(current?.key || TABS[0].key);
-    }
-  }, []);
+useEffect(() => {
+  if (!pathname) return;
 
-  // Sync activeTab from route if route changes
-  useEffect(() => {
-    const current = TABS.find(tab => pathname?.includes(tab.key));
-    if (current && current.key !== activeTab) setActiveTab(current.key);
-  }, [pathname, activeTab, setActiveTab]);
-
-  function onPressTab(tab) {
-    setActiveTab(tab.key);
-    router.push(tab.route);
+  const current = TABS.find(tab => pathname.includes(tab.matchPath));
+  if (current && current.key !== activeTab) {
+    setActiveTab(current.key);
   }
 
-  function onPressCreate() {
-    // TODO - create project functionality
+  // If nothing matches, keep whatever is already active
+  if (!current && !activeTab) {
+    setActiveTab(TABS[0].key);
   }
+}, [pathname, activeTab, setActiveTab]);
+
+function onPressTab(tab) {
+  setActiveTab(tab.key);
+  router.push(tab.route);
+}
 
   return (
     <View style={styles.wrapper}>
@@ -69,15 +65,6 @@ export default function ProjectTabBar() {
             );
           })}
         </View>
-
-        {/* Create Button */}
-        <Pressable 
-          onPress={onPressCreate} 
-          style={({ hovered }) => [styles.createButton, hovered && styles.createButtonHovered]}
-        >
-          <Ionicons name="add" size={18} color={colors.neutral.white} />
-          <Text style={styles.createButtonText}>New Project</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -130,25 +117,6 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: colors.text.primary,
-    fontWeight: typography.fontWeight.semibold,
-  },
-  createButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.primary.orange,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.md,
-    transitionDuration: '200ms',
-  },
-  createButtonHovered: {
-    backgroundColor: colors.primary.orangeLight,
-    transform: [{ translateY: -1 }],
-  },
-  createButtonText: {
-    color: colors.neutral.white,
-    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
   },
 });

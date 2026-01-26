@@ -21,28 +21,53 @@ export default function AppLayout() {
     return null;
   }
 
-  // Build page title from pathname
+  // Map segments to proper display titles (with correct capitalization)
   const segmentTitleMap = {
+    // Main sections
     dashboard: "Dashboard",
-    project: "Project",
-    projectsOverview: "Projects",
-    formsOverview: "Forms",
+    projects: "Projects",
+    workforce: "Workforce",
+    time: "Time",
+    safety: "Safety",
+    reports: "Reports",
+    settings: "Settings",
+    
+    // Workforce sub-pages
+    employees: "Employees",
+    costCodes: "Cost Codes",
+    costcodes: "Cost Codes",
+    
+    // Time sub-pages
+    live: "Live Crew",
+    timecards: "Timecards",
+    overview: "Overview",
+    
+    // Project sub-pages
+    projectsOverview: "Project",
     laborOverview: "Labor",
     safetyOverview: "Safety",
     materialsOverview: "Materials",
+    
+    // Other
     company: "Company",
-    workforce: "Workforce",
+  };
+
+  // Helper to capitalize a word properly
+  const capitalize = (str) => {
+    if (!str) return '';
+    // Handle special cases
+    const lower = str.toLowerCase();
+    if (lower === 'api') return 'API';
+    if (lower === 'id') return 'ID';
+    if (lower === 'url') return 'URL';
+    // Default: capitalize first letter
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   };
 
   const segments = pathname.split("/").filter(Boolean);
   const titleParts = segments
-    .filter(seg => seg !== "(app)")
-    .map(seg => segmentTitleMap[seg] || seg);
-
-  // Special case for project/projectsOverview
-  if (segments.includes("project") && segments.includes("projectsOverview")) {
-    titleParts.splice(0, titleParts.length, "Projects");
-  }
+    .filter(seg => seg !== "(app)" && !seg.match(/^[0-9a-f-]{36}$/i)) // Filter out (app) and UUIDs
+    .map(seg => segmentTitleMap[seg] || segmentTitleMap[seg.toLowerCase()] || capitalize(seg));
 
   const title = titleParts.length > 0 ? titleParts.join(" / ") : "Dashboard";
 

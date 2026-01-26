@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,25 +6,36 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar } from "react-native-calendars";
 import { router } from "expo-router";
+import { useSession } from "../../../utils/ctx";
+import { apiCall } from "../../../utils/api";
 
 const TABS = ["My Hours", "Time Off"];
 
-// Helper function to get the start of the week (Sunday)
+// Helper function to get the start of the week (Sunday) in local timezone
 const getWeekStart = (dateString) => {
-  const date = new Date(dateString + 'T00:00:00');
-  const day = date.getDay();
-  const diff = date.getDate() - day;
-  const weekStart = new Date(date);
-  weekStart.setDate(diff);
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const dayOfWeek = date.getDay();
+  const diff = date.getDate() - dayOfWeek;
+  const weekStart = new Date(year, month - 1, diff);
   return weekStart;
 };
 
-// Helper function to generate week data
-const generateWeekData = (startDate) => {
+// Helper function to format seconds to hours display
+const formatSecondsToHours = (seconds) => {
+  if (!seconds || seconds === 0) return "0";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return minutes > 0 ? `${hours}.${Math.round((minutes / 60) * 10)}` : `${hours}`;
+};
+
+// Helper function to generate week data structure
+const generateWeekDataStructure = (startDate) => {
   const weekData = [];
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   
@@ -34,11 +45,15 @@ const generateWeekData = (startDate) => {
     
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
+    const year = currentDate.getFullYear();
+    const fullDateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     weekData.push({
       date: `${month}/${day}`,
       day: days[currentDate.getDay()],
-      hours: "9",
+      hours: "0",
+      seconds: 0,
+      fullDate: fullDateString,
     });
   }
   
@@ -64,23 +79,134 @@ const formatDateRange = (startDate) => {
 };
 
 const Timecard_Screen = () => {
+  const { session } = useSession();
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   
   const [activeTab, setActiveTab] = useState("My Hours");
   const [selectedWeekStart, setSelectedWeekStart] = useState(getWeekStart(todayString));
-  const [timeData, setTimeData] = useState(generateWeekData(getWeekStart(todayString)));
+  const [timeData, setTimeData] = useState(generateWeekDataStructure(getWeekStart(todayString)));
   const [dateRange, setDateRange] = useState(formatDateRange(getWeekStart(todayString)));
   const [selectedDate, setSelectedDate] = useState(todayString);
   const [selectedRowDate, setSelectedRowDate] = useState(null);
   const [lastTap, setLastTap] = useState(null);
   const [lastCalendarTap, setLastCalendarTap] = useState(null);
+  const [loadingHours, setLoadingHours] = useState(false);
 
   // Time Off form states
   const [selectedDaysOff, setSelectedDaysOff] = useState([]);
   const [timeOffType, setTimeOffType] = useState("vacation");
   const [submittedTimeOff, setSubmittedTimeOff] = useState([]);
-  // submittedTimeOff will be an array of objects: { date: "2026-01-15", type: "vacation" }
+  
+  // Time Off balances (in hours)
+  const [timeOffBalances, setTimeOffBalances] = useState({
+    vacation: 80,
+    personal: 40,
+    other: 24,
+  });
+
+  // Helper function to check if a time entry belongs to a specific day
+  const doesEntryBelongToDay = (entry, dateString) => {
+    // Parse the target date in local timezone
+    const [year, month, day] = dateString.split('-').map(Number);
+    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+    
+    // Parse entry times
+    const clockIn = new Date(entry.clock_in);
+    const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
+    
+    // Check if there's any overlap with this day
+    return clockIn < dayEnd && clockOut > dayStart;
+  };
+
+  // Helper function to calculate seconds for a specific day
+  const calculateSecondsForDay = (timeEntries, dateString) => {
+    if (!timeEntries || timeEntries.length === 0) return 0;
+    
+    // Parse date in LOCAL timezone (midnight to midnight in local time)
+    const [year, month, day] = dateString.split('-').map(Number);
+    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+    
+    let totalSeconds = 0;
+    
+    timeEntries.forEach(entry => {
+      // Parse UTC times from database
+      const clockIn = new Date(entry.clock_in);
+      const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
+      
+      // Calculate overlap with this LOCAL day
+      const overlapStart = Math.max(clockIn.getTime(), dayStart.getTime());
+      const overlapEnd = Math.min(clockOut.getTime(), dayEnd.getTime());
+      
+      if (overlapStart < overlapEnd) {
+        const overlapSeconds = (overlapEnd - overlapStart) / 1000;
+        // Subtract break minutes proportionally if the entry spans this day
+        const entryDuration = (clockOut - clockIn) / 1000;
+        const overlapRatio = overlapSeconds / entryDuration;
+        const breakSeconds = (entry.break_minutes || 0) * 60 * overlapRatio;
+        totalSeconds += Math.max(0, overlapSeconds - breakSeconds);
+      }
+    });
+    
+    return Math.round(totalSeconds);
+  };
+
+  // Fetch hours worked for each day in the current week
+  const fetchWeekHours = async (weekStart) => {
+    if (!session?.access_token) return;
+    
+    setLoadingHours(true);
+    const weekStructure = generateWeekDataStructure(weekStart);
+    
+    try {
+      // Get the start and end of the week in LOCAL timezone
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      
+      // Format dates as YYYY-MM-DD and let backend append time
+      const startDateStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}T00:00:00`;
+      const endDateStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}T23:59:59`;
+      
+      // Fetch all time entries for the week range
+      const response = await apiCall(
+        session.access_token,
+        `time-entries?start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`,
+        'GET'
+      );
+      
+      if (response.success && response.data?.time_entries) {
+        const timeEntries = response.data.time_entries;
+        
+        // Calculate hours for each day using local timezone
+        const updatedWeekData = weekStructure.map(dayData => {
+          const seconds = calculateSecondsForDay(timeEntries, dayData.fullDate);
+          return {
+            ...dayData,
+            seconds: seconds,
+            hours: formatSecondsToHours(seconds),
+          };
+        });
+        
+        setTimeData(updatedWeekData);
+      } else {
+        setTimeData(weekStructure);
+      }
+    } catch (error) {
+      console.error('Error fetching week hours:', error);
+      setTimeData(weekStructure);
+    } finally {
+      setLoadingHours(false);
+    }
+  };
+
+  // Fetch hours when week changes or when tab becomes active
+  useEffect(() => {
+    if (activeTab === "My Hours") {
+      fetchWeekHours(selectedWeekStart);
+    }
+  }, [selectedWeekStart, activeTab, session]);
 
   const handleDayPress = (day) => {
     const now = Date.now();
@@ -90,9 +216,8 @@ const Timecard_Screen = () => {
       // Check for double tap
       if (lastCalendarTap && (now - lastCalendarTap) < DOUBLE_TAP_DELAY) {
         // Double tap detected - navigate to detail page
-        const selected = new Date(day.dateString + 'T00:00:00');
-        const month = selected.getMonth() + 1;
-        const dayNum = selected.getDate();
+        const [year, month, dayNum] = day.dateString.split('-').map(Number);
+        const selected = new Date(year, month - 1, dayNum);
         const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const dayOfWeek = days[selected.getDay()];
         
@@ -107,14 +232,11 @@ const Timecard_Screen = () => {
         // Single tap - update selection
         const weekStart = getWeekStart(day.dateString);
         setSelectedWeekStart(weekStart);
-        setTimeData(generateWeekData(weekStart));
         setDateRange(formatDateRange(weekStart));
         setSelectedDate(day.dateString);
         
         // Update selected row to match calendar selection
-        const selected = new Date(day.dateString + 'T00:00:00');
-        const month = selected.getMonth() + 1;
-        const dayNum = selected.getDate();
+        const [year, month, dayNum] = day.dateString.split('-').map(Number);
         setSelectedRowDate(`${month}/${dayNum}`);
       }
       
@@ -148,7 +270,6 @@ const Timecard_Screen = () => {
     const newWeekStart = new Date(selectedWeekStart);
     newWeekStart.setDate(selectedWeekStart.getDate() + (direction * 7));
     setSelectedWeekStart(newWeekStart);
-    setTimeData(generateWeekData(newWeekStart));
     setDateRange(formatDateRange(newWeekStart));
     setSelectedDate(null);
     setSelectedRowDate(null);
@@ -249,9 +370,18 @@ const Timecard_Screen = () => {
 
   // Format date for display
   const formatDate = (dateStr) => {
-    const date = new Date(dateStr + 'T00:00:00');
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${months[date.getMonth()]} ${date.getDate()}`;
+  };
+
+  // Calculate total hours for the week
+  const calculateTotalHours = () => {
+    const totalSeconds = timeData.reduce((sum, day) => sum + (day.seconds || 0), 0);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${hours}.${String(minutes).padStart(2, '0')}`;
   };
 
   return (
@@ -290,6 +420,12 @@ const Timecard_Screen = () => {
             arrowColor: "#ff7a00",
           }}
         />
+        {/* Helper text for double-tap */}
+        {activeTab === "My Hours" && (
+          <Text style={styles.calendarHelperText}>
+            Double-tap a date on calendar or timecard to view details
+          </Text>
+        )}
       </View>
 
       {/* My Hours Card */}
@@ -307,6 +443,14 @@ const Timecard_Screen = () => {
               <Ionicons name="chevron-forward" size={22} color="#fff" />
             </Pressable>
           </View>
+
+          {/* Loading indicator */}
+          {loadingHours && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.loadingText}>Loading hours...</Text>
+            </View>
+          )}
 
           {/* Rows */}
           {timeData.map((item, index) => (
@@ -328,7 +472,7 @@ const Timecard_Screen = () => {
 
           {/* Total */}
           <View style={styles.totalRow}>
-            <Text style={styles.totalText}>0:00</Text>
+            <Text style={styles.totalText}>{calculateTotalHours()}</Text>
           </View>
         </View>
       )}
@@ -337,6 +481,28 @@ const Timecard_Screen = () => {
       {activeTab === "Time Off" && (
         <View style={styles.card}>
           <ScrollView style={styles.formContainer}>
+            {/* Time Off Balances */}
+            <View style={styles.balancesContainer}>
+              <Text style={styles.balancesTitle}>Available Time Off</Text>
+              <View style={styles.balancesGrid}>
+                <View style={styles.balanceCard}>
+                  <View style={[styles.balanceIndicator, { backgroundColor: "#4CAF50" }]} />
+                  <Text style={styles.balanceLabel}>Vacation</Text>
+                  <Text style={styles.balanceHours}>{timeOffBalances.vacation} hrs</Text>
+                </View>
+                <View style={styles.balanceCard}>
+                  <View style={[styles.balanceIndicator, { backgroundColor: "#2196F3" }]} />
+                  <Text style={styles.balanceLabel}>Personal</Text>
+                  <Text style={styles.balanceHours}>{timeOffBalances.personal} hrs</Text>
+                </View>
+                <View style={styles.balanceCard}>
+                  <View style={[styles.balanceIndicator, { backgroundColor: "#9C27B0" }]} />
+                  <Text style={styles.balanceLabel}>Other</Text>
+                  <Text style={styles.balanceHours}>{timeOffBalances.other} hrs</Text>
+                </View>
+              </View>
+            </View>
+
             <Text style={styles.formTitle}>Request Time Off</Text>
             
             <View style={styles.formSection}>
@@ -384,11 +550,11 @@ const Timecard_Screen = () => {
               </Pressable>
 
               <Pressable 
-                onPress={() => setTimeOffType("other")}
+                onPress={() => setTimeOffType("cancel")}
                 style={styles.checkboxRow}
               >
                 <View style={styles.checkbox}>
-                  {timeOffType === "Cancel" && (
+                  {timeOffType === "cancel" && (
                     <Ionicons name="checkmark" size={18} color="#ff7a00" />
                   )}
                 </View>
@@ -488,6 +654,13 @@ const styles = StyleSheet.create({
   calendarWrapper: {
     marginBottom: 16,
   },
+  calendarHelperText: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 8,
+    fontStyle: "italic",
+  },
 
   /* Card */
   card: {
@@ -512,6 +685,18 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontWeight: "600",
+  },
+
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  loadingText: {
+    color: "#fff",
+    marginLeft: 8,
+    fontSize: 14,
   },
 
   row: {
@@ -545,6 +730,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
+  },
+
+  /* Time Off Balances */
+  balancesContainer: {
+    marginBottom: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#444",
+  },
+  balancesTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 16,
+  },
+  balancesGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  balanceCard: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  balanceIndicator: {
+    width: 24,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  balanceLabel: {
+    fontSize: 12,
+    color: "#ccc",
+    marginBottom: 4,
+  },
+  balanceHours: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
   },
 
   /* Time Off Form */
@@ -666,6 +893,6 @@ const styles = StyleSheet.create({
   },
   submittedType: {
     fontSize: 14,
-    color: "#ccc",
+    color: "#ccc"
   },
 });

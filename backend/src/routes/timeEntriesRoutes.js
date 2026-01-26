@@ -2,6 +2,12 @@ import express from 'express';
 import {
   clockIn,
   clockOut,
+  getActiveRoster,
+  clockInForUser,
+  clockOutForUser,
+  switchTaskForUser,
+  startBreakForUser,
+  endBreakForUser,
   getCurrentTimeEntry,
   getTimeEntries,
   getNearbyProjects,
@@ -17,7 +23,8 @@ import {
   startBreak,
   endBreak,
   getCurrentBreak,
-  updateCostCode
+  updateCostCode,
+  updateNotes  // ADD THIS
 } from '../controllers/timeEntriesController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -37,6 +44,14 @@ router.get('/seconds-week', getSecondsWorkedWeek);
 router.get('/seconds-month', getSecondsWorkedMonth);
 router.get('/seconds-year', getSecondsWorkedYear);
 
+// Foreman/Admin live management
+router.get('/manage/active', getActiveRoster);
+router.post('/manage/:user_id/clock-in', clockInForUser);
+router.post('/manage/:user_id/clock-out', clockOutForUser);
+router.post('/manage/:user_id/switch-task', switchTaskForUser);
+router.post('/manage/:user_id/break/start', startBreakForUser);
+router.post('/manage/:user_id/break/end', endBreakForUser);
+
 // Break management
 router.post('/break/start', startBreak);
 router.post('/break/end', endBreak);
@@ -52,6 +67,7 @@ router.post('/validate-geofence', validateGeofence);
 // CRUD operations - parameterized routes go LAST
 router.get('/', getTimeEntries);
 router.put('/:id', updateTimeEntry);
+router.put('/:id/notes', updateNotes); 
 router.delete('/:id', deleteTimeEntry);
 
 export default router;
