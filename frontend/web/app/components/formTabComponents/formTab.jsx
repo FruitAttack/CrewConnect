@@ -7,13 +7,13 @@ import { colors, spacing, borderRadius, typography } from "../../../constants/th
 
 const TABS = [
   { key: "forms", label: "Forms", icon: "folder-outline", route: "/(app)/form/formsOverview", match: "/form/formsOverview" },
-  { key: "responses", label: "Responses", icon: "document-text-outline", route: "/(app)/form/responses", match: "/form/responses" },
+  { key: "submissions", label: "Submissions", icon: "document-text-outline", route: "/(app)/form/submissions", match: "/form/submissions" },
 ];
 
 export default function FormTabBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { activeTab, setActiveTab } = useFormTab();
+  const { activeTab, setActiveTab, setCreateOpen } = useFormTab();
 
   // Ensure context has the Forms tab as the initial active tab
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function FormTabBar() {
   }
 
   function onPressCreate() {
-    // TODO - create form functionality
+    setCreateOpen(true);
   }
 
   return (

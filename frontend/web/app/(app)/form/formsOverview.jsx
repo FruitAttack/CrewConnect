@@ -4,10 +4,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSession } from "../../../utils/ctx";
 import { getForms } from "../../../utils/api";
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
+import { useFormTab } from "../../components/formTabComponents/formTabContext";
+import CreateFormModal from "../../components/formComponents/createFormModal";
 
 export default function FormsOverview() {
 	const { session } = useSession();
 	const token = session?.access_token;
+	const { createOpen, setCreateOpen } = useFormTab();
 
 	const [forms, setForms] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -110,6 +113,17 @@ export default function FormsOverview() {
 					</View>
 				</View>
 			))}
+
+			{/* Create Form Modal */}
+			<CreateFormModal
+				visible={createOpen}
+				onClose={() => setCreateOpen(false)}
+				token={token}
+				onCreated={(newForm) => {
+					setForms(prev => [...prev, newForm]);
+					setCreateOpen(false);
+				}}
+			/>
 		</ScrollView>
 	);
 }
