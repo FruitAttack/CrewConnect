@@ -371,6 +371,22 @@ export async function getProjectCostCodes(token, projectId) {
   return apiCall(`projects/${projectId}/cost-codes`, token)
 }
 
+export async function assignCostCodeToProject(token, projectId, data) {
+  return apiCall(`projects/${projectId}/cost-codes`, token, 'POST', data)
+}
+
+export async function removeCostCodeFromProject(token, projectId, costCodeId) {
+  return apiCall(`projects/${projectId}/cost-codes/${costCodeId}`, token, 'DELETE')
+}
+
+export async function updateProjectCostCodeBudget(token, projectId, costCodeId, updates) {
+  return apiCall(`projects/${projectId}/cost-codes/${costCodeId}/budget`, token, 'PUT', updates)
+}
+
+export async function getProjectBudgetSummary(token, projectId) {
+  return apiCall(`projects/${projectId}/budget-summary`, token)
+}
+
 // ============================================
 // EMPLOYEE ASSIGNMENTS
 // ============================================
