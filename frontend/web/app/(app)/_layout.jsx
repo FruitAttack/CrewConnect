@@ -29,6 +29,7 @@ export default function AppLayout() {
     workforce: "Workforce",
     time: "Time",
     safety: "Safety",
+    forms: "Forms",
     reports: "Reports",
     settings: "Settings",
     
@@ -46,6 +47,7 @@ export default function AppLayout() {
     projectsOverview: "Project",
     laborOverview: "Labor",
     safetyOverview: "Safety",
+    formsOverview: "Overview",
     materialsOverview: "Materials",
     
     // Other

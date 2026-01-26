@@ -10,6 +10,7 @@ const TABS = [
   { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
   { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview", matchPath: "/project/safetyOverview" },
   { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview", matchPath: "/project/materialsOverview" },
+  { key: "forms", label: "Forms", icon: "document-text-outline", route: "/(app)/project/formsOverview", matchPath: "/project/formsOverview" },
 ];
 
 export default function ProjectTabBar() {
