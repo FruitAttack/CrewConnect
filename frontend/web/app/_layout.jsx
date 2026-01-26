@@ -15,6 +15,7 @@ export default function RootLayout() {
     '/time',
     '/safety',
     '/reports',
+    '/form',
     '/settings',
   ];
   
