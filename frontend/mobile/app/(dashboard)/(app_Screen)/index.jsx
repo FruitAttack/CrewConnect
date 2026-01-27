@@ -14,7 +14,7 @@ const tiles = [
   { label: 'My Crew', icon: require('../../../assets/icons/myCrew.png') },
   { label: 'Toolbox Talk', icon: require('../../../assets/icons/toolbox.png') },
   { label: 'Observations', icon: require('../../../assets/icons/observation.png') },
-  { label: 'Contacts', icon: require('../../../assets/icons/contacts.png') },
+  { label: 'Contacts', icon: require('../../../assets/icons/contacts.png'), route: 'contacts_list' },
   { label: 'Change Order', icon: require('../../../assets/icons/change_order.png') },
 ];
 
