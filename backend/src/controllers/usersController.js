@@ -270,9 +270,40 @@ export async function getUser(req, res) {
  */
 export async function getMe(req, res) {
   try {
-    // req.user is set by auth middleware and includes default_company_id
-    // Return { user: {...} } - apiCall wrapper will add success/data
-    return res.status(200).json({ user: req.user });
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Fetch full user data with company relationship
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        default_company:default_company_id(id, name)
+      `)
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Get me error:', error);
+      return res.status(500).json({ message: 'Failed to get user profile' });
+    }
+
+    // Fetch roles separately
+    const { data: rolesData } = await supabase
+      .from('user_roles')
+      .select('role_key, company_id')
+      .eq('user_id', userId);
+
+    if (rolesData) {
+      data.roles = rolesData;
+      // Set role_key from first role or from users table
+      data.role_key = rolesData[0]?.role_key || data.role_key || null;
+    }
+
+    return res.status(200).json({ user: data });
   } catch (err) {
     console.error('Get me error:', err);
     return res.status(500).json({ message: 'Server error' });

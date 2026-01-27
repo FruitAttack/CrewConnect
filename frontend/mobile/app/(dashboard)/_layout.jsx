@@ -68,7 +68,7 @@ const DashboardLayout = () => {
             (<Ionicons name="person" 
                 size={24} 
                 color={focused ? theme.lava : theme.dustyGrey} />),
-          headerShown: true,
+          headerShown: false,
           headerTitle: "My Profile"
         }
         } />
