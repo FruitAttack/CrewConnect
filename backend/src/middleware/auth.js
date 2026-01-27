@@ -318,3 +318,5 @@ export const sanitizeInput = (req, res, next) => {
 
   next();
 };
+
+export { authenticate as authMiddleware };

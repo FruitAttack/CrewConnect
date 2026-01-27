@@ -177,6 +177,19 @@ export async function deleteTimeEntry(token, entryId) {
 }
 
 // ============================================
+// TIMECARD APPROVALS
+// ============================================
+export async function getTimecardApprovals(token, companyId, weekStart) {
+  const params = new URLSearchParams({ company_id: companyId });
+  if (weekStart) params.append('week_start', weekStart);
+  return apiCall(`timecard-approvals?${params}`, token);
+}
+
+export async function bulkUpdateTimecardApprovals(token, data) {
+  return apiCall('timecard-approvals/bulk', token, 'POST', data);
+}
+
+// ============================================
 // FOREMAN/ADMIN MANAGEMENT
 // ============================================
 
