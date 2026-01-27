@@ -92,8 +92,9 @@ router.post('/break/start', startBreak);
 router.post('/break/end', endBreak);
 router.get('/break/current', getCurrentBreak);
 
-// Active roster for company
+// Active roster for company (both routes for compatibility)
 router.get('/roster/:company_id', getActiveRoster);
+router.get('/manage/active', getActiveRoster);
 
 // ==========================================
 // MANAGER/ADMIN ROUTES
