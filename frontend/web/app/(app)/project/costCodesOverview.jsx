@@ -21,6 +21,9 @@ import {
   updateProjectCostCodeBudget,
 } from "../../../utils/api";
 
+/**
+ * Project Cost Codes Overview
+ */
 export default function CostCodesOverview() {
   const { session } = useSession();
   const token = session?.access_token;
@@ -37,6 +40,9 @@ export default function CostCodesOverview() {
   const [editItem, setEditItem] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  const [selectedToAdd, setSelectedToAdd] = useState(new Set());
+  const [focusedField, setFocusedField] = useState(null);
 
   /* ---------------- Load ---------------- */
   useEffect(() => {
@@ -80,18 +86,33 @@ export default function CostCodesOverview() {
   const inactiveCodes = projectCostCodes.filter(pc => !pc.is_active);
 
   /* ---------------- Actions ---------------- */
-  const handleAdd = async (cc) => {
-    setSaving(true);
-    const res = await assignCostCodeToProject(token, projectId, {
-      cost_code_id: cc.id,
+  const toggleSelect = (id) => {
+    setSelectedToAdd(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
+  };
 
-    if (res.success) {
-      await refreshAssigned();
-      setAddOpen(false);
-    } else {
-      setError(res.message || "Failed to add cost code");
+  const handleBulkAdd = async () => {
+    if (selectedToAdd.size === 0) return;
+
+    setSaving(true);
+    setError(null);
+
+    for (const costCodeId of selectedToAdd) {
+      const res = await assignCostCodeToProject(token, projectId, {
+        cost_code_id: costCodeId,
+      });
+      if (!res.success) {
+        setError(res.message || "Failed to add one or more cost codes");
+        break;
+      }
     }
+
+    await refreshAssigned();
+    setSelectedToAdd(new Set());
+    setAddOpen(false);
     setSaving(false);
   };
 
@@ -155,6 +176,7 @@ export default function CostCodesOverview() {
   /* ---------------- UI ---------------- */
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Project Cost Codes</Text>
@@ -179,20 +201,20 @@ export default function CostCodesOverview() {
       <ScrollView contentContainerStyle={styles.list}>
         {activeCodes.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>Active</Text>
+            <SectionHeader icon="checkmark-circle" text="Active Cost Codes" color={colors.semantic.success} />
             {activeCodes.map(renderCard)}
           </>
         )}
 
         {inactiveCodes.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>Inactive</Text>
+            <SectionHeader icon="pause-circle" text="Inactive Cost Codes" color={colors.text.tertiary} />
             {inactiveCodes.map(renderCard)}
           </>
         )}
       </ScrollView>
 
-      {/* ---------- Edit Modal ---------- */}
+      {/* ---------- EDIT MODAL ---------- */}
       <Modal visible={!!editItem} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -200,48 +222,55 @@ export default function CostCodesOverview() {
               {editItem?.cost_code.code} — {editItem?.cost_code.name}
             </Text>
 
-            <LabeledInput
-              icon="time-outline"
-              label="Budgeted Hours"
-              value={editItem?.budgeted_hours}
-              onChange={v => setEditItem(m => ({ ...m, budgeted_hours: v }))}
-            />
+            <View style={styles.modalSection}>
+              <LabeledInput
+                label="Budgeted Hours"
+                value={editItem?.budgeted_hours}
+                focused={focusedField === "hours"}
+                onFocus={() => setFocusedField("hours")}
+                onBlur={() => setFocusedField(null)}
+                onChange={v => setEditItem(m => ({ ...m, budgeted_hours: v }))}
+              />
 
-            <LabeledInput
-              icon="cash-outline"
-              label="Budgeted Labor Cost"
-              value={editItem?.budgeted_labor_cost}
-              onChange={v => setEditItem(m => ({ ...m, budgeted_labor_cost: v }))}
-            />
+              <LabeledInput
+                label="Budgeted Labor Cost"
+                value={editItem?.budgeted_labor_cost}
+                focused={focusedField === "labor"}
+                onFocus={() => setFocusedField("labor")}
+                onBlur={() => setFocusedField(null)}
+                onChange={v => setEditItem(m => ({ ...m, budgeted_labor_cost: v }))}
+              />
 
-            <LabeledInput
-              icon="cube-outline"
-              label="Budgeted Quantity"
-              value={editItem?.budgeted_quantity}
-              onChange={v => setEditItem(m => ({ ...m, budgeted_quantity: v }))}
-            />
+              <LabeledInput
+                label="Budgeted Quantity"
+                value={editItem?.budgeted_quantity}
+                focused={focusedField === "qty"}
+                onFocus={() => setFocusedField("qty")}
+                onBlur={() => setFocusedField(null)}
+                onChange={v => setEditItem(m => ({ ...m, budgeted_quantity: v }))}
+              />
+            </View>
 
             <Pressable
               style={styles.toggle}
-              onPress={() =>
-                setEditItem(m => ({ ...m, is_active: !m.is_active }))
-              }
+              onPress={() => setEditItem(m => ({ ...m, is_active: !m.is_active }))}
             >
               <Ionicons
-                name={editItem?.is_active ? "checkmark-circle" : "close-circle"}
-                size={16}
+                name={editItem?.is_active ? "checkmark-circle" : "pause-circle"}
+                size={18}
                 color={editItem?.is_active ? colors.semantic.success : colors.text.tertiary}
               />
-              <Text>{editItem?.is_active ? "Active" : "Inactive"}</Text>
+              <Text style={styles.toggleText}>
+                {editItem?.is_active ? "Active" : "Inactive"}
+              </Text>
             </Pressable>
 
-            <Pressable
-              style={styles.deleteBtn}
-              onPress={() => setConfirmDelete(editItem)}
-            >
-              <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
-              <Text style={styles.deleteText}>Remove from Project</Text>
-            </Pressable>
+            <View style={styles.dangerZone}>
+              <Pressable onPress={() => setConfirmDelete(editItem)} style={styles.deleteBtn}>
+                <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
+                <Text style={styles.deleteText}>Remove from Project</Text>
+              </Pressable>
+            </View>
 
             <View style={styles.modalActions}>
               <Pressable onPress={() => setEditItem(null)}>
@@ -255,7 +284,7 @@ export default function CostCodesOverview() {
         </View>
       </Modal>
 
-      {/* ---------- Delete Confirm ---------- */}
+      {/* ---------- DELETE CONFIRM ---------- */}
       <Modal visible={!!confirmDelete} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -276,28 +305,66 @@ export default function CostCodesOverview() {
         </View>
       </Modal>
 
-      {/* ---------- Add Modal ---------- */}
+      {/* ---------- ADD MODAL ---------- */}
       <Modal visible={addOpen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add Cost Code</Text>
+            <Text style={styles.modalTitle}>Add Cost Codes</Text>
+            <Text style={styles.modalSubtitle}>
+              Select one or more cost codes to add
+            </Text>
 
             <ScrollView style={{ maxHeight: 320 }}>
-              {availableCostCodes.map(cc => (
-                <Pressable
-                  key={cc.id}
-                  style={styles.modalItem}
-                  onPress={() => handleAdd(cc)}
-                >
-                  <Text style={styles.code}>{cc.code}</Text>
-                  <Text>{cc.name}</Text>
-                </Pressable>
-              ))}
+              {availableCostCodes.map(cc => {
+                const selected = selectedToAdd.has(cc.id);
+                return (
+                  <Pressable
+                    key={cc.id}
+                    style={[
+                      styles.selectRow,
+                      selected && styles.selectRowSelected,
+                    ]}
+                    onPress={() => toggleSelect(cc.id)}
+                  >
+                    <Ionicons
+                      name={selected ? "checkbox" : "square-outline"}
+                      size={18}
+                      color={selected ? colors.primary.orange : colors.text.tertiary}
+                    />
+                    <View>
+                      <Text style={styles.code}>{cc.code}</Text>
+                      <Text>{cc.name}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
 
-            <Pressable onPress={() => setAddOpen(false)}>
-              <Text style={styles.cancelText}>Close</Text>
-            </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => {
+                setSelectedToAdd(new Set());
+                setAddOpen(false);
+              }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.saveButton,
+                  selectedToAdd.size === 0 && styles.saveButtonDisabled,
+                ]}
+                disabled={selectedToAdd.size === 0 || saving}
+                onPress={handleBulkAdd}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>
+                    Add {selectedToAdd.size || ""} Cost Code{selectedToAdd.size === 1 ? "" : "s"}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -314,10 +381,15 @@ export default function CostCodesOverview() {
         ]}
         onPress={() => setEditItem({ ...pc })}
       >
+        <View style={styles.iconWrap}>
+          <Ionicons name="pricetag" size={20} color={colors.primary.orange} />
+        </View>
+
         <View style={{ flex: 1 }}>
           <Text style={styles.code}>{pc.cost_code.code}</Text>
           <Text style={styles.name}>{pc.cost_code.name}</Text>
 
+          {/* ✅ RESTORED METRICS */}
           <View style={styles.metricsRow}>
             <Metric icon="time-outline" label="Hours" value={pc.budgeted_hours} />
             <Metric icon="cash-outline" label="Labor" value={pc.budgeted_labor_cost} />
@@ -325,7 +397,15 @@ export default function CostCodesOverview() {
           </View>
         </View>
 
-        <View style={styles.statusPill}>
+        <View style={[
+          styles.statusPill,
+          pc.is_active ? styles.statusActive : styles.statusInactive
+        ]}>
+          <Ionicons
+            name={pc.is_active ? "checkmark-circle" : "pause-circle"}
+            size={14}
+            color={pc.is_active ? colors.semantic.success : colors.text.tertiary}
+          />
           <Text style={styles.statusText}>
             {pc.is_active ? "Active" : "Inactive"}
           </Text>
@@ -336,6 +416,34 @@ export default function CostCodesOverview() {
 }
 
 /* ---------- helpers ---------- */
+function LabeledInput({ label, value, focused, onFocus, onBlur, onChange }) {
+  return (
+    <View>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+        ]}
+        keyboardType="numeric"
+        value={value != null ? String(value) : ""}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onChangeText={v => onChange(Number(v) || null)}
+      />
+    </View>
+  );
+}
+
+function SectionHeader({ icon, text, color }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Ionicons name={icon} size={18} color={color} />
+      <Text style={[styles.sectionLabel, { color }]}>{text}</Text>
+    </View>
+  );
+}
+
 function Metric({ icon, label, value }) {
   return (
     <View style={styles.metric}>
@@ -343,23 +451,6 @@ function Metric({ icon, label, value }) {
       <Text style={styles.metricText}>
         {label}: {value ?? "—"}
       </Text>
-    </View>
-  );
-}
-
-function LabeledInput({ icon, label, value, onChange }) {
-  return (
-    <View>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={styles.inputRow}>
-        <Ionicons name={icon} size={16} color={colors.text.tertiary} />
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          value={value != null ? String(value) : ""}
-          onChangeText={v => onChange(Number(v) || null)}
-        />
-      </View>
     </View>
   );
 }
@@ -394,11 +485,15 @@ const styles = StyleSheet.create({
 
   list: { padding: spacing.lg, gap: spacing.sm },
 
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
   sectionLabel: {
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.text.tertiary,
-    marginTop: spacing.sm,
   },
 
   cardRow: {
@@ -413,38 +508,30 @@ const styles = StyleSheet.create({
   },
   cardRowHover: { borderColor: colors.primary.orange },
 
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary.orangeSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: spacing.sm,
+  },
+
   code: { color: colors.primary.orange, fontWeight: typography.fontWeight.semibold },
   name: { fontWeight: typography.fontWeight.medium },
 
-  metricsRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginTop: spacing.xs,
-  },
-  metric: { flexDirection: "row", gap: 4 },
-  metricText: { fontSize: typography.fontSize.xs, color: colors.text.secondary },
-
   statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.neutral.offWhite,
   },
+  statusActive: { backgroundColor: colors.semantic.successLight },
+  statusInactive: { backgroundColor: colors.neutral.offWhite },
   statusText: { fontSize: typography.fontSize.xs },
-
-  emptyState: { alignItems: "center", paddingVertical: spacing.xxxxl },
-  emptyTitle: { fontWeight: typography.fontWeight.semibold },
-  emptySubtitle: { color: colors.text.secondary },
-
-  errorBox: {
-    margin: spacing.lg,
-    padding: spacing.md,
-    backgroundColor: colors.semantic.errorLight,
-    borderRadius: borderRadius.md,
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  errorText: { color: colors.semantic.error },
 
   modalBackdrop: {
     flex: 1,
@@ -463,18 +550,26 @@ const styles = StyleSheet.create({
     ...shadows.xl,
   },
   modalTitle: { fontWeight: typography.fontWeight.semibold },
+  modalSubtitle: { color: colors.text.secondary },
+
+  modalSection: {
+    padding: spacing.md,
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.lg,
+    gap: spacing.sm,
+  },
 
   inputLabel: { fontSize: typography.fontSize.sm, color: colors.text.secondary },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+  input: {
     borderWidth: 1,
     borderColor: colors.border.light,
     borderRadius: borderRadius.md,
     padding: spacing.sm,
+    outlineStyle: "none",
   },
-  input: { flex: 1 },
+  inputFocused: {
+    borderColor: colors.primary.orange,
+  },
 
   toggle: {
     flexDirection: "row",
@@ -484,25 +579,73 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     backgroundColor: colors.neutral.offWhite,
   },
+  toggleText: { fontWeight: typography.fontWeight.medium },
 
+  dangerZone: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+    paddingTop: spacing.sm,
+  },
   deleteBtn: {
     flexDirection: "row",
     gap: spacing.xs,
-    marginTop: spacing.sm,
   },
   deleteText: { color: colors.semantic.error, fontWeight: typography.fontWeight.medium },
+
+  selectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  selectRowSelected: {
+    backgroundColor: colors.primary.orangeSubtle,
+  },
 
   modalActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: spacing.md,
+    marginTop: spacing.sm,
   },
   cancelText: { color: colors.text.secondary },
-  saveText: { color: colors.primary.orange, fontWeight: typography.fontWeight.semibold },
 
-  modalItem: {
+  saveButton: {
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary.orange,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontWeight: typography.fontWeight.semibold,
+  },
+
+  errorBox: {
+    margin: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.semantic.errorLight,
+    borderRadius: borderRadius.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  errorText: { color: colors.semantic.error },
+  metricsRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  metric: { 
+    flexDirection: "row",
+     gap: 4 
+  },
+  metricText: { 
+    fontSize: typography.fontSize.xs, 
+    color: colors.text.secondary 
   },
 });
