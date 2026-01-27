@@ -1,25 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, TextInput, } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
 import { useSession } from "../../../utils/ctx";
 import { useProject } from "../../components/projectComponents/projectContext";
-import {
-  getAllProjectCostCodes,
-  getCostCodes,
-  assignCostCodeToProject,
-  removeCostCodeFromProject,
-  updateProjectCostCodeBudget,
-} from "../../../utils/api";
+import { getAllProjectCostCodes, getCostCodes, assignCostCodeToProject, removeCostCodeFromProject, updateProjectCostCodeBudget, } from "../../../utils/api";
 
 /**
  * Project Cost Codes Overview
@@ -28,8 +14,10 @@ export default function CostCodesOverview() {
   const { session } = useSession();
   const token = session?.access_token;
 
-  const { selectedProject, selectedProjectId } = useProject();
-  const projectId = selectedProject?.id || selectedProjectId;
+const params = useLocalSearchParams();
+const projectIdFromQuery = params?.projectId;
+const { selectedProject, selectedProjectId } = useProject();
+const projectId = projectIdFromQuery || selectedProject?.id || selectedProjectId;
 
   const [loading, setLoading] = useState(true);
   const [projectCostCodes, setProjectCostCodes] = useState([]);
@@ -163,7 +151,16 @@ export default function CostCodesOverview() {
     setSaving(false);
   };
 
-  /* ---------------- Guards ---------------- */
+  /* ---------------- Loading Screen ---------------- */
+  if (!projectId) {
+    return (
+      <View style={styles.center}>
+        <Ionicons name="alert-circle-outline" size={32} color={colors.text.tertiary} />
+        <Text style={styles.loadingText}>No project selected</Text>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -214,7 +211,7 @@ export default function CostCodesOverview() {
         )}
       </ScrollView>
 
-      {/* ---------- EDIT MODAL ---------- */}
+      {/* ---------- Edit Modal ---------- */}
       <Modal visible={!!editItem} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -284,7 +281,7 @@ export default function CostCodesOverview() {
         </View>
       </Modal>
 
-      {/* ---------- DELETE CONFIRM ---------- */}
+      {/* ---------- Deletion Confirmation Modal ---------- */}
       <Modal visible={!!confirmDelete} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -305,7 +302,7 @@ export default function CostCodesOverview() {
         </View>
       </Modal>
 
-      {/* ---------- ADD MODAL ---------- */}
+      {/* ---------- Add Cost Code Modal ---------- */}
       <Modal visible={addOpen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -389,7 +386,6 @@ export default function CostCodesOverview() {
           <Text style={styles.code}>{pc.cost_code.code}</Text>
           <Text style={styles.name}>{pc.cost_code.name}</Text>
 
-          {/* ✅ RESTORED METRICS */}
           <View style={styles.metricsRow}>
             <Metric icon="time-outline" label="Hours" value={pc.budgeted_hours} />
             <Metric icon="cash-outline" label="Labor" value={pc.budgeted_labor_cost} />
@@ -415,7 +411,7 @@ export default function CostCodesOverview() {
   }
 }
 
-/* ---------- helpers ---------- */
+/* ---------- Helpers ---------- */
 function LabeledInput({ label, value, focused, onFocus, onBlur, onChange }) {
   return (
     <View>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname } from "expo-router";
+import { useRouter, usePathname, useLocalSearchParams } from "expo-router";
 import { useProjectTab } from "./projectTabContext";
 import { colors, spacing, borderRadius, typography } from "../../../constants/theme";
 
@@ -15,6 +15,9 @@ export default function ProjectTabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const { activeTab, setActiveTab } = useProjectTab();
+
+  const params = useLocalSearchParams();
+  const projectId = params?.projectId;
 
 useEffect(() => {
   if (!pathname) return;
@@ -32,7 +35,11 @@ useEffect(() => {
 
 function onPressTab(tab) {
   setActiveTab(tab.key);
-  router.push(tab.route);
+
+  router.push({
+    pathname: tab.route,
+    params: projectId ? { projectId } : {},
+  });
 }
 
   return (
