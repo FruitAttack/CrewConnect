@@ -14,7 +14,7 @@ import { colors, spacing, borderRadius, typography, shadows } from "../../../con
 import { useSession } from "../../../utils/ctx";
 import { useProject } from "../../components/projectComponents/projectContext";
 import {
-  getProjectCostCodes,
+  getAllProjectCostCodes,
   getCostCodes,
   assignCostCodeToProject,
   removeCostCodeFromProject,
@@ -47,7 +47,7 @@ export default function CostCodesOverview() {
       setError(null);
 
       const [assigned, all] = await Promise.all([
-        getProjectCostCodes(token, projectId),
+        getAllProjectCostCodes(token, projectId),
         getCostCodes(token),
       ]);
 
@@ -66,7 +66,7 @@ export default function CostCodesOverview() {
   }, [token, projectId]);
 
   const refreshAssigned = async () => {
-    const res = await getProjectCostCodes(token, projectId);
+    const res = await getAllProjectCostCodes(token, projectId);
     if (res.success) setProjectCostCodes(res.data || []);
   };
 

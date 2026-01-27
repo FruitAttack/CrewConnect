@@ -371,6 +371,11 @@ export async function getProjectCostCodes(token, projectId) {
   return apiCall(`projects/${projectId}/cost-codes`, token)
 }
 
+// Gets both active and inactive cost codes
+export async function getAllProjectCostCodes(token, projectId) {
+  return apiCall(`projects/${projectId}/cost-codes?active_only=false`, token);
+}
+
 export async function assignCostCodeToProject(token, projectId, data) {
   return apiCall(`projects/${projectId}/cost-codes`, token, 'POST', data)
 }
