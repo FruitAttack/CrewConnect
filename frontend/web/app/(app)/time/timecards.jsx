@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, RefreshControl, ActivityIndicator, TextInput, Platform, Modal, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../../utils/ctx';
-import { getTimeEntries, getUserProfile } from '../../../utils/api';
+import { getTimeEntries, getUserProfile, getTimecardApprovals, bulkUpdateTimecardApprovals } from '../../../utils/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 
 // Fixed widths for alignment - all columns use exact pixel widths
@@ -258,19 +258,31 @@ const ActionModal = ({ visible, onClose, selectedCount, onApprove, onReject, onR
                   <View style={modalStyles.actionText}><Text style={modalStyles.actionTitle}>Request Changes</Text><Text style={modalStyles.actionDesc}>Ask for corrections</Text></View>
                 </Pressable>
               </View>
-              <Pressable style={modalStyles.cancelBtn} onPress={resetAndClose} disabled={processing}><Text style={modalStyles.cancelText}>Cancel</Text></Pressable>
+              <Pressable style={modalStyles.cancelBtnFooter} onPress={resetAndClose} disabled={processing}>
+                <Text style={modalStyles.cancelText}>Cancel</Text>
+              </Pressable>
             </>
           )}
           {(step === 'reject' || step === 'changes') && (
             <>
               <View style={modalStyles.header}>
                 <Text style={modalStyles.title}>{step === 'reject' ? 'Reject Timecards' : 'Request Changes'}</Text>
+                <Text style={modalStyles.subtitle}>{selectedCount} employee{selectedCount !== 1 ? 's' : ''} selected</Text>
               </View>
               <View style={modalStyles.body}>
                 <Text style={modalStyles.noteLabel}>Add a note (optional)</Text>
-                <TextInput style={modalStyles.noteInput} placeholder="Enter reason or details..." placeholderTextColor={colors.text.tertiary} value={note} onChangeText={setNote} multiline />
+                <TextInput 
+                  style={modalStyles.noteInput} 
+                  placeholder="Enter reason or details..." 
+                  placeholderTextColor={colors.text.tertiary} 
+                  value={note} 
+                  onChangeText={setNote} 
+                  multiline 
+                />
                 <View style={modalStyles.noteActions}>
-                  <Pressable style={modalStyles.cancelBtn} onPress={() => { setStep('initial'); setNote(''); }} disabled={processing}><Text style={modalStyles.cancelBtnText}>Back</Text></Pressable>
+                  <Pressable style={modalStyles.backBtn} onPress={() => { setStep('initial'); setNote(''); }} disabled={processing}>
+                    <Text style={modalStyles.backBtnText}>Back</Text>
+                  </Pressable>
                   <Pressable style={[modalStyles.submitBtn, step === 'reject' && modalStyles.submitBtnReject]} onPress={step === 'reject' ? handleReject : handleRequestChanges} disabled={processing}>
                     {processing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={modalStyles.submitBtnText}>{step === 'reject' ? 'Reject' : 'Request Changes'}</Text>}
                   </Pressable>
@@ -279,14 +291,12 @@ const ActionModal = ({ visible, onClose, selectedCount, onApprove, onReject, onR
             </>
           )}
           {step === 'success' && (
-            <>
-              <View style={modalStyles.successBody}>
-                <View style={modalStyles.successIcon}><Ionicons name="checkmark-circle" size={48} color={activeColor} /></View>
-                <Text style={modalStyles.successTitle}>Success!</Text>
-                <Text style={modalStyles.successDesc}>You {successAction} {selectedCount} timecard{selectedCount !== 1 ? 's' : ''}.</Text>
-              </View>
+            <View style={modalStyles.successBody}>
+              <View style={modalStyles.successIcon}><Ionicons name="checkmark-circle" size={48} color={activeColor} /></View>
+              <Text style={modalStyles.successTitle}>Success!</Text>
+              <Text style={modalStyles.successDesc}>You {successAction} {selectedCount} timecard{selectedCount !== 1 ? 's' : ''}.</Text>
               <Pressable style={modalStyles.doneBtn} onPress={resetAndClose}><Text style={modalStyles.doneBtnText}>Done</Text></Pressable>
-            </>
+            </View>
           )}
         </View>
       </View>
@@ -297,7 +307,7 @@ const ActionModal = ({ visible, onClose, selectedCount, onApprove, onReject, onR
 const modalStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modal: { backgroundColor: colors.neutral.white, borderRadius: 12, width: '100%', maxWidth: 400, ...shadows.xl },
+  modal: { backgroundColor: colors.neutral.white, borderRadius: 12, width: '100%', maxWidth: 400, overflow: 'hidden', ...shadows.xl },
   header: { padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border.light },
   title: { fontSize: 18, fontWeight: '600', color: colors.text.primary },
   subtitle: { fontSize: 13, color: colors.text.tertiary, marginTop: 4 },
@@ -306,19 +316,20 @@ const modalStyles = StyleSheet.create({
   actionText: { flex: 1 },
   actionTitle: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
   actionDesc: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.medium, alignItems: 'center' },
-  cancelText: { fontSize: 14, fontWeight: '600', color: colors.text.primary, textAlign: 'center', paddingVertical: 14 },
+  cancelBtnFooter: { paddingVertical: 16, borderTopWidth: 1, borderTopColor: colors.border.light, alignItems: 'center' },
+  cancelText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary },
   successBody: { padding: 32, alignItems: 'center' },
   successIcon: { marginBottom: 16 },
   successTitle: { fontSize: 20, fontWeight: '600', color: colors.text.primary, marginBottom: 8 },
   successDesc: { fontSize: 14, color: colors.text.secondary, textAlign: 'center' },
-  doneBtn: { paddingHorizontal: 32, paddingVertical: 10, backgroundColor: colors.primary.orange, borderRadius: 8 },
+  doneBtn: { marginTop: 8, paddingHorizontal: 32, paddingVertical: 12, backgroundColor: colors.primary.orange, borderRadius: 8 },
   doneBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   noteLabel: { fontSize: 14, color: colors.text.secondary, marginBottom: 10 },
   noteInput: { borderWidth: 1, borderColor: colors.border.light, borderRadius: 8, padding: 12, fontSize: 14, color: colors.text.primary, minHeight: 100, textAlignVertical: 'top', marginBottom: 16 },
   noteActions: { flexDirection: 'row', gap: 10 },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
-  submitBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.semantic.warning, alignItems: 'center' },
+  backBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.medium, alignItems: 'center', justifyContent: 'center' },
+  backBtnText: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
+  submitBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.semantic.warning, alignItems: 'center', justifyContent: 'center' },
   submitBtnReject: { backgroundColor: colors.semantic.error },
   submitBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
@@ -418,9 +429,29 @@ export default function Timecards() {
     try {
       setError(null);
       const { startDate, endDate } = view === 'week' ? getWeekRange(selectedDate) : { startDate: selectedDate, endDate: selectedDate };
-      const response = await getTimeEntries(token, companyId, { start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0], all_users: 'true' });
-      if (response.success && response.data?.time_entries !== undefined) setTimeEntries(response.data.time_entries);
-      else setError(response.message || 'Failed to load time entries');
+      const weekStartStr = startDate.toISOString().split('T')[0];
+      
+      // Fetch both time entries and approvals in parallel
+      const [entriesResponse, approvalsResponse] = await Promise.all([
+        getTimeEntries(token, companyId, { start_date: weekStartStr, end_date: endDate.toISOString().split('T')[0], all_users: 'true' }),
+        getTimecardApprovals(token, companyId, weekStartStr),
+      ]);
+      
+      if (entriesResponse.success && entriesResponse.data?.time_entries !== undefined) {
+        setTimeEntries(entriesResponse.data.time_entries);
+      } else {
+        setError(entriesResponse.message || 'Failed to load time entries');
+      }
+      
+      // Load approvals into state
+      if (approvalsResponse.success && Array.isArray(approvalsResponse.data)) {
+        const statusMap = {};
+        approvalsResponse.data.forEach(approval => {
+          const statusKey = `${approval.user_id}_${approval.week_start}`;
+          statusMap[statusKey] = approval.status;
+        });
+        setEmployeeStatuses(prev => ({ ...prev, ...statusMap }));
+      }
     } catch (err) { setError('Failed to load time entries'); }
     finally { setLoading(false); setRefreshing(false); }
   }, [token, companyId, selectedDate, view, getWeekRange]);
@@ -498,39 +529,76 @@ export default function Timecards() {
     else setSelectedEmployees(new Set(filteredEmployees.map(e => e.id)));
   };
 
-  const updateStatuses = (status) => {
-    const newStatuses = { ...employeeStatuses };
-    selectedEmployees.forEach(id => { 
-      // Key by employee ID + week
-      const statusKey = `${id}_${currentWeekKey}`;
-      newStatuses[statusKey] = status; 
+  const updateStatuses = async (status, notes = null) => {
+    const { startDate, endDate } = getWeekRange(selectedDate);
+    const weekStart = startDate.toISOString().split('T')[0];
+    const weekEnd = endDate.toISOString().split('T')[0];
+    
+    console.log('Updating timecard approvals:', {
+      company_id: companyId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      user_ids: Array.from(selectedEmployees),
+      status,
+      notes,
     });
-    setEmployeeStatuses(newStatuses);
+    
+    // Save to database
+    const response = await bulkUpdateTimecardApprovals(token, {
+      company_id: companyId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      user_ids: Array.from(selectedEmployees),
+      status,
+      notes,
+    });
+    
+    console.log('Approval response:', response);
+    
+    if (response.success) {
+      // Update local state
+      const newStatuses = { ...employeeStatuses };
+      selectedEmployees.forEach(id => { 
+        const statusKey = `${id}_${currentWeekKey}`;
+        newStatuses[statusKey] = status; 
+      });
+      setEmployeeStatuses(newStatuses);
+      return true;
+    } else {
+      console.error('Failed to update approvals:', response.message);
+      alert('Failed to save approval: ' + (response.message || 'Unknown error'));
+      return false;
+    }
   };
 
   const handleApprove = async () => { 
     setProcessing(true); 
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
-    updateStatuses('approved');
-    setProcessing(false); 
+    const success = await updateStatuses('approved');
+    setProcessing(false);
+    if (!success) {
+      // Show error - could add an alert here
+      console.error('Failed to approve timecards');
+    }
   };
   
   const handleReject = async (note) => { 
     setProcessing(true); 
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
-    updateStatuses('rejected');
+    const success = await updateStatuses('rejected', note);
     setProcessing(false); 
-    setShowActionModal(false); 
-    setSelectedEmployees(new Set()); 
+    if (success) {
+      setShowActionModal(false); 
+      setSelectedEmployees(new Set()); 
+    }
   };
   
   const handleRequestChanges = async (note) => { 
     setProcessing(true); 
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
-    updateStatuses('pending_changes');
+    const success = await updateStatuses('pending_changes', note);
     setProcessing(false); 
-    setShowActionModal(false); 
-    setSelectedEmployees(new Set()); 
+    if (success) {
+      setShowActionModal(false); 
+      setSelectedEmployees(new Set()); 
+    }
   };
   
   const handleModalClose = () => { 

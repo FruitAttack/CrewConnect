@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
 import { getActiveRoster, getCostCodes, getUserProfile, getTimeEntries } from '../../../utils/api';
+import { calculateHoursInRange } from '../../../utils/timeUtils';
 import { colors, shadows } from '../../../constants/theme';
 
 const COLORS = {
@@ -164,23 +165,10 @@ export default function WorkforceOverview() {
     
     return { 
       startOfWeek: formatDate(startOfWeek), 
-      endOfWeek: formatDate(endOfWeek) 
+      endOfWeek: formatDate(endOfWeek),
+      startDate: startOfWeek,
+      endDate: endOfWeek,
     };
-  };
-
-  // Calculate hours from time entries
-  const calculateHours = (entries) => {
-    let totalMinutes = 0;
-    entries.forEach(entry => {
-      if (entry.clock_in) {
-        const clockIn = new Date(entry.clock_in);
-        const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
-        const minutes = (clockOut - clockIn) / 60000;
-        const breakMinutes = entry.break_minutes || 0;
-        totalMinutes += Math.max(0, minutes - breakMinutes);
-      }
-    });
-    return totalMinutes / 60;
   };
 
   async function load() {
@@ -192,7 +180,7 @@ export default function WorkforceOverview() {
       setCompanyId(cid);
 
       if (cid) {
-        const { startOfWeek, endOfWeek } = getWeekRange();
+        const { startOfWeek, endOfWeek, startDate, endDate } = getWeekRange();
         
         const [rosterRes, ccRes, timeRes] = await Promise.all([
           getActiveRoster(token, cid),
@@ -204,8 +192,6 @@ export default function WorkforceOverview() {
           }).catch((err) => { console.error('Time entries error:', err); return { data: [] }; }),
         ]);
         
-        console.log('Time entries response:', timeRes);
-        
         const rosterData = rosterRes?.data?.roster || [];
         setRoster(rosterData);
         const users = rosterData.map(r => ({ 
@@ -216,10 +202,9 @@ export default function WorkforceOverview() {
         setEmployees(users);
         setCostCodes(ccRes?.data || []);
         
-        // Calculate weekly hours - data is directly in timeRes.data (not timeRes.data.entries)
+        // Calculate weekly hours using the utility that handles midnight splits
         const entries = timeRes?.data || [];
-        console.log('Entries for calculation:', entries.length);
-        const hours = calculateHours(Array.isArray(entries) ? entries : []);
+        const hours = calculateHoursInRange(Array.isArray(entries) ? entries : [], startDate, endDate);
         setWeeklyHours(hours);
       }
     } catch (err) {
@@ -233,7 +218,7 @@ export default function WorkforceOverview() {
     if (!companyId || !token) return;
     setRefreshing(true);
     try {
-      const { startOfWeek, endOfWeek } = getWeekRange();
+      const { startOfWeek, endOfWeek, startDate, endDate } = getWeekRange();
       
       const [rosterRes, ccRes, timeRes] = await Promise.all([
         getActiveRoster(token, companyId),
@@ -256,7 +241,7 @@ export default function WorkforceOverview() {
       setCostCodes(ccRes?.data || []);
       
       const entries = timeRes?.data || [];
-      const hours = calculateHours(Array.isArray(entries) ? entries : []);
+      const hours = calculateHoursInRange(Array.isArray(entries) ? entries : [], startDate, endDate);
       setWeeklyHours(hours);
     } finally {
       setRefreshing(false);
