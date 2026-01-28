@@ -48,6 +48,11 @@ export default function AppLayout() {
     laborOverview: "Project Labor",
     costCodesOverview: "Project Cost Codes",
     
+    // Form sub-pages
+    form: "Forms",
+    formsOverview: "Forms",
+    submissions: "Submissions",
+    
     // Other
     company: "Company",
   };

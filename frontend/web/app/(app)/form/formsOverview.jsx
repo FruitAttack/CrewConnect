@@ -6,7 +6,7 @@ import { getForms } from "../../../utils/api";
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
 import { useFormTab } from "../../components/formTabComponents/formTabContext";
 import FormModal from "../../components/formComponents/formModal";
-import { createForm, getForms as fetchFormsApi, seedForms, seedFormSubmissions } from "../../../utils/api";
+import { createForm, getForms as fetchFormsApi } from "../../../utils/api";
 
 export default function FormsOverview() {
 	const { session } = useSession();
@@ -126,35 +126,6 @@ export default function FormsOverview() {
 		}
 	};
 
-	const handleSeed = async () => {
-		try {
-			const response = await seedForms(token);
-			if (response.success) {
-				setError(null);
-				await fetchForms();
-				alert("Forms seeded successfully!");
-			} else {
-				setError(response.message || "Failed to seed forms");
-			}
-		} catch (err) {
-			setError("Failed to seed forms");
-		}
-	};
-
-	const handleSeedSubmissions = async () => {
-		try {
-			const response = await seedFormSubmissions(token);
-			if (response.success) {
-				setError(null);
-				alert("Form submissions seeded successfully!");
-			} else {
-				setError(response.message || "Failed to seed submissions");
-			}
-		} catch (err) {
-			setError("Failed to seed submissions");
-		}
-	};
-
 	return (
 		<ScrollView
 			style={styles.container}
@@ -166,22 +137,6 @@ export default function FormsOverview() {
 				<View>
 					<Text style={styles.pageTitle}>Forms Management</Text>
 					<Text style={styles.subtitle}>Manage templates and see key details from your library.</Text>
-				</View>
-				<View style={styles.seedButtonGroup}>
-					<Pressable 
-						style={styles.seedButton}
-						onPress={handleSeed}
-						disabled={loading}
-					>
-						<Text style={styles.seedButtonText}>{loading ? "..." : "Seed"}</Text>
-					</Pressable>
-					<Pressable 
-						style={styles.seedButton}
-						onPress={handleSeedSubmissions}
-						disabled={loading}
-					>
-						<Text style={styles.seedButtonText}>{loading ? "..." : "Seed Data"}</Text>
-					</Pressable>
 				</View>
 			</View>
 
@@ -329,21 +284,6 @@ const styles = StyleSheet.create({
 		marginBottom: spacing.xs,
 	},
 	subtitle: { fontSize: typography.fontSize.md, color: colors.text.secondary },
-	seedButtonGroup: {
-		flexDirection: 'column',
-		gap: spacing.sm,
-	},
-	seedButton: {
-		backgroundColor: colors.semantic.info,
-		paddingHorizontal: spacing.md,
-		paddingVertical: spacing.sm,
-		borderRadius: borderRadius.md,
-	},
-	seedButtonText: {
-		color: 'white',
-		fontSize: typography.fontSize.sm,
-		fontWeight: typography.fontWeight.semibold,
-	},
 
 	statsRow: {
 		flexDirection: 'row',
