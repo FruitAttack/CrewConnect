@@ -19,7 +19,15 @@ import {
   typography,
   shadows,
 } from "../../../constants/theme";
-import { getAllProjectCostCodes } from "../../../utils/api";
+import {
+  getAllProjectCostCodes,
+  getTimeEntries,
+  getUserProfile,
+} from "../../../utils/api";
+
+/* -------------------------------------------------------------------------- */
+/* Layout helpers                                                              */
+/* -------------------------------------------------------------------------- */
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CARD_GAP = spacing.md;
@@ -28,15 +36,29 @@ const CARD_WIDTH =
   (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) /
   NUM_COLUMNS;
 
+/* -------------------------------------------------------------------------- */
+/* Math helpers                                                                */
+/* -------------------------------------------------------------------------- */
+
+function hoursBetween(clockIn, clockOut, breakMinutes = 0) {
+  if (!clockIn || !clockOut) return 0;
+  const ms = new Date(clockOut) - new Date(clockIn);
+  return Math.max(0, ms / 36e5 - breakMinutes / 60);
+}
+
 function percent(value, max) {
   if (!max || max <= 0) return "0%";
   return `${Math.min(100, (value / max) * 100)}%`;
 }
 
 function currency(n) {
-  if (!n) return "$0";
+  if (!n || isNaN(n)) return "$0";
   return `$${n.toFixed(2)}`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Bars                                                                        */
+/* -------------------------------------------------------------------------- */
 
 function BarGroup({ icon, label, actual, budget, unit, muted }) {
   const max = Math.max(actual, budget, 1);
@@ -50,24 +72,19 @@ function BarGroup({ icon, label, actual, budget, unit, muted }) {
             size={14}
             color={muted ? colors.text.tertiary : colors.text.secondary}
           />
-          <Text
-            style={[
-              styles.barLabel,
-              muted && { color: colors.text.tertiary },
-            ]}
-          >
+          <Text style={[styles.barLabel, muted && styles.muted]}>
             {label}
           </Text>
         </View>
 
-        <Text
-          style={[
-            styles.barValue,
-            muted && { color: colors.text.tertiary },
-          ]}
-        >
-          {unit === "currency" ? currency(actual) : `${actual}h`} /{" "}
-          {unit === "currency" ? currency(budget) : `${budget}h`}
+        <Text style={[styles.barValue, muted && styles.muted]}>
+          {unit === "currency"
+            ? currency(actual)
+            : `${actual.toFixed(1)}h`}{" "}
+          /{" "}
+          {unit === "currency"
+            ? currency(budget)
+            : `${budget.toFixed(1)}h`}
         </Text>
       </View>
 
@@ -91,7 +108,10 @@ function BarGroup({ icon, label, actual, budget, unit, muted }) {
   );
 }
 
-// A laborCard component that shows the graphs, actuals, and budgets for labor cost and hours
+/* -------------------------------------------------------------------------- */
+/* Card                                                                        */
+/* -------------------------------------------------------------------------- */
+
 function LaborCard({ item }) {
   const inactive = !item.is_active;
 
@@ -105,11 +125,7 @@ function LaborCard({ item }) {
     >
       <View style={styles.cardHeader}>
         <View style={styles.iconBadge}>
-          <Ionicons
-            name="pricetag"
-            size={16}
-            color={colors.primary.orange}
-          />
+          <Ionicons name="pricetag" size={16} color={colors.primary.orange} />
         </View>
 
         <View style={{ flex: 1 }}>
@@ -119,11 +135,7 @@ function LaborCard({ item }) {
 
         {inactive && (
           <View style={styles.inactivePill}>
-            <Ionicons
-              name="pause-circle"
-              size={14}
-              color={colors.text.tertiary}
-            />
+            <Ionicons name="pause-circle" size={14} color={colors.text.tertiary} />
             <Text style={styles.inactiveText}>Inactive</Text>
           </View>
         )}
@@ -132,7 +144,7 @@ function LaborCard({ item }) {
       <BarGroup
         icon="time-outline"
         label="Labor Hours"
-        actual={0}
+        actual={item.actual_hours}
         budget={item.budgeted_hours || 0}
         unit="hours"
         muted={inactive}
@@ -141,7 +153,7 @@ function LaborCard({ item }) {
       <BarGroup
         icon="cash-outline"
         label="Labor Cost"
-        actual={0}
+        actual={item.actual_cost}
         budget={item.budgeted_labor_cost || 0}
         unit="currency"
         muted={inactive}
@@ -149,6 +161,10 @@ function LaborCard({ item }) {
     </Pressable>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Main                                                                        */
+/* -------------------------------------------------------------------------- */
 
 export default function LaborOverview() {
   const { session } = useSession();
@@ -160,51 +176,104 @@ export default function LaborOverview() {
     params?.projectId || selectedProject?.id || selectedProjectId;
 
   const [loading, setLoading] = useState(true);
+  const [companyId, setCompanyId] = useState(null);
   const [costCodes, setCostCodes] = useState([]);
+  const [timeEntries, setTimeEntries] = useState([]);
   const [error, setError] = useState(null);
 
+  /* ---------------- Company ---------------- */
+
   useEffect(() => {
-    if (!token || !projectId) return;
+    if (!token) return;
+
+    async function loadCompany() {
+      const res = await getUserProfile(token);
+      setCompanyId(res?.data?.user?.default_company_id || null);
+    }
+
+    loadCompany();
+  }, [token]);
+
+  /* ---------------- Load Data ---------------- */
+
+  useEffect(() => {
+    if (!token || !projectId || !companyId) return;
 
     async function load() {
       setLoading(true);
       setError(null);
 
-      const res = await getAllProjectCostCodes(token, projectId);
+      const [ccRes, teRes] = await Promise.all([
+        getAllProjectCostCodes(token, projectId),
+        getTimeEntries(token, companyId, {
+          project_id: projectId,
+          start_date: selectedProject?.created_at?.split("T")[0],
+          end_date: new Date().toISOString().split("T")[0],
+          all_users: "true",
+        }),
+      ]);
 
-      if (!res?.success) {
-        setError(res?.message || "Failed to load labor data");
+      if (!ccRes.success) {
+        setError(ccRes.message || "Failed to load cost codes");
         setLoading(false);
         return;
       }
 
-      setCostCodes(res.data || []);
+      setCostCodes(ccRes.data || []);
+      setTimeEntries(teRes.success ? teRes.data?.time_entries || [] : []);
       setLoading(false);
     }
 
     load();
-  }, [token, projectId]);
+  }, [token, projectId, companyId]);
 
-  const active = useMemo(
-    () => costCodes.filter(c => c.is_active),
-    [costCodes]
-  );
-  const inactive = useMemo(
-    () => costCodes.filter(c => !c.is_active),
-    [costCodes]
-  );
+  /* ---------------- Aggregate ---------------- */
 
-  /* ----------------------------- Loading Animation ---------------------------- */
+  const computed = useMemo(() => {
+  const map = {};
+
+  for (const pc of costCodes) {
+    const companyCostCodeId = pc.cost_code?.id;
+    if (!companyCostCodeId) continue;
+
+    map[companyCostCodeId] = {
+      ...pc,
+      actual_hours: 0,
+      actual_cost: 0,
+    };
+  }
+
+  for (const entry of timeEntries) {
+    const bucket = map[entry.cost_code_id];
+    if (!bucket) continue;
+
+    const hours = hoursBetween(
+      entry.clock_in,
+      entry.clock_out,
+      entry.break_minutes
+    );
+
+    const rate =
+      entry.hourly_rate ??
+      entry.salary_rate ??
+      0;
+
+    bucket.actual_hours += hours;
+    bucket.actual_cost += hours * rate;
+  }
+
+  return Object.values(map);
+}, [costCodes, timeEntries]);
+
+  const active = computed.filter(c => c.is_active);
+  const inactive = computed.filter(c => !c.is_active);
+
+  /* ---------------- UI ---------------- */
 
   if (!projectId) {
     return (
       <View style={styles.center}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={32}
-          color={colors.text.tertiary}
-        />
-        <Text style={styles.loadingText}>No project selected</Text>
+        <Text>No project selected</Text>
       </View>
     );
   }
@@ -218,11 +287,8 @@ export default function LaborOverview() {
     );
   }
 
-  /* ---------------------------------- UI ---------------------------------- */
-
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Labor Overview</Text>
         <Text style={styles.subtitle}>
@@ -230,19 +296,13 @@ export default function LaborOverview() {
         </Text>
       </View>
 
-      {/* Error message */}
       {error && (
         <View style={styles.errorBox}>
-          <Ionicons
-            name="alert-circle"
-            size={18}
-            color={colors.semantic.error}
-          />
+          <Ionicons name="alert-circle" size={18} color={colors.semantic.error} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-      
-      {/* All the project cost codes with budgets and actuals */}
+
       <ScrollView contentContainerStyle={styles.content}>
         {active.length > 0 && (
           <>
@@ -270,58 +330,31 @@ export default function LaborOverview() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface.background,
-  },
+/* -------------------------------------------------------------------------- */
+/* Styles                                                                      */
+/* -------------------------------------------------------------------------- */
 
-  /* Header */
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface.background },
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    padding: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
-    backgroundColor: colors.surface.background,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: colors.text.primary,
-  },
-  subtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.text.tertiary,
-    marginTop: 4,
-  },
-  content: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  loadingText: {
-    color: colors.text.tertiary,
-  },
+  title: { fontSize: 26, fontWeight: "700", color: colors.text.primary },
+  subtitle: { marginTop: 4, color: colors.text.tertiary },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  loadingText: { marginTop: 8, color: colors.text.tertiary },
+
   section: {
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.text.primary,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: CARD_GAP,
   },
 
-  /* Card */
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: CARD_GAP },
+
   card: {
     width: CARD_WIDTH,
     backgroundColor: colors.neutral.white,
@@ -336,9 +369,8 @@ const styles = StyleSheet.create({
     borderColor: colors.primary.orange,
     ...shadows.lg,
   },
-  cardInactive: {
-    opacity: 0.85,
-  },
+  cardInactive: { opacity: 0.85 },
+
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -353,82 +385,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  code: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.tertiary,
-    fontWeight: typography.fontWeight.semibold,
-  },
-  name: {
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.text.primary,
-  },
-  inactivePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  inactiveText: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.tertiary,
-  },
+  code: { fontSize: 12, color: colors.text.tertiary },
+  name: { fontSize: 15, fontWeight: "600" },
 
-  /* Bars */
-  barGroup: {
-    marginTop: spacing.sm,
-  },
-  barHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  barLabelWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  barLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.secondary,
-  },
-  barValue: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.text.primary,
-  },
+  inactivePill: { flexDirection: "row", gap: 6 },
+  inactiveText: { fontSize: 11, color: colors.text.tertiary },
+
+  barGroup: { marginTop: spacing.sm },
+  barHeader: { flexDirection: "row", justifyContent: "space-between" },
+  barLabelWrap: { flexDirection: "row", gap: 6 },
+  barLabel: { fontSize: 12 },
+  barValue: { fontSize: 12, fontWeight: "500" },
   barTrack: {
+    marginTop: 4,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.neutral.offWhite,
     overflow: "hidden",
   },
-  barBudget: {
-    position: "absolute",
-    height: "100%",
-    backgroundColor: colors.primary.orangeSubtle,
-  },
-  barActual: {
-    height: "100%",
-    backgroundColor: colors.primary.orange,
-  },
-  barBudgetMuted: {
-    backgroundColor: colors.neutral.offWhite,
-  },
-  barActualMuted: {
-    backgroundColor: colors.border.light,
-  },
+  barBudget: { position: "absolute", height: "100%", backgroundColor: colors.primary.orangeSubtle },
+  barActual: { height: "100%", backgroundColor: colors.primary.orange },
+  barBudgetMuted: { backgroundColor: colors.neutral.offWhite },
+  barActualMuted: { backgroundColor: colors.border.light },
 
-  /* Error */
+  muted: { color: colors.text.tertiary },
+
   errorBox: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    margin: spacing.lg,
     padding: spacing.sm,
     backgroundColor: colors.semantic.errorLight,
     borderRadius: borderRadius.md,
     flexDirection: "row",
     gap: spacing.sm,
   },
-  errorText: {
-    color: colors.semantic.error,
-  },
+  errorText: { color: colors.semantic.error },
 });
