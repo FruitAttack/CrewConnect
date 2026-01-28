@@ -119,9 +119,22 @@ export default function FormsOverview() {
 				visible={createOpen}
 				onClose={() => setCreateOpen(false)}
 				token={token}
-				onCreated={(newForm) => {
-					setForms(prev => [...prev, newForm]);
+				onCreated={async (newForm) => {
+					setLoading(true);
 					setCreateOpen(false);
+					setError(null);
+					try {
+						const response = await import("../../../utils/api").then(m => m.createForm(token, newForm));
+						if (response.success) {
+							await fetchForms();
+						} else {
+							setError(response.message || "Failed to create form");
+						}
+					} catch (err) {
+						setError("Failed to create form");
+					} finally {
+						setLoading(false);
+					}
 				}}
 			/>
 		</ScrollView>

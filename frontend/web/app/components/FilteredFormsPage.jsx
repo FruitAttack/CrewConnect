@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getAllSubmissions, getFormById } from "../../utils/sampleForms";
+import FilteredFormSubmissionsPage from "./FilteredFormSubmissionsPage";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
 
 /**
- * Reusable Forms Page - displays form submissions filtered by context
+ * Filtered Forms Page - displays all forms with submission statistics
+ * Clicking a form row navigates to FilteredFormSubmissionsPage
  * 
  * @param {object} filter - Filter configuration
  * @param {string} filter.type - "all" | "project" | "equipment" | "user" | "vehicle" | "customer" | "costCode" | "form"
@@ -13,10 +15,9 @@ import { colors, spacing, borderRadius, typography, shadows } from "../../consta
  * @param {string} filter.name - Display name for the filter context
  */
 export default function FilteredFormsPage({ filter = { type: "all" } }) {
-  const [viewType, setViewType] = useState("table"); // "graph", "donut", "table"
   const [submissions, setSubmissions] = useState([]);
-  const [formGroups, setFormGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedForm, setSelectedForm] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -38,93 +39,29 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     }
     
     setSubmissions(filtered);
-    
-    // Group submissions by form and get schemas
-    const grouped = groupSubmissionsByForm(filtered);
-    setFormGroups(grouped);
-    
     setLoading(false);
   }, [filter]);
 
-  const groupSubmissionsByForm = (submissions) => {
-    // Group by formId
-    const groups = {};
-    submissions.forEach((sub) => {
-      if (!groups[sub.formId]) {
-        groups[sub.formId] = [];
-      }
-      groups[sub.formId].push(sub);
-    });
-
-    // Get schema for each form and create group objects
-    return Object.keys(groups).map((formId) => {
-      const formSchema = getFormById(formId);
-      return {
-        formId,
-        formTitle: formSchema?.title || "Unknown Form",
-        formIcon: formSchema?.icon || "📄",
-        schema: formSchema,
-        submissions: groups[formId],
-      };
-    });
-  };
-
-  const renderViewToggle = () => (
-    <View style={styles.viewToggle}>
-      <Pressable
-        style={[styles.toggleButton, viewType === "table" && styles.toggleButtonActive]}
-        onPress={() => setViewType("table")}
-      >
-        <Ionicons 
-          name="list" 
-          size={18} 
-          color={viewType === "table" ? colors.primary.orange : colors.text.secondary} 
-        />
-        <Text style={[styles.toggleText, viewType === "table" && styles.toggleTextActive]}>
-          Table
-        </Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.toggleButton, viewType === "graph" && styles.toggleButtonActive]}
-        onPress={() => setViewType("graph")}
-      >
-        <Ionicons 
-          name="bar-chart" 
-          size={18} 
-          color={viewType === "graph" ? colors.primary.orange : colors.text.secondary} 
-        />
-        <Text style={[styles.toggleText, viewType === "graph" && styles.toggleTextActive]}>
-          Graph
-        </Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.toggleButton, viewType === "donut" && styles.toggleButtonActive]}
-        onPress={() => setViewType("donut")}
-      >
-        <Ionicons 
-          name="pie-chart" 
-          size={18} 
-          color={viewType === "donut" ? colors.primary.orange : colors.text.secondary} 
-        />
-        <Text style={[styles.toggleText, viewType === "donut" && styles.toggleTextActive]}>
-          Donut
-        </Text>
-      </Pressable>
-    </View>
-  );
+  // If a form is selected, show the submissions page
+  if (selectedForm) {
+    return (
+      <FilteredFormSubmissionsPage 
+        formSubmissions={selectedForm}
+        onBack={() => setSelectedForm(null)}
+      />
+    );
+  }
 
   const renderTableView = () => {
     if (submissions.length === 0) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="document-outline" size={48} color={colors.text.tertiary} />
-          <Text style={styles.emptyTitle}>No submissions found</Text>
+          <Text style={styles.emptyTitle}>No forms found</Text>
           <Text style={styles.emptySubtitle}>
             {filter.type === "all" 
               ? "No form submissions yet" 
-              : `No submissions for this ${filter.type}`}
+              : `No forms for this ${filter.type}`}
           </Text>
         </View>
       );
@@ -132,27 +69,15 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
 
     return (
       <ScrollView style={styles.scrollContainer}>
-        {formGroups.map((group) => (
-          <FormTable key={group.formId} group={group} />
-        ))}
+        <FormsTableView submissions={submissions} onSelectForm={setSelectedForm} />
       </ScrollView>
     );
   };
 
-  const renderPlaceholder = (type) => (
-    <View style={styles.placeholderContainer}>
-      <Ionicons name="construct-outline" size={64} color={colors.text.tertiary} />
-      <Text style={styles.placeholderTitle}>{type} View Coming Soon</Text>
-      <Text style={styles.placeholderSubtitle}>
-        This view is under development. Use Table view for now.
-      </Text>
-    </View>
-  );
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading submissions...</Text>
+        <Text style={styles.loadingText}>Loading forms...</Text>
       </View>
     );
   }
@@ -162,45 +87,49 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.pageTitle}>Form Submissions</Text>
+          <Text style={styles.pageTitle}>Forms</Text>
           <Text style={styles.subtitle}>
             {filter.type === "all" 
-              ? "All form submissions" 
-              : `Submissions for ${filter.name || filter.type}`}
+              ? "All forms" 
+              : `Forms for ${filter.name || filter.type}`}
           </Text>
         </View>
-        {renderViewToggle()}
       </View>
 
-      {/* Stats Summary */}
+      {/* Stats Summary - Forms-specific stats */}
       <View style={styles.statsRow}>
+        <StatCard 
+          icon="albums" 
+          label="Total Forms" 
+          value={new Set(submissions.map(s => s.formId)).size} 
+          bg={colors.primary.orangeSubtle} 
+          color={colors.primary.orange} 
+        />
+
         <StatCard 
           icon="document-text" 
           label="Total Submissions" 
           value={submissions.length} 
-          bg={colors.primary.orangeSubtle} 
-          color={colors.primary.orange} 
+          bg={colors.semantic.successLight} 
+          color={colors.semantic.success}
         />
+
         <StatCard 
-          icon="albums" 
-          label="Unique Forms" 
-          value={new Set(submissions.map(s => s.formId)).size} 
+          icon="calendar" 
+          label="Submissions this Week" 
+          value={submissions.filter(s => {
+            const submittedDate = new Date(s.submittedAt);
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            return submittedDate >= weekAgo;
+          }).length} 
           bg={colors.semantic.infoLight} 
           color={colors.semantic.info} 
         />
-        <StatCard 
-          icon="people" 
-          label="Contributors" 
-          value={new Set(submissions.map(s => s.submittedBy)).size} 
-          bg={colors.semantic.successLight} 
-          color={colors.semantic.success} 
-        />
       </View>
 
-      {/* Content based on view type */}
-      {viewType === "table" && renderTableView()}
-      {viewType === "graph" && renderPlaceholder("Graph")}
-      {viewType === "donut" && renderPlaceholder("Donut Chart")}
+      {/* Content */}
+      {renderTableView()}
     </View>
   );
 }
@@ -219,7 +148,7 @@ function StatCard({ icon, label, value, bg, color }) {
   );
 }
 
-function FormTable({ group }) {
+function FormsTableView({ submissions, onSelectForm }) {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", { 
@@ -230,88 +159,89 @@ function FormTable({ group }) {
     });
   };
 
-  const getFieldValue = (submission, fieldId) => {
-    const value = submission.data[fieldId];
-    if (Array.isArray(value)) {
-      return value.join(", ");
+  // Group submissions by form
+  const formGroups = {};
+  submissions.forEach((sub) => {
+    if (!formGroups[sub.formId]) {
+      formGroups[sub.formId] = {
+        formId: sub.formId,
+        submissions: [],
+        schema: getFormById(sub.formId),
+      };
     }
-    return value || "-";
-  };
-
-  // Get first 4 most important fields to display as columns
-  const displayFields = group.schema?.fields?.slice(0, 4) || [];
+    formGroups[sub.formId].submissions.push(sub);
+  });
 
   return (
     <View style={styles.formTableContainer}>
-      {/* Form Header */}
-      <View style={styles.formTableTitleRow}>
-        <Text style={styles.formTableIcon}>{group.formIcon}</Text>
-        <Text style={styles.formTableTitle}>{group.formTitle}</Text>
-        <Text style={styles.formTableCount}>({group.submissions.length} submissions)</Text>
+      {/* Table Header */}
+      <View style={styles.tableHeaderRow}>
+        <View style={[styles.tableCell, styles.colFormName]}>
+          <Text style={styles.tableHeaderText}>Form</Text>
+        </View>
+        <View style={[styles.tableCell, styles.colSubmissionCount]}>
+          <Text style={styles.tableHeaderText}>Submissions</Text>
+        </View>
+        <View style={[styles.tableCell, styles.colFieldsCount]}>
+          <Text style={styles.tableHeaderText}>Fields</Text>
+        </View>
+        <View style={[styles.tableCell, styles.colCreatedDate]}>
+          <Text style={styles.tableHeaderText}>Created</Text>
+        </View>
+        <View style={[styles.tableCell, styles.colActions]}>
+          <Text style={styles.tableHeaderText}>Actions</Text>
+        </View>
       </View>
 
-      {/* Table */}
-      <View style={styles.tableWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-          <View>
-            {/* Header Row */}
-            <View style={styles.tableHeaderRow}>
-              <View style={[styles.tableCell, styles.colSubmissionId]}>
-                <Text style={styles.tableHeaderText}>ID</Text>
-              </View>
-              <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                <Text style={styles.tableHeaderText}>Submitted By</Text>
-              </View>
-              <View style={[styles.tableCell, styles.colDate]}>
-                <Text style={styles.tableHeaderText}>Date</Text>
-              </View>
-              {displayFields.map((field) => (
-                <View key={field.id} style={[styles.tableCell, styles.colField]}>
-                  <Text style={styles.tableHeaderText} numberOfLines={1}>
-                    {field.question}
+      {/* Data Rows */}
+      {Object.values(formGroups).map((group) => {
+        return (
+          <Pressable 
+            key={group.formId} 
+            style={styles.tableDataRow}
+            onPress={() => onSelectForm({
+              formId: group.formId,
+              formTitle: group.schema?.title || "Unknown Form",
+              formIcon: group.schema?.icon || "📄",
+              submissions: group.submissions,
+            })}
+          >
+            <View style={[styles.tableCell, styles.colFormName]}>
+              <View style={styles.formNameContainer}>
+                <Text style={styles.formIcon}>{group.schema?.icon || "📄"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cellTextLink} numberOfLines={1}>
+                    {group.schema?.title || "Unknown Form"}
+                  </Text>
+                  <Text style={styles.formCategory} numberOfLines={1}>
+                    {group.schema?.category || "General"}
                   </Text>
                 </View>
-              ))}
-              <View style={[styles.tableCell, styles.colActions]}>
-                <Text style={styles.tableHeaderText}>Actions</Text>
               </View>
             </View>
-
-            {/* Data Rows */}
-            {group.submissions.map((submission) => (
-              <View key={submission.id} style={styles.tableDataRow}>
-                <View style={[styles.tableCell, styles.colSubmissionId]}>
-                  <Text style={styles.cellTextSmall} numberOfLines={1}>
-                    {submission.id}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.submittedBy}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.colDate]}>
-                  <Text style={styles.cellTextSmall} numberOfLines={2}>
-                    {formatDate(submission.submittedAt)}
-                  </Text>
-                </View>
-                {displayFields.map((field) => (
-                  <View key={field.id} style={[styles.tableCell, styles.colField]}>
-                    <Text style={styles.cellText} numberOfLines={2}>
-                      {getFieldValue(submission, field.id)}
-                    </Text>
-                  </View>
-                ))}
-                <View style={[styles.tableCell, styles.colActions]}>
-                  <Pressable style={styles.actionButton}>
-                    <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+            <View style={[styles.tableCell, styles.colSubmissionCount]}>
+              <Text style={styles.cellTextMedium}>
+                {group.submissions.length}
+              </Text>
+            </View>
+            <View style={[styles.tableCell, styles.colFieldsCount]}>
+              <Text style={styles.cellTextMedium}>
+                {group.schema?.fields?.length || 0}
+              </Text>
+            </View>
+            <View style={[styles.tableCell, styles.colCreatedDate]}>
+              <Text style={styles.cellTextSmall} numberOfLines={1}>
+                {group.schema?.createdAt ? formatDate(group.schema.createdAt) : 'N/A'}
+              </Text>
+            </View>
+            <View style={[styles.tableCell, styles.colActions]}>
+              <Pressable style={styles.actionButton}>
+                <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary.orange} />
+              </Pressable>
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -347,33 +277,6 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: 4,
   },
-  viewToggle: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    borderRadius: 8,
-    padding: 4,
-    ...shadows.small,
-  },
-  toggleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    gap: 6,
-  },
-  toggleButtonActive: {
-    backgroundColor: colors.primary.orangeSubtle,
-  },
-  toggleText: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    fontWeight: "500",
-  },
-  toggleTextActive: {
-    color: colors.primary.orange,
-    fontWeight: "600",
-  },
   statsRow: {
     flexDirection: "row",
     gap: 16,
@@ -405,37 +308,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text.secondary,
   },
+  scrollContainer: {
+    flex: 1,
+  },
   formTableContainer: {
-    marginBottom: 20,
     backgroundColor: "white",
     borderRadius: 10,
     overflow: "hidden",
     ...shadows.small,
-  },
-  formTableTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-    backgroundColor: "#FAFAFA",
-  },
-  formTableIcon: {
-    fontSize: 20,
-  },
-  formTableTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#161519",
-  },
-  formTableCount: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    marginLeft: 4,
-  },
-  tableWrapper: {
-    maxHeight: 400,
   },
   tableHeaderRow: {
     flexDirection: "row",
@@ -462,31 +342,76 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.primary,
   },
+  cellTextMedium: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text.primary,
+  },
+  cellTextLink: {
+    fontSize: 13,
+    color: colors.primary.orange,
+    fontWeight: "600",
+  },
   cellTextSmall: {
     fontSize: 12,
     color: colors.text.secondary,
   },
-  colSubmissionId: {
-    width: 120,
+  formNameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
   },
-  colSubmittedBy: {
-    width: 150,
+  formIcon: {
+    fontSize: 20,
   },
-  colDate: {
-    width: 130,
+  formCategory: {
+    fontSize: 11,
+    color: colors.text.tertiary,
+    marginTop: 2,
   },
-  colField: {
-    width: 180,
+  countBadge: {
+    backgroundColor: colors.primary.orangeSubtle,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  countBadgeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.primary.orange,
+  },
+  countBadgeGreen: {
+    backgroundColor: colors.semantic.successLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  countBadgeTextGreen: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.semantic.success,
+  },
+  colFormName: {
+    flex: 3,
+  },
+  colSubmissionCount: {
+    flex: 1,
+  },
+  colFieldsCount: {
+    flex: 0.8,
+  },
+  colCreatedDate: {
+    flex: 1.5,
   },
   colActions: {
-    width: 80,
+    flex: 0.5,
     flexDirection: "row",
     gap: 8,
-  },
-  actionButton: {
-    padding: 6,
-    borderRadius: 4,
-    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyState: {
     alignItems: "center",
@@ -503,24 +428,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     marginTop: 4,
-  },
-  placeholderContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 100,
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#161519",
-    marginTop: 16,
-  },
-  placeholderSubtitle: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    marginTop: 8,
-    textAlign: "center",
-    maxWidth: 300,
   },
 });

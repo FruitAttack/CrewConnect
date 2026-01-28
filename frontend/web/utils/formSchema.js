@@ -23,6 +23,7 @@ export const FORM_FIELD_TYPES = {
  *   description: "Daily inspection of hand tools and small equipment",
  *   category: "Maintenance",
  *   icon: "🔨",
+ *   createdDate: "2026-01-10T09:00:00Z",
  *   associations: {
  *     project: { enabled: false, question: null },
  *     equipment: { enabled: true, question: "Which equipment was inspected?" },

@@ -12,6 +12,7 @@ export const SAMPLE_FORMS = [
     description: "Complete inspection of vehicle before and after operation",
     category: "Vehicle Maintenance",
     icon: "🚚",
+    createdAt: "2025-11-15T08:30:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: false, question: null },
@@ -105,7 +106,6 @@ export const SAMPLE_FORMS = [
         type: FORM_FIELD_TYPES.LONG_ANSWER,
         question: "Describe Defects Found",
         required: false,
-        conditional: { dependsOn: "field_defects_found", value: "yes" },
         placeholder: "Provide detailed description of all defects or safety concerns...",
         minLines: 5,
       },
@@ -132,6 +132,7 @@ export const SAMPLE_FORMS = [
     description: "Track fuel consumption and refueling activities",
     category: "Vehicle Maintenance",
     icon: "⛽",
+    createdAt: "2024-09-22T14:15:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: false, question: null },
@@ -194,6 +195,7 @@ export const SAMPLE_FORMS = [
     description: "Document routine service and oil changes",
     category: "Vehicle Maintenance",
     icon: "🔧",
+    createdAt: "2024-10-05T09:45:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: false, question: null },
@@ -260,6 +262,7 @@ export const SAMPLE_FORMS = [
     description: "Report and document workplace safety incidents",
     category: "Safety",
     icon: "⚠️",
+    createdAt: "2024-08-18T11:20:00Z",
     associations: {
       project: { enabled: true, question: "Which project or site did this incident occur on?" },
       equipment: { enabled: false, question: null },
@@ -333,6 +336,7 @@ export const SAMPLE_FORMS = [
     description: "Inspect and document personal protective equipment condition",
     category: "Safety",
     icon: "🦺",
+    createdAt: "2024-07-30T16:00:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: false, question: null },
@@ -397,6 +401,7 @@ export const SAMPLE_FORMS = [
     title: "Equipment Maintenance Log",
     description: "Track equipment maintenance and service history",
     category: "Maintenance",
+    createdAt: "2024-06-12T10:30:00Z",
     icon: "🔧",
     associations: {
       project: { enabled: false, question: null },
@@ -468,6 +473,7 @@ export const SAMPLE_FORMS = [
     description: "Daily inspection of hand tools and small equipment",
     category: "Maintenance",
     icon: "🔨",
+    createdAt: "2024-05-25T13:10:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: true, question: "Which tool/equipment?" },
@@ -531,6 +537,7 @@ export const SAMPLE_FORMS = [
     description: "Submit maintenance requests for facilities and buildings",
     category: "Maintenance",
     icon: "🏢",
+    createdAt: "2024-04-10T08:00:00Z",
     associations: {
       project: { enabled: false, question: null },
       equipment: { enabled: false, question: null },
@@ -595,6 +602,7 @@ export const SAMPLE_FORMS = [
     description: "Daily summary of work completed and hours",
     category: "Reporting",
     icon: "📋",
+    createdAt: "2024-12-01T07:30:00Z",
     associations: {
       project: { enabled: true, question: "Which project was this work completed for?" },
       equipment: { enabled: false, question: null },
@@ -661,6 +669,7 @@ export const SAMPLE_FORMS = [
     description: "Weekly project progress and status updates",
     category: "Reporting",
     icon: "📊",
+    createdAt: "2024-03-15T12:45:00Z",
     associations: {
       project: { enabled: true, question: "Which project is this status report for?" },
       equipment: { enabled: false, question: null },

@@ -281,13 +281,16 @@ export async function createCustomer(token, customerData) {
 // ============================================
 // FORMS (dummy data from sampleForms)
 // ============================================
-export async function getForms(token, companyId) {
-  // return dummy data structure consistent with API callers
-  return {
-    success: true,
-    message: "OK",
-    data: { forms: SAMPLE_FORMS },
-  }
+
+// Get all forms from backend
+export async function getForms(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(`forms${params ? `?${params}` : ''}`, token);
+}
+
+// Create a new form
+export async function createForm(token, formData) {
+  return apiCall('forms', token, 'POST', formData);
 }
 
 export async function getForm(token, formId) {

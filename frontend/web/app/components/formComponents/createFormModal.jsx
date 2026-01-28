@@ -79,7 +79,6 @@ export default function CreateFormModal({
       required: false,
       placeholder: "",
       options: [],
-      conditional: null,
     };
     setForm(f => ({ ...f, fields: [...f.fields, newField] }));
   };
@@ -458,10 +457,8 @@ export default function CreateFormModal({
 function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, onAddOption, onUpdateOption, onDeleteOption }) {
   const [expanded, setExpanded] = useState(true);
   const [typeOpen, setTypeOpen] = useState(false);
-  const [conditionalFieldOpen, setConditionalFieldOpen] = useState(false);
 
   const needsOptions = field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE || field.type === FORM_FIELD_TYPES.CHECKBOX;
-  const canHaveConditional = index > 0; // Can't be conditional on first field
 
   return (
     <View style={styles.fieldCard}>
@@ -608,73 +605,6 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
               thumbColor={field.required ? colors.primary.orange : colors.neutral.offWhite}
             />
           </View>
-
-          {/* Conditional Logic */}
-          {canHaveConditional && (
-            <View style={[styles.fieldEditorRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-              <FormLabel icon="git-branch-outline" text="Show Conditionally" />
-              <Switch
-                value={!!field.conditional}
-                onValueChange={(value) => {
-                  if (value) {
-                    onUpdate(index, { conditional: { dependsOn: "", value: "" } });
-                  } else {
-                    onUpdate(index, { conditional: null });
-                  }
-                }}
-                trackColor={{ false: colors.border.dark, true: colors.primary.orangeLight }}
-                thumbColor={field.conditional ? colors.primary.orange : colors.neutral.offWhite}
-              />
-            </View>
-          )}
-
-          {field.conditional && (
-            <View style={styles.conditionalSettings}>
-              <Text style={styles.conditionalLabel}>Show this field only when:</Text>
-              
-              <Pressable
-                onPress={() => setConditionalFieldOpen(!conditionalFieldOpen)}
-                style={[styles.dropdownTrigger, conditionalFieldOpen && styles.dropdownTriggerOpen]}
-              >
-                <Text style={styles.dropdownText}>
-                  {allFields.slice(0, index).find(f => f.id === field.conditional.dependsOn)?.question || "Select field"}
-                </Text>
-                <Ionicons
-                  name={conditionalFieldOpen ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color={colors.text.secondary}
-                />
-              </Pressable>
-
-              {conditionalFieldOpen && (
-                <View style={styles.dropdownMenu}>
-                  {allFields.slice(0, index).map((f) => (
-                    <Pressable
-                      key={f.id}
-                      onPress={() => {
-                        onUpdate(index, { conditional: { ...field.conditional, dependsOn: f.id } });
-                        setConditionalFieldOpen(false);
-                      }}
-                      style={[
-                        styles.dropdownItem,
-                        field.conditional.dependsOn === f.id && styles.dropdownItemActive,
-                      ]}
-                    >
-                      <Text style={styles.dropdownItemText}>{f.question || `Field ${allFields.indexOf(f) + 1}`}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-
-              <TextInput
-                style={[styles.input, { marginTop: spacing.xs }]}
-                value={field.conditional.value}
-                onChangeText={(text) => onUpdate(index, { conditional: { ...field.conditional, value: text } })}
-                placeholder="equals this value"
-                placeholderTextColor={colors.text.tertiary}
-              />
-            </View>
-          )}
         </View>
       )}
     </View>
