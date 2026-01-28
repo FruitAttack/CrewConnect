@@ -37,6 +37,7 @@ export default function Sidebar() {
     { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/projects', matchPath: '/projects' },
     { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce', matchPath: '/workforce' },
     { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
+    { icon: 'map-outline', iconFilled: 'map', label: 'Map', route: '/(app)/map', matchPath: '/map' },
     { icon: 'stats-chart-outline', iconFilled: 'stats-chart', label: 'Reports', route: '/(app)/reports', matchPath: '/reports' },
     { icon: 'document-text-outline', iconFilled: 'document-text', label: 'Forms', route: '/(app)/forms', matchPath: '/forms' },
   ];

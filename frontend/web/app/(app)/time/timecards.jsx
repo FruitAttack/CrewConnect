@@ -715,10 +715,10 @@ const styles = StyleSheet.create({
   searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.neutral.white, borderRadius: 6, borderWidth: 1, borderColor: colors.border.light, paddingHorizontal: 10, paddingVertical: 6, minWidth: 200 },
   searchContainerFocused: { borderColor: colors.primary.orange },
   searchInput: { flex: 1, fontSize: 13, color: colors.text.primary, outlineStyle: 'none' },
-  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
-  viewBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
-  viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
-  viewText: { fontSize: 12, fontWeight: '500', color: colors.text.tertiary },
+  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 8, padding: 4 },
+  viewBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  viewBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  viewText: { fontSize: 13, fontWeight: '500', color: colors.text.tertiary },
   viewTextActive: { color: colors.text.primary },
   
   // Date picker container - holds both button and dropdown

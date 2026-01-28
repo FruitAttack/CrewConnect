@@ -15,6 +15,7 @@ import reportsRoutes from './routes/reportsRoutes.js';
 import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
+import mapRoutes from './routes/mapRoutes.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/daily-production", dailyProductionRoutes);
 app.use("/api/forms", formsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
+app.use("/api/map", mapRoutes);
 
 // Health check
 app.get("/", (req, res) => {
