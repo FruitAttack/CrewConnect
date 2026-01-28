@@ -1,5 +1,132 @@
 import { supabase } from '../utils/supabase.js';
 
+// Helper function to check if two dates are the same day
+function isSameDay(date1, date2) {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+}
+
+// Helper to get end of day
+function getEndOfDay(date) {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+// Helper to get start of next day
+function getStartOfNextDay(date) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + 1);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+/**
+ * Split a time entry across multiple days
+ * Creates separate entries for each day
+ */
+async function splitEntryAcrossDays(entry, clockOutTime, clockOutData = {}) {
+  const clockIn = new Date(entry.clock_in);
+  const clockOut = new Date(clockOutTime);
+  
+  const segments = [];
+  let currentStart = new Date(clockIn);
+  let isFirstSegment = true;
+  
+  // Calculate total duration for proportional break distribution
+  const totalMinutes = (clockOut - clockIn) / 60000;
+  let remainingBreakMinutes = entry.break_minutes || 0;
+  
+  while (!isSameDay(currentStart, clockOut)) {
+    const endOfDay = getEndOfDay(currentStart);
+    const segmentMinutes = (endOfDay - currentStart) / 60000;
+    
+    // Proportional break time for this segment
+    const breakPortion = totalMinutes > 0 
+      ? Math.round((segmentMinutes / totalMinutes) * (entry.break_minutes || 0))
+      : 0;
+    const segmentBreak = Math.min(breakPortion, remainingBreakMinutes);
+    remainingBreakMinutes -= segmentBreak;
+    
+    if (isFirstSegment) {
+      // Update the original entry to end at midnight
+      const { data, error } = await supabase
+        .from('time_entries')
+        .update({
+          clock_out: endOfDay.toISOString(),
+          break_minutes: segmentBreak,
+          is_split: true,
+        })
+        .eq('id', entry.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      segments.push(data);
+      isFirstSegment = false;
+    } else {
+      // Create new entry for this day
+      const { data, error } = await supabase
+        .from('time_entries')
+        .insert({
+          company_id: entry.company_id,
+          user_id: entry.user_id,
+          project_id: entry.project_id,
+          cost_code_id: entry.cost_code_id,
+          equipment_id: entry.equipment_id,
+          clock_in: currentStart.toISOString(),
+          clock_out: endOfDay.toISOString(),
+          break_minutes: segmentBreak,
+          hourly_rate: entry.hourly_rate,
+          notes: entry.notes ? `${entry.notes} (continued)` : 'Continued from previous day',
+          parent_entry_id: entry.id,
+          is_split: true,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      segments.push(data);
+    }
+    
+    // Move to start of next day
+    currentStart = getStartOfNextDay(currentStart);
+  }
+  
+  // Final segment: from start of last day to actual clock out
+  const { data: finalSegment, error: finalError } = await supabase
+    .from('time_entries')
+    .insert({
+      company_id: entry.company_id,
+      user_id: entry.user_id,
+      project_id: entry.project_id,
+      cost_code_id: entry.cost_code_id,
+      equipment_id: entry.equipment_id,
+      clock_in: currentStart.toISOString(),
+      clock_out: clockOut.toISOString(),
+      clock_out_lat: clockOutData.lat,
+      clock_out_lng: clockOutData.lng,
+      clock_out_accuracy: clockOutData.accuracy,
+      break_minutes: Math.max(0, remainingBreakMinutes),
+      hourly_rate: entry.hourly_rate,
+      notes: clockOutData.notes !== undefined ? clockOutData.notes : (entry.notes ? `${entry.notes} (continued)` : 'Continued from previous day'),
+      quantity: clockOutData.quantity,
+      unit_of_measure: clockOutData.unit_of_measure,
+      parent_entry_id: entry.id,
+      is_split: true,
+    })
+    .select()
+    .single();
+  
+  if (finalError) throw finalError;
+  segments.push(finalSegment);
+  
+  return segments;
+}
+
 // Clock in
 export const clockIn = async (req, res) => {
   try {
@@ -102,7 +229,7 @@ export const clockIn = async (req, res) => {
   }
 };
 
-// Clock out
+// Clock out (with automatic midnight splitting for overnight entries)
 export const clockOut = async (req, res) => {
   try {
     const { id: user_id } = req.user;
@@ -127,9 +254,50 @@ export const clockOut = async (req, res) => {
       return res.status(404).json({ error: 'No open time entry found' });
     }
 
-    // Build update object
+    const clockIn = new Date(entry.clock_in);
+    const clockOutTime = new Date();
+
+    // Check if entry spans multiple days - if so, split it
+    if (!isSameDay(clockIn, clockOutTime)) {
+      try {
+        const segments = await splitEntryAcrossDays(entry, clockOutTime, {
+          lat,
+          lng,
+          accuracy,
+          notes,
+          quantity,
+          unit_of_measure
+        });
+
+        // Return the final segment with relations
+        const { data: finalEntry, error: fetchError } = await supabase
+          .from('time_entries')
+          .select(`
+            *,
+            project:projects(id, name),
+            cost_code:cost_codes(id, code, name, unit_of_measure),
+            equipment:equipment(id, label)
+          `)
+          .eq('id', segments[segments.length - 1].id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        return res.json({
+          ...finalEntry,
+          _split: true,
+          _totalSegments: segments.length,
+          _originalEntryId: entry.id
+        });
+      } catch (splitError) {
+        console.error('Split error, falling back to normal clock out:', splitError);
+        // Fall through to normal clock out if split fails
+      }
+    }
+
+    // Same day - update normally
     const updates = {
-      clock_out: new Date().toISOString(),
+      clock_out: clockOutTime.toISOString(),
       clock_out_lat: lat,
       clock_out_lng: lng,
       clock_out_accuracy: accuracy
@@ -1398,5 +1566,403 @@ export const endBreakForUser = async (req, res) => {
   } catch (error) {
     console.error("End break for user error:", error);
     res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+// ==========================================
+// CRON JOB FUNCTIONS FOR MIDNIGHT SPLITTING
+// ==========================================
+
+/**
+ * Process midnight splits for all open entries
+ * Should be called by a cron job at midnight (00:00:01)
+ * POST /api/time-entries/cron/midnight-split
+ */
+export const processMidnightSplits = async (req, res) => {
+  try {
+    // Verify cron secret
+    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    const providedSecret = req.headers['x-cron-secret'] || req.query.secret;
+    
+    if (providedSecret !== cronSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const endOfYesterday = getEndOfDay(yesterday);
+    
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    console.log(`Processing midnight splits at ${now.toISOString()}`);
+
+    // Find all open entries that started before today
+    const { data: openEntries, error: fetchError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .is('clock_out', null)
+      .lt('clock_in', startOfToday.toISOString());
+
+    if (fetchError) {
+      console.error('Error fetching open entries:', fetchError);
+      throw fetchError;
+    }
+
+    console.log(`Found ${openEntries?.length || 0} open entries to split`);
+
+    const results = {
+      processed: 0,
+      created: 0,
+      errors: [],
+    };
+
+    for (const entry of openEntries || []) {
+      try {
+        // Close the entry at end of yesterday
+        const { error: updateError } = await supabase
+          .from('time_entries')
+          .update({
+            clock_out: endOfYesterday.toISOString(),
+            is_split: true,
+          })
+          .eq('id', entry.id);
+
+        if (updateError) throw updateError;
+
+        // Create new open entry starting at midnight
+        const { error: insertError } = await supabase
+          .from('time_entries')
+          .insert({
+            company_id: entry.company_id,
+            user_id: entry.user_id,
+            project_id: entry.project_id,
+            cost_code_id: entry.cost_code_id,
+            equipment_id: entry.equipment_id,
+            clock_in: startOfToday.toISOString(),
+            clock_out: null,
+            break_minutes: 0,
+            hourly_rate: entry.hourly_rate,
+            notes: entry.notes ? `${entry.notes} (auto-continued)` : 'Auto-continued from previous day',
+            parent_entry_id: entry.id,
+            is_split: true,
+          });
+
+        if (insertError) throw insertError;
+
+        results.processed++;
+        results.created++;
+      } catch (err) {
+        console.error(`Error processing entry ${entry.id}:`, err);
+        results.errors.push({ entry_id: entry.id, error: err.message });
+      }
+    }
+
+    console.log(`Midnight split complete: ${results.processed} processed, ${results.created} created, ${results.errors.length} errors`);
+
+    res.json({
+      success: true,
+      message: 'Midnight split completed',
+      results,
+    });
+  } catch (error) {
+    console.error('Midnight split cron error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Auto-close stale entries that have been open too long
+ * POST /api/time-entries/cron/auto-close-stale?maxHours=24
+ */
+export const autoCloseStaleEntries = async (req, res) => {
+  try {
+    // Verify cron secret
+    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    const providedSecret = req.headers['x-cron-secret'] || req.query.secret;
+    
+    if (providedSecret !== cronSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const maxHours = parseInt(req.query.maxHours) || 24;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - (maxHours * 60 * 60 * 1000));
+
+    console.log(`Auto-closing entries open since before ${cutoff.toISOString()}`);
+
+    // Find stale open entries
+    const { data: staleEntries, error: fetchError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .is('clock_out', null)
+      .lt('clock_in', cutoff.toISOString());
+
+    if (fetchError) {
+      console.error('Error fetching stale entries:', fetchError);
+      throw fetchError;
+    }
+
+    console.log(`Found ${staleEntries?.length || 0} stale entries`);
+
+    const results = {
+      closed: 0,
+      split: 0,
+      errors: [],
+    };
+
+    for (const entry of staleEntries || []) {
+      try {
+        // Split across days and close
+        const segments = await splitEntryAcrossDays(entry, now, {});
+        results.split += segments.length - 1;
+        results.closed++;
+
+        // Flag the original entry for review
+        await supabase
+          .from('time_entries')
+          .update({
+            notes: entry.notes
+              ? `${entry.notes} [AUTO-CLOSED: Entry was open for ${Math.round((now - new Date(entry.clock_in)) / 3600000)} hours]`
+              : `[AUTO-CLOSED: Entry was open for ${Math.round((now - new Date(entry.clock_in)) / 3600000)} hours]`,
+          })
+          .eq('id', entry.id);
+      } catch (err) {
+        console.error(`Error auto-closing entry ${entry.id}:`, err);
+        results.errors.push({ entry_id: entry.id, error: err.message });
+      }
+    }
+
+    console.log(`Auto-close complete: ${results.closed} closed, ${results.split} segments created, ${results.errors.length} errors`);
+
+    res.json({
+      success: true,
+      message: 'Auto-close completed',
+      results,
+    });
+  } catch (error) {
+    console.error('Auto-close cron error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Get status of pending splits
+ * GET /api/time-entries/cron/status
+ */
+export const getCronStatus = async (req, res) => {
+  try {
+    // Verify cron secret
+    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    const providedSecret = req.headers['x-cron-secret'] || req.query.secret;
+    
+    if (providedSecret !== cronSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Count open entries from before today
+    const { count: pendingSplits } = await supabase
+      .from('time_entries')
+      .select('*', { count: 'exact', head: true })
+      .is('clock_out', null)
+      .lt('clock_in', startOfToday.toISOString());
+
+    // Count entries open more than 24 hours
+    const cutoff24h = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    const { count: staleEntries } = await supabase
+      .from('time_entries')
+      .select('*', { count: 'exact', head: true })
+      .is('clock_out', null)
+      .lt('clock_in', cutoff24h.toISOString());
+
+    // Count total open entries
+    const { count: totalOpen } = await supabase
+      .from('time_entries')
+      .select('*', { count: 'exact', head: true })
+      .is('clock_out', null);
+
+    res.json({
+      success: true,
+      timestamp: now.toISOString(),
+      stats: {
+        totalOpenEntries: totalOpen || 0,
+        pendingMidnightSplits: pendingSplits || 0,
+        staleEntries24h: staleEntries || 0,
+      },
+    });
+  } catch (error) {
+    console.error('Cron status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * One-time fix for existing overnight entries
+ * POST /api/time-entries/cron/fix-overnight
+ */
+export const fixOvernightEntries = async (req, res) => {
+  try {
+    // Verify cron secret
+    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    const providedSecret = req.headers['x-cron-secret'] || req.query.secret;
+    
+    if (providedSecret !== cronSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const dryRun = req.query.dry_run === 'true';
+    
+    console.log(`Starting overnight entry fix (dry_run: ${dryRun})...`);
+
+    // Find all entries that span multiple days and haven't been split yet
+    const { data: allEntries, error: fetchError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .not('clock_out', 'is', null)
+      .order('clock_in', { ascending: true });
+
+    if (fetchError) throw fetchError;
+
+    // Filter to only entries that span multiple days and aren't already split
+    const entriesToFix = allEntries.filter(entry => {
+      if (entry.is_split === true) return false; // Already processed
+      const clockIn = new Date(entry.clock_in);
+      const clockOut = new Date(entry.clock_out);
+      return !isSameDay(clockIn, clockOut);
+    });
+
+    console.log(`Found ${entriesToFix.length} overnight entries to fix`);
+
+    if (dryRun) {
+      return res.json({
+        dry_run: true,
+        entries_to_fix: entriesToFix.length,
+        entries: entriesToFix.map(e => ({
+          id: e.id,
+          user_id: e.user_id,
+          clock_in: e.clock_in,
+          clock_out: e.clock_out,
+          hours: ((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(1),
+        })),
+      });
+    }
+
+    const results = {
+      processed: 0,
+      segments_created: 0,
+      errors: [],
+    };
+
+    for (const entry of entriesToFix) {
+      try {
+        const clockIn = new Date(entry.clock_in);
+        const clockOut = new Date(entry.clock_out);
+        
+        const segments = [];
+        let currentStart = new Date(clockIn);
+        let isFirstSegment = true;
+        
+        const totalMinutes = (clockOut - clockIn) / 60000;
+        let remainingBreakMinutes = entry.break_minutes || 0;
+        
+        while (!isSameDay(currentStart, clockOut)) {
+          const endOfDay = getEndOfDay(currentStart);
+          const segmentMinutes = (endOfDay - currentStart) / 60000;
+          
+          const breakPortion = totalMinutes > 0 
+            ? Math.round((segmentMinutes / totalMinutes) * (entry.break_minutes || 0))
+            : 0;
+          const segmentBreak = Math.min(breakPortion, remainingBreakMinutes);
+          remainingBreakMinutes -= segmentBreak;
+          
+          if (isFirstSegment) {
+            // Update the original entry to end at midnight
+            await supabase
+              .from('time_entries')
+              .update({
+                clock_out: endOfDay.toISOString(),
+                break_minutes: segmentBreak,
+                is_split: true,
+              })
+              .eq('id', entry.id);
+            
+            segments.push({ id: entry.id, action: 'updated' });
+            isFirstSegment = false;
+          } else {
+            // Create new entry for this day
+            const { data } = await supabase
+              .from('time_entries')
+              .insert({
+                company_id: entry.company_id,
+                user_id: entry.user_id,
+                project_id: entry.project_id,
+                cost_code_id: entry.cost_code_id,
+                equipment_id: entry.equipment_id,
+                clock_in: currentStart.toISOString(),
+                clock_out: endOfDay.toISOString(),
+                break_minutes: segmentBreak,
+                hourly_rate: entry.hourly_rate,
+                notes: entry.notes ? `${entry.notes} (split)` : 'Split from overnight',
+                parent_entry_id: entry.id,
+                is_split: true,
+              })
+              .select()
+              .single();
+            
+            if (data) segments.push({ id: data.id, action: 'created' });
+          }
+          
+          currentStart = getStartOfNextDay(currentStart);
+        }
+        
+        // Final segment
+        const { data: finalData } = await supabase
+          .from('time_entries')
+          .insert({
+            company_id: entry.company_id,
+            user_id: entry.user_id,
+            project_id: entry.project_id,
+            cost_code_id: entry.cost_code_id,
+            equipment_id: entry.equipment_id,
+            clock_in: currentStart.toISOString(),
+            clock_out: clockOut.toISOString(),
+            clock_out_lat: entry.clock_out_lat,
+            clock_out_lng: entry.clock_out_lng,
+            break_minutes: Math.max(0, remainingBreakMinutes),
+            hourly_rate: entry.hourly_rate,
+            notes: entry.notes ? `${entry.notes} (split)` : 'Split from overnight',
+            parent_entry_id: entry.id,
+            is_split: true,
+          })
+          .select()
+          .single();
+        
+        if (finalData) segments.push({ id: finalData.id, action: 'created' });
+        
+        results.processed++;
+        results.segments_created += segments.length - 1;
+        console.log(`Split entry ${entry.id} into ${segments.length} segments`);
+        
+      } catch (err) {
+        console.error(`Error splitting entry ${entry.id}:`, err);
+        results.errors.push({ entry_id: entry.id, error: err.message });
+      }
+    }
+
+    console.log(`Fix complete: ${results.processed} processed, ${results.segments_created} segments created`);
+
+    res.json({
+      success: true,
+      message: 'Overnight entry fix completed',
+      results,
+    });
+  } catch (error) {
+    console.error('Fix overnight entries error:', error);
+    res.status(500).json({ error: error.message });
   }
 };

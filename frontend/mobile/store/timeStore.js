@@ -13,6 +13,10 @@ export const useTimeStore = create((set, get) => ({
   secondsWorkedShift: 0,
 
   lastServerUpdateTimestamp: null,
+  
+  // Track the current day to detect midnight crossings
+  _currentDay: new Date().toDateString(),
+  _midnightCheckInterval: null,
 
   // --- Internal State Setters ---
   _fetchWorkedSeconds: async (session) => {
@@ -51,6 +55,7 @@ export const useTimeStore = create((set, get) => ({
       isOnBreak: false,
       isClockedIn: true,
       currentTimeEntryId: entryId,
+      _currentDay: new Date().toDateString(),
     });
   },
 
@@ -115,6 +120,78 @@ export const useTimeStore = create((set, get) => ({
     return Math.floor((now - state.breakStartTime) / 1000);
   },
 
+  // --- Midnight Detection ---
+  
+  /**
+   * Check if we've crossed midnight and need to refresh from server.
+   * The backend splits entries at midnight, so we need to:
+   * 1. Get the new time entry ID (old one was closed at 11:59:59)
+   * 2. Reset shift seconds (new day = new shift for display)
+   * 3. Update today's seconds
+   */
+  checkMidnightCrossing: async (session) => {
+    const state = get();
+    const today = new Date().toDateString();
+    
+    // If the day has changed and user is clocked in
+    if (state._currentDay !== today && state.isClockedIn) {
+      console.log("🌙 Midnight crossing detected! Refreshing from server...");
+      console.log("   Previous day:", state._currentDay);
+      console.log("   Current day:", today);
+      
+      // Update the tracked day
+      set({ _currentDay: today });
+      
+      // Re-hydrate from server to get the new split entry
+      await get().hydrateFromServer(session);
+      
+      return true; // Indicates midnight was crossed
+    }
+    
+    // Update tracked day even if not clocked in
+    if (state._currentDay !== today) {
+      set({ _currentDay: today });
+    }
+    
+    return false;
+  },
+
+  /**
+   * Start the midnight check interval.
+   * Call this when the app becomes active or user clocks in.
+   */
+  startMidnightWatch: (session) => {
+    const state = get();
+    
+    // Clear any existing interval
+    if (state._midnightCheckInterval) {
+      clearInterval(state._midnightCheckInterval);
+    }
+    
+    // Check every minute for midnight crossing
+    const interval = setInterval(() => {
+      get().checkMidnightCrossing(session);
+    }, 60000); // Check every 60 seconds
+    
+    set({ _midnightCheckInterval: interval });
+    
+    console.log("🌙 Midnight watch started");
+  },
+
+  /**
+   * Stop the midnight check interval.
+   * Call this when user clocks out or app goes to background.
+   */
+  stopMidnightWatch: () => {
+    const state = get();
+    
+    if (state._midnightCheckInterval) {
+      clearInterval(state._midnightCheckInterval);
+      set({ _midnightCheckInterval: null });
+      console.log("🌙 Midnight watch stopped");
+    }
+  },
+
   // --- API / ASYNC Actions ---
 
   // 1. Initial hydration for both clock-in and break status
@@ -133,12 +210,24 @@ export const useTimeStore = create((set, get) => ({
       "GET"
     );
 
+    const isClockedIn = !!entryResp.data;
+    const newEntryId = entryResp.data?.id || null;
+    
+    // Check if the entry ID changed (indicates a midnight split occurred)
+    const state = get();
+    if (state.currentTimeEntryId && newEntryId && state.currentTimeEntryId !== newEntryId) {
+      console.log("🌙 Time entry ID changed (midnight split detected)");
+      console.log("   Old ID:", state.currentTimeEntryId);
+      console.log("   New ID:", newEntryId);
+    }
+
     // API returns the entry/break directly in data, not nested
     set({
-      isClockedIn: !!entryResp.data,
-      currentTimeEntryId: entryResp.data?.id || null,
+      isClockedIn: isClockedIn,
+      currentTimeEntryId: newEntryId,
       isOnBreak: !!breakResp.data,
       currentBreakId: breakResp.data?.id || null,
+      _currentDay: new Date().toDateString(),
     });
 
     // Fetch authoritative worked seconds
@@ -164,36 +253,45 @@ export const useTimeStore = create((set, get) => ({
       get()._setClockInState(response.data.id);
       // Fetch fresh seconds from server
       await get()._fetchWorkedSeconds(session);
+      // Start watching for midnight
+      get().startMidnightWatch(session);
     }
     return response;
   },
 
- // 3. Clock Out Action
-doClockOut: async (session, body = {}) => {
-  if (!session?.access_token)
-    return { success: false, message: "Not authenticated." };
+  // 3. Clock Out Action
+  doClockOut: async (session, body = {}) => {
+    if (!session?.access_token)
+      return { success: false, message: "Not authenticated." };
 
-  // If on break, end it first before clocking out
-  if (get().isOnBreak) {
-    console.log("⏰ Ending break before clock out...");
-    await get().doEndBreak(session);
-  }
+    // If on break, end it first before clocking out
+    if (get().isOnBreak) {
+      console.log("⏰ Ending break before clock out...");
+      await get().doEndBreak(session);
+    }
 
-  const response = await apiCall(
-    session.access_token,
-    "time-entries/clock-out",
-    "POST",
-    body
-  );
+    const response = await apiCall(
+      session.access_token,
+      "time-entries/clock-out",
+      "POST",
+      body
+    );
 
-  console.log("Clock-out response:", response);
+    console.log("Clock-out response:", response);
 
-  if (response.success) {
-    get()._setClockOutState();
-    await get()._fetchWorkedSeconds(session);
-  }
-  return response;
-},
+    if (response.success) {
+      get()._setClockOutState();
+      await get()._fetchWorkedSeconds(session);
+      // Stop watching for midnight
+      get().stopMidnightWatch();
+      
+      // Check if the response indicates a split occurred
+      if (response.data?._split) {
+        console.log("🌙 Clock-out resulted in split entries:", response.data._totalSegments, "segments");
+      }
+    }
+    return response;
+  },
 
   // 4. Start Break Action
   doStartBreak: async (session) => {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Alert, AppState } from "react-native";
 import Octicons from "@expo/vector-icons/Octicons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { router, useFocusEffect } from "expo-router";
@@ -19,10 +19,14 @@ const Clockin_Home = () => {
     getSecondsWorkedToday,
     getSecondsWorkedShift,
     getSecondsOnBreak,
+    startMidnightWatch,
+    stopMidnightWatch,
+    checkMidnightCrossing,
   } = useTimeStore();
 
   const [tick, setTick] = useState(0);
   const intervalRef = useRef(null);
+  const appStateRef = useRef(AppState.currentState);
 
   // Hydrate from server on focus to catch any state changes
   useFocusEffect(
@@ -30,9 +34,41 @@ const Clockin_Home = () => {
       console.log("Clock screen focused - hydrating from server");
       if (session?.access_token) {
         hydrateFromServer(session);
+        
+        // Start midnight watch if clocked in
+        if (isClockedIn) {
+          startMidnightWatch(session);
+        }
       }
-    }, [session])
+      
+      return () => {
+        // Stop midnight watch when screen loses focus
+        stopMidnightWatch();
+      };
+    }, [session, isClockedIn])
   );
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+        console.log('App came to foreground - checking for midnight crossing');
+        if (session?.access_token) {
+          // Check if midnight passed while app was in background
+          checkMidnightCrossing(session);
+        }
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [session]);
 
   // Timer keeps running when clocked in (even during breaks)
   useEffect(() => {
