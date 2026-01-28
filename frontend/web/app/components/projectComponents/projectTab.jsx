@@ -1,21 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname } from "expo-router";
+import { useRouter, usePathname, useLocalSearchParams } from "expo-router";
 import { useProjectTab } from "./projectTabContext";
 import { colors, spacing, borderRadius, typography } from "../../../constants/theme";
 
 const TABS = [
   { key: "project", label: "Project", icon: "folder-outline", route: "/(app)/project/projectsOverview", matchPath: "/project/projectsOverview" },
   { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
-  { key: "safety", label: "Safety", icon: "shield-checkmark-outline", route: "/(app)/project/safetyOverview", matchPath: "/project/safetyOverview" },
-  { key: "materials", label: "Materials", icon: "cube-outline", route: "/(app)/project/materialsOverview", matchPath: "/project/materialsOverview" },
+  { key: "costCodes", label: "Cost Codes", icon: "cube-outline", route: "/(app)/project/costCodesOverview", matchPath: "/project/costCodesOverview" },
 ];
 
 export default function ProjectTabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const { activeTab, setActiveTab } = useProjectTab();
+
+  const params = useLocalSearchParams();
+  const projectId = params?.projectId;
 
 useEffect(() => {
   if (!pathname) return;
@@ -33,7 +35,11 @@ useEffect(() => {
 
 function onPressTab(tab) {
   setActiveTab(tab.key);
-  router.push(tab.route);
+
+  router.push({
+    pathname: tab.route,
+    params: projectId ? { projectId } : {},
+  });
 }
 
   return (

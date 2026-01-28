@@ -31,18 +31,16 @@ const ACTIONS = [
 // Helper function to capitalize each word in the title
 function formatTitle(title) {
   if (!title) return '';
-  
+
   return title
-    .split(/[\s\/]+/)
-    .map(word => {
-      if (!word) return '';
-      const lowerWord = word.toLowerCase();
-      if (lowerWord === 'api') return 'API';
-      if (lowerWord === 'id') return 'ID';
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    .split(' / ')
+    .map(part => {
+      const lower = part.toLowerCase();
+      if (lower === 'api') return 'API';
+      if (lower === 'id') return 'ID';
+      return part;
     })
-    .join(' / ')
-    .replace(/\s+\/\s+\//g, ' / ');
+    .join(' / ');
 }
 
 export default function TopBar({ title }) {
