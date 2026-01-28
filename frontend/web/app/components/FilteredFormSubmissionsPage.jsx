@@ -1,25 +1,72 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getFormById } from "../../utils/sampleForms";
+import { getForm, getFormSubmissions } from "../../utils/api";
+import { useSession } from "../../utils/ctx";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
 
 /**
  * Form Submissions Page - displays submissions for a specific form
  * with different view options (table, graph, donut)
  * 
- * @param {object} formSubmissions - Form submission data
- * @param {string} formSubmissions.formId - ID of the form
- * @param {string} formSubmissions.formTitle - Title of the form
- * @param {string} formSubmissions.formIcon - Icon for the form
- * @param {array} formSubmissions.submissions - Array of submission objects
+ * @param {string} formId - ID of the form
+ * @param {string} formTitle - Title of the form
+ * @param {string} formIcon - Icon for the form
  * @param {function} onBack - Callback to navigate back to forms list
  */
 export default function FilteredFormSubmissionsPage({ 
-  formSubmissions, 
+  formId,
+  formTitle,
+  formIcon,
+  filter = { type: "all" },
   onBack 
 }) {
+  const { session } = useSession();
+  const token = session?.access_token;
   const [viewType, setViewType] = useState("table"); // "table", "graph", "donut"
+  const [form, setForm] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    if (!token || !formId) return;
+    setLoading(true);
+    try {
+      // Get form details
+      const formResponse = await getForm(token, formId);
+      if (formResponse.success && formResponse.data?.form) {
+        setForm(formResponse.data.form);
+      }
+      
+      // Build query params based on filter type
+      const queryParams = {};
+      if (filter.type === "project" && filter.id) {
+        queryParams.projectId = filter.id;
+      } else if (filter.type === "equipment" && filter.id) {
+        queryParams.equipmentId = filter.id;
+      } else if (filter.type === "vehicle" && filter.id) {
+        queryParams.vehicleId = filter.id;
+      } else if (filter.type === "customer" && filter.id) {
+        queryParams.customerId = filter.id;
+      } else if (filter.type === "costCode" && filter.id) {
+        queryParams.costCodeId = filter.id;
+      }
+      
+      // Get form submissions with optional filters
+      const submissionsResponse = await getFormSubmissions(token, formId, queryParams);
+      if (submissionsResponse.success && submissionsResponse.data?.submissions) {
+        setSubmissions(submissionsResponse.data.submissions);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, formId, filter]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -31,17 +78,18 @@ export default function FilteredFormSubmissionsPage({
     });
   };
 
-  const schema = getFormById(formSubmissions.formId);
-  const displayFields = schema?.fields?.slice(0, 4) || [];
-  const submissions = formSubmissions.submissions || [];
+  // Parse fields from JSON string if needed
+  const parsedFields = form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : [];
+  const displayFields = parsedFields?.slice(0, 4) || [];
 
-  const getFieldValue = (submission, fieldId) => {
-    const value = submission.data[fieldId];
-    if (Array.isArray(value)) {
-      return value.join(", ");
-    }
-    return value || "-";
-  };
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary.orange} />
+        <Text style={styles.loadingText}>Loading submissions...</Text>
+      </View>
+    );
+  }
 
   const renderViewToggle = () => (
     <View style={styles.viewToggle}>
@@ -90,64 +138,75 @@ export default function FilteredFormSubmissionsPage({
   );
 
   const renderTableView = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={{ minWidth: '100%' }}>
-      <View style={{ flex: 1, minWidth: '100%' }}>
-        {/* Header Row */}
-        <View style={styles.tableHeaderRow}>
-          <View style={[styles.tableCell, styles.colSubmissionId]}>
-            <Text style={styles.tableHeaderText}>ID</Text>
-          </View>
-          <View style={[styles.tableCell, styles.colSubmittedBy]}>
-            <Text style={styles.tableHeaderText}>Submitted By</Text>
-          </View>
-          <View style={[styles.tableCell, styles.colDate]}>
-            <Text style={styles.tableHeaderText}>Date</Text>
-          </View>
-          {displayFields.map((field) => (
-            <View key={field.id} style={[styles.tableCell, styles.colField]}>
-              <Text style={styles.tableHeaderText} numberOfLines={1}>
-                {field.question}
-              </Text>
-            </View>
-          ))}
-          <View style={[styles.tableCell, styles.colActions]}>
-            <Text style={styles.tableHeaderText}>Actions</Text>
-          </View>
-        </View>
-
-        {/* Data Rows */}
-        {submissions.map((submission) => (
-          <View key={submission.id} style={styles.tableDataRow}>
+    <ScrollView 
+      style={{ flex: 1 }}
+      contentContainerStyle={{ flexGrow: 1, minHeight: '100%' }}
+      showsVerticalScrollIndicator={true}
+    >
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={true} 
+        style={{ flex: 1, minHeight: '100%' }}
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        <View style={{ flex: 1, minWidth: '100%', minHeight: '100%' }}>
+          {/* Header Row */}
+          <View style={styles.tableHeaderRow}>
             <View style={[styles.tableCell, styles.colSubmissionId]}>
-              <Text style={styles.cellTextSmall} numberOfLines={1}>
-                {submission.id}
-              </Text>
+              <Text style={styles.tableHeaderText}>ID</Text>
             </View>
             <View style={[styles.tableCell, styles.colSubmittedBy]}>
-              <Text style={styles.cellText} numberOfLines={1}>
-                {submission.submittedBy}
-              </Text>
+              <Text style={styles.tableHeaderText}>Submitted By</Text>
             </View>
             <View style={[styles.tableCell, styles.colDate]}>
-              <Text style={styles.cellTextSmall} numberOfLines={2}>
-                {formatDate(submission.submittedAt)}
-              </Text>
+              <Text style={styles.tableHeaderText}>Date</Text>
             </View>
             {displayFields.map((field) => (
               <View key={field.id} style={[styles.tableCell, styles.colField]}>
-                <Text style={styles.cellText} numberOfLines={2}>
-                  {getFieldValue(submission, field.id)}
+                <Text style={styles.tableHeaderText} numberOfLines={1}>
+                  {field.question}
                 </Text>
               </View>
             ))}
             <View style={[styles.tableCell, styles.colActions]}>
-              <Pressable style={styles.actionButton}>
-                <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
-              </Pressable>
+              <Text style={styles.tableHeaderText}>Actions</Text>
             </View>
           </View>
-        ))}
-      </View>
+
+          {/* Data Rows */}
+          {submissions.map((submission) => (
+            <View key={submission.id} style={styles.tableDataRow}>
+              <View style={[styles.tableCell, styles.colSubmissionId]}>
+                <Text style={styles.cellTextSmall} numberOfLines={1}>
+                  {submission.id?.substring(0, 8)}...
+                </Text>
+              </View>
+              <View style={[styles.tableCell, styles.colSubmittedBy]}>
+                <Text style={styles.cellText} numberOfLines={1}>
+                  {submission.submitted_by || "Unknown"}
+                </Text>
+              </View>
+              <View style={[styles.tableCell, styles.colDate]}>
+                <Text style={styles.cellTextSmall} numberOfLines={2}>
+                  {formatDate(submission.submitted_at)}
+                </Text>
+              </View>
+              {displayFields.map((field) => (
+                <View key={field.id} style={[styles.tableCell, styles.colField]}>
+                  <Text style={styles.cellText} numberOfLines={2}>
+                    {submission.data?.[field.id] || "-"}
+                  </Text>
+                </View>
+              ))}
+              <View style={[styles.tableCell, styles.colActions]}>
+                <Pressable style={styles.actionButton}>
+                  <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </ScrollView>
   );
 
@@ -175,7 +234,7 @@ export default function FilteredFormSubmissionsPage({
       {/* Title */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.pageTitle}>{formSubmissions.formIcon} {formSubmissions.formTitle}</Text>
+          <Text style={styles.pageTitle}>{formIcon} {formTitle}</Text>
           <Text style={styles.subtitle}>{submissions.length} submissions</Text>
         </View>
       </View>
@@ -192,14 +251,14 @@ export default function FilteredFormSubmissionsPage({
         <StatCard 
           icon="person" 
           label="Unique Submitters" 
-          value={new Set(submissions.map(s => s.submittedBy)).size} 
+          value={new Set(submissions.map(s => s.submitted_by)).size} 
           bg={colors.semantic.infoLight} 
           color={colors.semantic.info} 
         />
         <StatCard 
           icon="calendar" 
           label="Last Submission" 
-          value={submissions.length > 0 ? formatDate(submissions.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))[0].submittedAt) : "N/A"} 
+          value={submissions.length > 0 ? formatDate(submissions.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0].submitted_at) : "N/A"} 
           bg={colors.semantic.successLight} 
           color={colors.semantic.success} 
         />
@@ -235,6 +294,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBFBFB",
     padding: 20,
     paddingTop: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FBFBFB",
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.md,
+    color: colors.text.secondary,
   },
   topBar: {
     flexDirection: "row",
@@ -330,7 +400,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "white",
     borderRadius: 10,
-    overflow: "hidden",
     ...shadows.small,
   },
   tableHeaderRow: {

@@ -5,12 +5,15 @@ import { useSession } from "../../../utils/ctx";
 import { getForms } from "../../../utils/api";
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
 import { useFormTab } from "../../components/formTabComponents/formTabContext";
-import CreateFormModal from "../../components/formComponents/createFormModal";
+import FormModal from "../../components/formComponents/formModal";
+import { createForm, getForms as fetchFormsApi, seedForms, seedFormSubmissions } from "../../../utils/api";
 
 export default function FormsOverview() {
 	const { session } = useSession();
 	const token = session?.access_token;
 	const { createOpen, setCreateOpen } = useFormTab();
+	const [editOpen, setEditOpen] = useState(false);
+	const [editingForm, setEditingForm] = useState(null);
 
 	const [forms, setForms] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -21,7 +24,7 @@ export default function FormsOverview() {
 		setError(null);
 		setLoading(true);
 		try {
-			const response = await getForms(token, null);
+			const response = await fetchFormsApi(token, null);
 			if (response.success && response.data?.forms) {
 				setForms(response.data.forms);
 			} else {
@@ -45,7 +48,10 @@ export default function FormsOverview() {
 	}, [fetchForms]);
 
 	const totalForms = forms.length;
-	const totalFields = forms.reduce((sum, f) => sum + (f.fields?.length || 0), 0);
+	const totalFields = forms.reduce((sum, f) => {
+		const parsedFields = typeof f.fields === 'string' ? JSON.parse(f.fields || '[]') : (f.fields || []);
+		return sum + (parsedFields?.length || 0);
+	}, 0);
 	const categories = Array.from(new Set(forms.map(f => f.category || "Uncategorized")));
 	const groupedForms = categories.map((cat) => ({
 		category: cat,
@@ -61,6 +67,94 @@ export default function FormsOverview() {
 		);
 	}
 
+	const handleCreate = async (newForm) => {
+		setLoading(true);
+		setCreateOpen(false);
+		setError(null);
+		try {
+			const response = await createForm(token, newForm);
+			if (response.success) {
+				await fetchForms();
+			} else {
+				setError(response.message || "Failed to create form");
+			}
+		} catch (err) {
+			setError("Failed to create form");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleEdit = (form) => {
+		setEditingForm(form);
+		setEditOpen(true);
+	};
+
+	const handleUpdate = async (updatedForm) => {
+		setLoading(true);
+		setEditOpen(false);
+		setError(null);
+		try {
+			const response = await import("../../../utils/api").then(m => m.apiCall(`forms/${editingForm.id}`, token, "PUT", updatedForm));
+			if (response.success) {
+				await fetchForms();
+			} else {
+				setError(response.message || "Failed to update form");
+			}
+		} catch (err) {
+			setError("Failed to update form");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleDelete = async () => {
+		setLoading(true);
+		setEditOpen(false);
+		setError(null);
+		try {
+			const response = await import("../../../utils/api").then(m => m.apiCall(`forms/${editingForm.id}`, token, "DELETE"));
+			if (response.success) {
+				await fetchForms();
+			} else {
+				setError(response.message || "Failed to delete form");
+			}
+		} catch (err) {
+			setError("Failed to delete form");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleSeed = async () => {
+		try {
+			const response = await seedForms(token);
+			if (response.success) {
+				setError(null);
+				await fetchForms();
+				alert("Forms seeded successfully!");
+			} else {
+				setError(response.message || "Failed to seed forms");
+			}
+		} catch (err) {
+			setError("Failed to seed forms");
+		}
+	};
+
+	const handleSeedSubmissions = async () => {
+		try {
+			const response = await seedFormSubmissions(token);
+			if (response.success) {
+				setError(null);
+				alert("Form submissions seeded successfully!");
+			} else {
+				setError(response.message || "Failed to seed submissions");
+			}
+		} catch (err) {
+			setError("Failed to seed submissions");
+		}
+	};
+
 	return (
 		<ScrollView
 			style={styles.container}
@@ -72,6 +166,22 @@ export default function FormsOverview() {
 				<View>
 					<Text style={styles.pageTitle}>Forms Management</Text>
 					<Text style={styles.subtitle}>Manage templates and see key details from your library.</Text>
+				</View>
+				<View style={styles.seedButtonGroup}>
+					<Pressable 
+						style={styles.seedButton}
+						onPress={handleSeed}
+						disabled={loading}
+					>
+						<Text style={styles.seedButtonText}>{loading ? "..." : "Seed"}</Text>
+					</Pressable>
+					<Pressable 
+						style={styles.seedButton}
+						onPress={handleSeedSubmissions}
+						disabled={loading}
+					>
+						<Text style={styles.seedButtonText}>{loading ? "..." : "Seed Data"}</Text>
+					</Pressable>
 				</View>
 			</View>
 
@@ -102,41 +212,36 @@ export default function FormsOverview() {
 				</View>
 			)}
 
-			{/* Forms by Category */}
-			{groupedForms.map(({ category, forms: catForms }) => (
-				<View key={category} style={styles.categorySection}>
-					<Text style={styles.categoryTitle}>{category}</Text>
-					<View style={styles.formsGrid}>
-						{catForms.map((form) => (
-							<FormCard key={form.id} form={form} />
+						{/* Forms by Category */}
+						{groupedForms.map(({ category, forms: catForms }) => (
+							<View key={category} style={styles.categorySection}>
+								<Text style={styles.categoryTitle}>{category}</Text>
+								<View style={styles.formsGrid}>
+									{catForms.map((form) => (
+										<FormCard key={form.id} form={form} onEdit={handleEdit} />
+									))}
+								</View>
+							</View>
 						))}
-					</View>
-				</View>
-			))}
 
-			{/* Create Form Modal */}
-			<CreateFormModal
-				visible={createOpen}
-				onClose={() => setCreateOpen(false)}
-				token={token}
-				onCreated={async (newForm) => {
-					setLoading(true);
-					setCreateOpen(false);
-					setError(null);
-					try {
-						const response = await import("../../../utils/api").then(m => m.createForm(token, newForm));
-						if (response.success) {
-							await fetchForms();
-						} else {
-							setError(response.message || "Failed to create form");
-						}
-					} catch (err) {
-						setError("Failed to create form");
-					} finally {
-						setLoading(false);
-					}
-				}}
-			/>
+						{/* Create Form Modal */}
+						<FormModal
+							mode="create"
+							visible={createOpen}
+							onClose={() => setCreateOpen(false)}
+							token={token}
+							onSubmit={handleCreate}
+						/>
+						{/* Edit Form Modal */}
+						<FormModal
+							mode="edit"
+							visible={editOpen}
+							onClose={() => setEditOpen(false)}
+							token={token}
+							initialFormData={editingForm}
+							onSubmit={handleUpdate}
+							onDelete={handleDelete}
+						/>
 		</ScrollView>
 	);
 }
@@ -155,9 +260,11 @@ function StatCard({ icon, label, value, bg, color }) {
 	);
 }
 
-function FormCard({ form }) {
-	const fieldCount = form.fields?.length || 0;
-	const fieldTypes = Array.from(new Set((form.fields || []).map(f => f.type))).slice(0, 4);
+function FormCard({ form, onEdit }) {
+	// Parse fields if it's a JSON string, otherwise use as-is
+	const parsedFields = typeof form.fields === 'string' ? JSON.parse(form.fields || '[]') : (form.fields || []);
+	const fieldCount = parsedFields?.length || 0;
+	const fieldTypes = Array.from(new Set((parsedFields || []).map(f => f.type))).slice(0, 4);
 
 	return (
 		<View style={styles.formCard}>
@@ -187,7 +294,7 @@ function FormCard({ form }) {
 					<Ionicons name="pricetag-outline" size={14} color={colors.text.tertiary} />
 					<Text style={styles.metaText}>{form.category || "Uncategorized"}</Text>
 				</View>
-				<Pressable style={styles.viewButton}>
+				<Pressable style={styles.viewButton} onPress={() => onEdit(form)}>
 					<Text style={styles.viewText}>Edit Form</Text>
 					<Ionicons name="chevron-forward" size={14} color={colors.primary.orange} />
 				</Pressable>
@@ -213,7 +320,7 @@ const styles = StyleSheet.create({
 		color: colors.text.secondary,
 	},
 
-	header: { marginBottom: spacing.xl },
+	header: { marginBottom: spacing.xl, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
 	pageTitle: {
 		fontSize: 28,
 		fontWeight: typography.fontWeight.bold,
@@ -222,6 +329,21 @@ const styles = StyleSheet.create({
 		marginBottom: spacing.xs,
 	},
 	subtitle: { fontSize: typography.fontSize.md, color: colors.text.secondary },
+	seedButtonGroup: {
+		flexDirection: 'column',
+		gap: spacing.sm,
+	},
+	seedButton: {
+		backgroundColor: colors.semantic.info,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.sm,
+		borderRadius: borderRadius.md,
+	},
+	seedButtonText: {
+		color: 'white',
+		fontSize: typography.fontSize.sm,
+		fontWeight: typography.fontWeight.semibold,
+	},
 
 	statsRow: {
 		flexDirection: 'row',

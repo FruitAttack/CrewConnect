@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getAllSubmissions, getFormById } from "../../utils/sampleForms";
+import { getForms, getFormSubmissions } from "../../utils/api";
+import { useSession } from "../../utils/ctx";
 import FilteredFormSubmissionsPage from "./FilteredFormSubmissionsPage";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
 
@@ -15,52 +16,104 @@ import { colors, spacing, borderRadius, typography, shadows } from "../../consta
  * @param {string} filter.name - Display name for the filter context
  */
 export default function FilteredFormsPage({ filter = { type: "all" } }) {
+  const { session } = useSession();
+  const token = session?.access_token;
+  const [forms, setForms] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [selectedForm, setSelectedForm] = useState(null);
 
-  useEffect(() => {
+  const fetchForms = useCallback(async () => {
+    setError(null);
     setLoading(true);
-    
-    let filtered = [];
-    
-    if (filter.type === "all") {
-      // Show all submissions
-      filtered = getAllSubmissions();
-    } else if (filter.type === "form") {
-      // Filter by specific form
-      filtered = getAllSubmissions({ formId: filter.id });
-    } else {
-      // Filter by object association (project, equipment, user, etc.)
-      filtered = getAllSubmissions({ 
-        associationType: filter.type, 
-        associationId: filter.id 
-      });
+    try {
+      // Get all forms
+      const formsResponse = await getForms(token);
+      if (formsResponse.success && formsResponse.data?.forms) {
+        let filteredForms = formsResponse.data.forms;
+        
+        // Build query params based on filter type
+        const queryParams = {};
+        if (filter.type === "project" && filter.id) {
+          console.log("Filtering by project:", filter.id);
+          queryParams.projectId = filter.id;
+        } else if (filter.type === "equipment" && filter.id) {
+          queryParams.equipmentId = filter.id;
+        } else if (filter.type === "vehicle" && filter.id) {
+          queryParams.vehicleId = filter.id;
+        } else if (filter.type === "customer" && filter.id) {
+          queryParams.customerId = filter.id;
+        } else if (filter.type === "costCode" && filter.id) {
+          queryParams.costCodeId = filter.id;
+        }
+
+        console.log("Filter params:", queryParams);
+        
+        // Fetch submissions with optional filters
+        const submissionsResponse = await getFormSubmissions(token, null, queryParams);
+        let filteredSubmissions = [];
+        
+        if (submissionsResponse.success && submissionsResponse.data?.submissions) {
+          filteredSubmissions = submissionsResponse.data.submissions;
+          
+          // If filtering by project, only show forms that have submissions for this project
+          if (filter.type === "project" && filter.id) {
+            const projectSubmissionFormIds = new Set(
+              filteredSubmissions.map(s => s.form_id)
+            );
+            filteredForms = filteredForms.filter(f => projectSubmissionFormIds.has(f.id));
+          }
+        } else {
+          filteredSubmissions = [];
+        }
+        
+        setForms(filteredForms);
+        setSubmissions(filteredSubmissions);
+      } else {
+        setError(formsResponse.message || "Failed to load forms");
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to load forms");
+    } finally {
+      setLoading(false);
     }
-    
-    setSubmissions(filtered);
-    setLoading(false);
-  }, [filter]);
+  }, [token, filter]);
+
+  useEffect(() => {
+    fetchForms();
+  }, [fetchForms]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchForms();
+    setRefreshing(false);
+  }, [fetchForms]);
 
   // If a form is selected, show the submissions page
   if (selectedForm) {
     return (
       <FilteredFormSubmissionsPage 
-        formSubmissions={selectedForm}
+        formId={selectedForm.formId}
+        formTitle={selectedForm.formTitle}
+        formIcon={selectedForm.formIcon}
+        filter={filter}
         onBack={() => setSelectedForm(null)}
       />
     );
   }
 
   const renderTableView = () => {
-    if (submissions.length === 0) {
+    if (forms.length === 0) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="document-outline" size={48} color={colors.text.tertiary} />
           <Text style={styles.emptyTitle}>No forms found</Text>
           <Text style={styles.emptySubtitle}>
             {filter.type === "all" 
-              ? "No form submissions yet" 
+              ? "No forms yet" 
               : `No forms for this ${filter.type}`}
           </Text>
         </View>
@@ -69,7 +122,7 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
 
     return (
       <ScrollView style={styles.scrollContainer}>
-        <FormsTableView submissions={submissions} onSelectForm={setSelectedForm} />
+        <FormsTableView forms={forms} onSelectForm={setSelectedForm} />
       </ScrollView>
     );
   };
@@ -77,13 +130,18 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary.orange} />
         <Text style={styles.loadingText}>Loading forms...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.orange} />}
+    >
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -96,41 +154,54 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
         </View>
       </View>
 
+      {/* Error */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={20} color={colors.semantic.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={fetchForms}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Stats Summary - Forms-specific stats */}
-      <View style={styles.statsRow}>
-        <StatCard 
-          icon="albums" 
-          label="Total Forms" 
-          value={new Set(submissions.map(s => s.formId)).size} 
-          bg={colors.primary.orangeSubtle} 
-          color={colors.primary.orange} 
-        />
+      {!error && forms.length > 0 && (
+        <View style={styles.statsRow}>
+          <StatCard 
+            icon="albums" 
+            label="Total Forms" 
+            value={forms.length} 
+            bg={colors.primary.orangeSubtle} 
+            color={colors.primary.orange} 
+          />
 
-        <StatCard 
-          icon="document-text" 
-          label="Total Submissions" 
-          value={submissions.length} 
-          bg={colors.semantic.successLight} 
-          color={colors.semantic.success}
-        />
+          <StatCard 
+            icon="document-text" 
+            label="Total Submissions" 
+            value={submissions.length} 
+            bg={colors.semantic.successLight} 
+            color={colors.semantic.success}
+          />
 
-        <StatCard 
-          icon="calendar" 
-          label="Submissions this Week" 
-          value={submissions.filter(s => {
-            const submittedDate = new Date(s.submittedAt);
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return submittedDate >= weekAgo;
-          }).length} 
-          bg={colors.semantic.infoLight} 
-          color={colors.semantic.info} 
-        />
-      </View>
+          <StatCard 
+            icon="calendar" 
+            label="Submissions this Week" 
+            value={submissions.filter(s => {
+              const submittedDate = new Date(s.submitted_at || s.submittedAt);
+              const weekAgo = new Date();
+              weekAgo.setDate(weekAgo.getDate() - 7);
+              return submittedDate >= weekAgo;
+            }).length} 
+            bg={colors.semantic.infoLight} 
+            color={colors.semantic.info} 
+          />
+        </View>
+      )}
 
       {/* Content */}
       {renderTableView()}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -148,7 +219,7 @@ function StatCard({ icon, label, value, bg, color }) {
   );
 }
 
-function FormsTableView({ submissions, onSelectForm }) {
+function FormsTableView({ forms, onSelectForm }) {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", { 
@@ -159,19 +230,6 @@ function FormsTableView({ submissions, onSelectForm }) {
     });
   };
 
-  // Group submissions by form
-  const formGroups = {};
-  submissions.forEach((sub) => {
-    if (!formGroups[sub.formId]) {
-      formGroups[sub.formId] = {
-        formId: sub.formId,
-        submissions: [],
-        schema: getFormById(sub.formId),
-      };
-    }
-    formGroups[sub.formId].submissions.push(sub);
-  });
-
   return (
     <View style={styles.formTableContainer}>
       {/* Table Header */}
@@ -179,8 +237,8 @@ function FormsTableView({ submissions, onSelectForm }) {
         <View style={[styles.tableCell, styles.colFormName]}>
           <Text style={styles.tableHeaderText}>Form</Text>
         </View>
-        <View style={[styles.tableCell, styles.colSubmissionCount]}>
-          <Text style={styles.tableHeaderText}>Submissions</Text>
+        <View style={[styles.tableCell, styles.colCategory]}>
+          <Text style={styles.tableHeaderText}>Category</Text>
         </View>
         <View style={[styles.tableCell, styles.colFieldsCount]}>
           <Text style={styles.tableHeaderText}>Fields</Text>
@@ -194,44 +252,43 @@ function FormsTableView({ submissions, onSelectForm }) {
       </View>
 
       {/* Data Rows */}
-      {Object.values(formGroups).map((group) => {
+      {forms.map((form) => {
         return (
           <Pressable 
-            key={group.formId} 
+            key={form.id} 
             style={styles.tableDataRow}
             onPress={() => onSelectForm({
-              formId: group.formId,
-              formTitle: group.schema?.title || "Unknown Form",
-              formIcon: group.schema?.icon || "📄",
-              submissions: group.submissions,
+              formId: form.id,
+              formTitle: form.title,
+              formIcon: form.icon || "📄",
             })}
           >
             <View style={[styles.tableCell, styles.colFormName]}>
               <View style={styles.formNameContainer}>
-                <Text style={styles.formIcon}>{group.schema?.icon || "📄"}</Text>
+                <Text style={styles.formIcon}>{form.icon || "📄"}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cellTextLink} numberOfLines={1}>
-                    {group.schema?.title || "Unknown Form"}
-                  </Text>
-                  <Text style={styles.formCategory} numberOfLines={1}>
-                    {group.schema?.category || "General"}
+                    {form.title}
                   </Text>
                 </View>
               </View>
             </View>
-            <View style={[styles.tableCell, styles.colSubmissionCount]}>
+            <View style={[styles.tableCell, styles.colCategory]}>
               <Text style={styles.cellTextMedium}>
-                {group.submissions.length}
+                {form.category || "General"}
               </Text>
             </View>
             <View style={[styles.tableCell, styles.colFieldsCount]}>
               <Text style={styles.cellTextMedium}>
-                {group.schema?.fields?.length || 0}
+                {(() => {
+                  const parsedFields = typeof form.fields === 'string' ? JSON.parse(form.fields || '[]') : (form.fields || []);
+                  return parsedFields?.length || 0;
+                })()}
               </Text>
             </View>
             <View style={[styles.tableCell, styles.colCreatedDate]}>
               <Text style={styles.cellTextSmall} numberOfLines={1}>
-                {group.schema?.createdAt ? formatDate(group.schema.createdAt) : 'N/A'}
+                {form.created_at ? formatDate(form.created_at) : 'N/A'}
               </Text>
             </View>
             <View style={[styles.tableCell, styles.colActions]}>
@@ -400,6 +457,9 @@ const styles = StyleSheet.create({
   colSubmissionCount: {
     flex: 1,
   },
+  colCategory: {
+    flex: 1.2,
+  },
   colFieldsCount: {
     flex: 0.8,
   },
@@ -428,5 +488,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     marginTop: 4,
+  },
+  errorContainer: {
+    backgroundColor: colors.semantic.errorLight,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.semantic.error,
+    fontWeight: "500",
+  },
+  retryButton: {
+    backgroundColor: colors.semantic.error,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  retryText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
 });

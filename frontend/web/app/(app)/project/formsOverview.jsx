@@ -1,20 +1,26 @@
 import React from "react";
 import { useLocalSearchParams } from "expo-router";
 import FilteredFormsPage from "../../components/FilteredFormsPage";
+import { useProject } from "../../components/projectComponents/projectContext";
 
 /**
  * Project-specific Forms Overview
  * Shows all form submissions associated with a specific project
  */
 export default function ProjectFormsOverview() {
-  const { projectId, projectName } = useLocalSearchParams();
+  const { selectedProject, selectedProjectID } = useProject();
+  const { projectId: paramProjectId } = useLocalSearchParams();
+  
+  // Use context project first, fallback to params
+  const projectId = selectedProject?.id || selectedProjectID || paramProjectId;
+  const projectName = selectedProject?.name || "Project";
 
   return (
     <FilteredFormsPage 
       filter={{
         type: "project",
-        id: projectId || "proj_001", // Default for demo
-        name: projectName || "Project"
+        id: projectId,
+        name: projectName,
       }}
     />
   );

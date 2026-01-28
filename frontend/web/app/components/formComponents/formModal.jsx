@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,43 +14,77 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius, typography, shadows } from "../../../constants/theme";
 import { FORM_FIELD_TYPES } from "../../../utils/formSchema";
 
-export default function CreateFormModal({
+/**
+ * Universal Form Modal for Create or Edit
+ * Props:
+ * - mode: "create" | "edit"
+ * - visible: boolean
+ * - onClose: function
+ * - token: string
+ * - onSubmit: function (called with form data)
+ * - onDelete: function (edit mode only)
+ * - initialFormData: object (edit mode only)
+ */
+export default function FormModal({
+  mode = "create",
   visible,
   onClose,
   token,
-  onCreated,
+  onSubmit,
+  onDelete,
+  initialFormData = null,
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(1); // 1: Basic Info, 2: Associations, 3: Fields
 
-  const [form, setForm] = useState({
+  const emptyForm = {
     title: "",
     description: "",
     category: "General",
     icon: "📄",
-    associations: {
-      project: { enabled: false, question: "" },
-      equipment: { enabled: false, question: "" },
-      user: { enabled: false, question: "" },
-      vehicle: { enabled: false, question: "" },
-      customer: { enabled: false, question: "" },
-      costCode: { enabled: false, question: "" },
-    },
+    project_enabled: false,
+    project_question: "",
+    equipment_enabled: false,
+    equipment_question: "",
+    user_enabled: false,
+    user_question: "",
+    cost_code_enabled: false,
+    cost_code_question: "",
     fields: [],
-  });
+  };
+  const [form, setForm] = useState(initialFormData ? { ...emptyForm, ...initialFormData } : emptyForm);
+
+  useEffect(() => {
+    if (visible) {
+      if (initialFormData) {
+        // Parse fields if they're a JSON string
+        const parsedFormData = {
+          ...emptyForm,
+          ...initialFormData,
+          fields: typeof initialFormData.fields === 'string' 
+            ? JSON.parse(initialFormData.fields || '[]') 
+            : (initialFormData.fields || [])
+        };
+        setForm(parsedFormData);
+      } else {
+        setForm(emptyForm);
+      }
+      setCurrentStep(1);
+      setError(null);
+    }
+    // eslint-disable-next-line
+  }, [visible, initialFormData]);
 
   const categories = ["General", "Safety", "Equipment", "Daily Reports", "Quality Control", "Inspections", "Vehicle Maintenance"];
   const icons = ["📄", "⚠️", "🔧", "📊", "✅", "🔍", "📝", "🚧", "👷", "🏗️", "🚚", "⛽"];
 
   const associationTypes = [
-    { key: "project", label: "Project", icon: "folder-outline", defaultQuestion: "Which project?" },
-    { key: "equipment", label: "Equipment", icon: "construct-outline", defaultQuestion: "Which equipment?" },
-    { key: "user", label: "User/Employee", icon: "person-outline", defaultQuestion: "Which employee?" },
-    { key: "vehicle", label: "Vehicle", icon: "car-outline", defaultQuestion: "Which vehicle?" },
-    { key: "customer", label: "Customer", icon: "business-outline", defaultQuestion: "Which customer?" },
-    { key: "costCode", label: "Cost Code", icon: "pricetag-outline", defaultQuestion: "Which cost code?" },
+    { key: "project", label: "Project", icon: "folder-outline", defaultQuestion: "Which project?", enabledField: "project_enabled", questionField: "project_question" },
+    { key: "equipment", label: "Equipment", icon: "construct-outline", defaultQuestion: "Which equipment?", enabledField: "equipment_enabled", questionField: "equipment_question" },
+    { key: "user", label: "User/Employee", icon: "person-outline", defaultQuestion: "Which employee?", enabledField: "user_enabled", questionField: "user_question" },
+    { key: "costCode", label: "Cost Code", icon: "pricetag-outline", defaultQuestion: "Which cost code?", enabledField: "cost_code_enabled", questionField: "cost_code_question" },
   ];
 
   const fieldTypes = [
@@ -69,7 +103,7 @@ export default function CreateFormModal({
     return true;
   };
 
-  const canCreate = currentStep === 3 && form.fields.length > 0 && !saving;
+  const canSubmit = currentStep === 3 && form.fields.length > 0 && !saving;
 
   const addField = () => {
     const newField = {
@@ -118,84 +152,50 @@ export default function CreateFormModal({
     updateField(fieldIndex, { options: field.options.filter((_, i) => i !== optionIndex) });
   };
 
-  const toggleAssociation = (key) => {
-    const assoc = form.associations[key];
-    const defaultQuestion = associationTypes.find(a => a.key === key)?.defaultQuestion || "";
+  const toggleAssociation = (assocType) => {
     setForm(f => ({
       ...f,
-      associations: {
-        ...f.associations,
-        [key]: {
-          enabled: !assoc.enabled,
-          question: !assoc.enabled ? defaultQuestion : "",
-        }
-      }
+      [assocType.enabledField]: !f[assocType.enabledField],
+      [assocType.questionField]: !f[assocType.enabledField] ? assocType.defaultQuestion : "",
     }));
   };
 
-  const updateAssociationQuestion = (key, question) => {
+  const updateAssociationQuestion = (assocType, question) => {
     setForm(f => ({
       ...f,
-      associations: {
-        ...f.associations,
-        [key]: { ...f.associations[key], question }
-      }
+      [assocType.questionField]: question
     }));
   };
 
-  const onCreate = async () => {
-    if (!canCreate) return;
-
+  const onSubmitForm = async () => {
+    if (!canSubmit) return;
     setSaving(true);
     setError(null);
-
-    // Clean up associations - remove questions for disabled associations
-    const cleanedAssociations = {};
-    Object.keys(form.associations).forEach(key => {
-      const assoc = form.associations[key];
-      cleanedAssociations[key] = {
-        enabled: assoc.enabled,
-        question: assoc.enabled ? assoc.question : null,
-      };
-    });
-
-    const newForm = {
-      id: `form_${Date.now()}`,
+    const submitForm = {
       title: form.title.trim(),
       description: form.description.trim() || "No description",
       category: form.category,
       icon: form.icon,
-      associations: cleanedAssociations,
       fields: form.fields,
-      created_at: new Date().toISOString(),
+      project_enabled: form.project_enabled,
+      project_question: form.project_enabled ? form.project_question : null,
+      equipment_enabled: form.equipment_enabled,
+      equipment_question: form.equipment_enabled ? form.equipment_question : null,
+      user_enabled: form.user_enabled,
+      user_question: form.user_enabled ? form.user_question : null,
+      cost_code_enabled: form.cost_code_enabled,
+      cost_code_question: form.cost_code_enabled ? form.cost_code_question : null,
     };
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    console.log("New Form Created:");
-    console.log(JSON.stringify(newForm, null, 2));
-
-    onCreated(newForm);
-    
-    // Reset form
-    setForm({
-      title: "",
-      description: "",
-      category: "General",
-      icon: "📄",
-      associations: {
-        project: { enabled: false, question: "" },
-        equipment: { enabled: false, question: "" },
-        user: { enabled: false, question: "" },
-        vehicle: { enabled: false, question: "" },
-        customer: { enabled: false, question: "" },
-        costCode: { enabled: false, question: "" },
-      },
-      fields: [],
-    });
-    setCurrentStep(1);
-    setSaving(false);
+    try {
+      await onSubmit(submitForm);
+      if (mode === "create") setForm(emptyForm);
+      setCurrentStep(1);
+      onClose();
+    } catch (err) {
+      setError("Failed to submit form");
+    } finally {
+      setSaving(false);
+    }
   };
 
   function renderBasicInfo() {
@@ -289,7 +289,6 @@ export default function CreateFormModal({
         </Text>
 
         {associationTypes.map((assocType) => {
-          const assoc = form.associations[assocType.key];
           return (
             <View key={assocType.key} style={styles.associationItem}>
               <View style={styles.associationHeader}>
@@ -298,19 +297,19 @@ export default function CreateFormModal({
                   <Text style={styles.associationLabel}>{assocType.label}</Text>
                 </View>
                 <Switch
-                  value={assoc.enabled}
-                  onValueChange={() => toggleAssociation(assocType.key)}
+                  value={form[assocType.enabledField]}
+                  onValueChange={() => toggleAssociation(assocType)}
                   trackColor={{ false: colors.border.dark, true: colors.primary.orangeLight }}
-                  thumbColor={assoc.enabled ? colors.primary.orange : colors.neutral.offWhite}
+                  thumbColor={form[assocType.enabledField] ? colors.primary.orange : colors.neutral.offWhite}
                 />
               </View>
 
-              {assoc.enabled && (
+              {form[assocType.enabledField] && (
                 <View style={styles.associationQuestion}>
                   <TextInput
                     style={styles.input}
-                    value={assoc.question}
-                    onChangeText={(text) => updateAssociationQuestion(assocType.key, text)}
+                    value={form[assocType.questionField]}
+                    onChangeText={(text) => updateAssociationQuestion(assocType, text)}
                     placeholder={`Question to ask (e.g., "${assocType.defaultQuestion}")`}
                     placeholderTextColor={colors.text.tertiary}
                   />
@@ -377,7 +376,7 @@ export default function CreateFormModal({
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>Create Form</Text>
+              <Text style={styles.title}>{mode === "edit" ? "Edit Form" : "Create Form"}</Text>
               <Text style={styles.stepIndicator}>
                 Step {currentStep} of 3: {currentStep === 1 ? "Basic Info" : currentStep === 2 ? "Associations" : "Form Fields"}
               </Text>
@@ -429,20 +428,30 @@ export default function CreateFormModal({
                   <Ionicons name="arrow-forward" size={18} color={colors.text.inverse} />
                 </Pressable>
               ) : (
-                <Pressable
-                  onPress={onCreate}
-                  disabled={!canCreate}
-                  style={[
-                    styles.createButton,
-                    !canCreate && styles.createButtonDisabled,
-                  ]}
-                >
-                  {saving ? (
-                    <ActivityIndicator color={colors.text.inverse} />
-                  ) : (
-                    <Text style={styles.createText}>Create Form</Text>
+                <>
+                  <Pressable
+                    onPress={onSubmitForm}
+                    disabled={!canSubmit}
+                    style={[
+                      styles.createButton,
+                      !canSubmit && styles.createButtonDisabled,
+                    ]}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color={colors.text.inverse} />
+                    ) : (
+                      <Text style={styles.createText}>{mode === "edit" ? "Save Changes" : "Create Form"}</Text>
+                    )}
+                  </Pressable>
+                  {mode === "edit" && (
+                    <Pressable
+                      onPress={onDelete}
+                      style={[styles.createButton, { backgroundColor: colors.semantic.error, marginLeft: 8 }]}
+                    >
+                      <Text style={styles.createText}>Delete</Text>
+                    </Pressable>
                   )}
-                </Pressable>
+                </>
               )}
             </View>
           </View>
