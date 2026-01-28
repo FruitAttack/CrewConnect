@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import os from "os";
 import authRoutes from "./routes/authRoutes.js";
 import usersRoutes from "./routes/usersRoutes.js";
 import projectsRoutes from './routes/projectsRoutes.js';
@@ -12,6 +13,8 @@ import timeEntriesRoutes from './routes/timeEntriesRoutes.js';
 import timecardApprovalsRoutes from "./routes/timecardApprovalsRoutes.js";
 import reportsRoutes from './routes/reportsRoutes.js';
 import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
+import formsRoutes from './routes/formsRoutes.js';
+import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
 
 const app = express();
 
@@ -32,6 +35,8 @@ app.use("/api/time-entries", timeEntriesRoutes);
 app.use("/api/timecard-approvals", timecardApprovalsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/daily-production", dailyProductionRoutes);
+app.use("/api/forms", formsRoutes);
+app.use("/api/form-submissions", formSubmissionsRoutes);
 
 // Health check
 app.get("/", (req, res) => {
@@ -49,7 +54,9 @@ app.get("/", (req, res) => {
       employeeAssignments: "/api/employee-assignments",
       timeEntries: "/api/time-entries",
       reports: "/api/reports",
-      dailyProduction: "/api/daily-production"
+      dailyProduction: "/api/daily-production",
+      forms: "/api/forms",
+      formSubmissions: "/api/form-submissions"
     }
   });
 });
@@ -62,9 +69,17 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
+  const networkInterfaces = os.networkInterfaces();
+  const localIP = Object.values(networkInterfaces)
+    .flat()
+    .find(iface => iface.family === 'IPv4' && !iface.internal)?.address;
+  
   console.log(`Server started on PORT: ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`API available at http://localhost:${PORT}`);
+  if (localIP) {
+    console.log(`API available at http://${localIP}:${PORT}`);
+  }
 });
 
 export default app;

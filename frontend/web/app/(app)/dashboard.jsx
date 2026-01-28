@@ -234,7 +234,7 @@ export default function Dashboard() {
           <View style={styles.cardHeader}>
             <View>
               <Text style={styles.cardTitle}>Labor Overview</Text>
-              <Text style={styles.cardSubtitle}>This month's activity</Text>
+              <Text style={styles.cardSubtitle}>This month&apos;s activity</Text>
             </View>
           </View>
           <View style={styles.cardContent}>

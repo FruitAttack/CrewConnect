@@ -29,6 +29,7 @@ export default function AppLayout() {
     workforce: "Workforce",
     time: "Time",
     safety: "Safety",
+    forms: "Forms",
     reports: "Reports",
     settings: "Settings",
     

@@ -5,13 +5,16 @@ const FormTabContext = createContext(null);
 export function FormTabProvider({ children }) {
   // Default to the Forms tab
   const [activeTab, setActiveTab] = useState("forms");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const value = useMemo(
     () => ({
       activeTab,
       setActiveTab,
+      createOpen,
+      setCreateOpen,
     }),
-    [activeTab]
+    [activeTab, createOpen]
   );
 
   return (

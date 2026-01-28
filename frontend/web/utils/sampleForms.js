@@ -12,6 +12,15 @@ export const SAMPLE_FORMS = [
     description: "Complete inspection of vehicle before and after operation",
     category: "Vehicle Maintenance",
     icon: "🚚",
+    createdAt: "2025-11-15T08:30:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: false, question: null },
+      user: { enabled: true, question: "Driver assigned?" },
+      vehicle: { enabled: true, question: "Which vehicle was inspected?" },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_vehicle_number",
@@ -97,7 +106,6 @@ export const SAMPLE_FORMS = [
         type: FORM_FIELD_TYPES.LONG_ANSWER,
         question: "Describe Defects Found",
         required: false,
-        conditional: { dependsOn: "field_defects_found", value: "yes" },
         placeholder: "Provide detailed description of all defects or safety concerns...",
         minLines: 5,
       },
@@ -124,6 +132,15 @@ export const SAMPLE_FORMS = [
     description: "Track fuel consumption and refueling activities",
     category: "Vehicle Maintenance",
     icon: "⛽",
+    createdAt: "2024-09-22T14:15:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: false, question: null },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: true, question: "Which vehicle was refueled?" },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_vehicle_id",
@@ -178,6 +195,15 @@ export const SAMPLE_FORMS = [
     description: "Document routine service and oil changes",
     category: "Vehicle Maintenance",
     icon: "🔧",
+    createdAt: "2024-10-05T09:45:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: false, question: null },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: true, question: "Which vehicle was serviced?" },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_vehicle",
@@ -236,6 +262,15 @@ export const SAMPLE_FORMS = [
     description: "Report and document workplace safety incidents",
     category: "Safety",
     icon: "⚠️",
+    createdAt: "2024-08-18T11:20:00Z",
+    associations: {
+      project: { enabled: true, question: "Which project or site did this incident occur on?" },
+      equipment: { enabled: false, question: null },
+      user: { enabled: true, question: "Employee involved?" },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_incident_date",
@@ -296,64 +331,20 @@ export const SAMPLE_FORMS = [
     ],
   },
   {
-    id: "form_safety_toolbox",
-    title: "Toolbox Safety Talk",
-    description: "Record safety meetings and toolbox talks",
-    category: "Safety",
-    icon: "🛡️",
-    fields: [
-      {
-        id: "field_talk_date",
-        type: FORM_FIELD_TYPES.DATE,
-        question: "Meeting Date",
-        required: true,
-      },
-      {
-        id: "field_talk_topic",
-        type: FORM_FIELD_TYPES.SHORT_ANSWER,
-        question: "Safety Topic",
-        required: true,
-        placeholder: "e.g., Fall Protection, PPE Requirements",
-      },
-      {
-        id: "field_presenter",
-        type: FORM_FIELD_TYPES.SHORT_ANSWER,
-        question: "Presented By",
-        required: true,
-        placeholder: "Name of presenter",
-      },
-      {
-        id: "field_key_points",
-        type: FORM_FIELD_TYPES.LONG_ANSWER,
-        question: "Key Points Discussed",
-        required: true,
-        placeholder: "Summarize main safety points covered...",
-        minLines: 5,
-      },
-      {
-        id: "field_attendees",
-        type: FORM_FIELD_TYPES.LONG_ANSWER,
-        question: "Attendees",
-        required: true,
-        placeholder: "List all attendees (name and signature)...",
-        minLines: 6,
-      },
-      {
-        id: "field_questions",
-        type: FORM_FIELD_TYPES.LONG_ANSWER,
-        question: "Questions or Concerns Raised",
-        required: false,
-        placeholder: "Document any questions or discussion points...",
-        minLines: 3,
-      },
-    ],
-  },
-  {
     id: "form_ppe_inspection",
     title: "PPE Inspection Checklist",
     description: "Inspect and document personal protective equipment condition",
     category: "Safety",
     icon: "🦺",
+    createdAt: "2024-07-30T16:00:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: false, question: null },
+      user: { enabled: true, question: "PPE assigned to which employee?" },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_inspector",
@@ -410,7 +401,16 @@ export const SAMPLE_FORMS = [
     title: "Equipment Maintenance Log",
     description: "Track equipment maintenance and service history",
     category: "Maintenance",
+    createdAt: "2024-06-12T10:30:00Z",
     icon: "🔧",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: true, question: "Which equipment was maintained?" },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_equipment_name",
@@ -473,6 +473,15 @@ export const SAMPLE_FORMS = [
     description: "Daily inspection of hand tools and small equipment",
     category: "Maintenance",
     icon: "🔨",
+    createdAt: "2024-05-25T13:10:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: true, question: "Which tool/equipment?" },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_inspector_name",
@@ -528,6 +537,15 @@ export const SAMPLE_FORMS = [
     description: "Submit maintenance requests for facilities and buildings",
     category: "Maintenance",
     icon: "🏢",
+    createdAt: "2024-04-10T08:00:00Z",
+    associations: {
+      project: { enabled: false, question: null },
+      equipment: { enabled: false, question: null },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_requester",
@@ -584,6 +602,15 @@ export const SAMPLE_FORMS = [
     description: "Daily summary of work completed and hours",
     category: "Reporting",
     icon: "📋",
+    createdAt: "2024-12-01T07:30:00Z",
+    associations: {
+      project: { enabled: true, question: "Which project was this work completed for?" },
+      equipment: { enabled: false, question: null },
+      user: { enabled: true, question: "Which employee?" },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: false, question: null },
+      costCode: { enabled: true, question: "Cost code for this work?" },
+    },
     fields: [
       {
         id: "field_report_date",
@@ -642,6 +669,15 @@ export const SAMPLE_FORMS = [
     description: "Weekly project progress and status updates",
     category: "Reporting",
     icon: "📊",
+    createdAt: "2024-03-15T12:45:00Z",
+    associations: {
+      project: { enabled: true, question: "Which project is this status report for?" },
+      equipment: { enabled: false, question: null },
+      user: { enabled: false, question: null },
+      vehicle: { enabled: false, question: null },
+      customer: { enabled: true, question: "Customer for this project?" },
+      costCode: { enabled: false, question: null },
+    },
     fields: [
       {
         id: "field_project_name",
@@ -700,67 +736,6 @@ export const SAMPLE_FORMS = [
       },
     ],
   },
-  {
-    id: "form_time_off_request",
-    title: "Time Off Request",
-    description: "Request vacation, sick leave, or personal time",
-    category: "Reporting",
-    icon: "📅",
-    fields: [
-      {
-        id: "field_employee_name",
-        type: FORM_FIELD_TYPES.SHORT_ANSWER,
-        question: "Employee Name",
-        required: true,
-        placeholder: "Your full name",
-      },
-      {
-        id: "field_request_date",
-        type: FORM_FIELD_TYPES.DATE,
-        question: "Request Date",
-        required: true,
-      },
-      {
-        id: "field_time_off_type",
-        type: FORM_FIELD_TYPES.MULTIPLE_CHOICE,
-        question: "Type of Time Off",
-        required: true,
-        options: [
-          { value: "vacation", label: "Vacation" },
-          { value: "sick", label: "Sick Leave" },
-          { value: "personal", label: "Personal Day" },
-          { value: "unpaid", label: "Unpaid Leave" },
-        ],
-      },
-      {
-        id: "field_start_date",
-        type: FORM_FIELD_TYPES.DATE,
-        question: "Start Date",
-        required: true,
-      },
-      {
-        id: "field_end_date",
-        type: FORM_FIELD_TYPES.DATE,
-        question: "End Date",
-        required: true,
-      },
-      {
-        id: "field_total_days",
-        type: FORM_FIELD_TYPES.SHORT_ANSWER,
-        question: "Total Days Requested",
-        required: true,
-        placeholder: "e.g., 3",
-      },
-      {
-        id: "field_reason",
-        type: FORM_FIELD_TYPES.LONG_ANSWER,
-        question: "Reason (Optional)",
-        required: false,
-        placeholder: "Brief explanation if desired...",
-        minLines: 2,
-      },
-    ],
-  },
 ];
 
 /**
@@ -798,4 +773,308 @@ export const submitForm = async (formSubmission) => {
     ok: true,
     received: formSubmission,
   };
+};
+
+/**
+ * Sample form submissions database
+ * In a real app, this would come from your backend API
+ */
+export const SAMPLE_SUBMISSIONS = [
+  {
+    id: "sub_001",
+    formId: "form_daily_report",
+    formTitle: "Daily Work Report",
+    submittedBy: "user_123",
+    submittedAt: "2026-01-25T16:30:00Z",
+    associations: {
+      project: { id: "proj_001", name: "A Really Big Lego House" },
+      equipment: null,
+      user: { id: "user_456", name: "Mike Johnson" },
+      vehicle: null,
+      customer: null,
+      costCode: { id: "cc_100", name: "General Labor" },
+    },
+    data: {
+      field_report_date: "2026-01-25",
+      field_employee_name: "Mike Johnson",
+      field_hours_worked: "8.5",
+      field_tasks_completed: ["Site Preparation", "Installation", "Cleanup"],
+      field_work_summary: "Completed drywall installation in the east wing. All framing inspected and approved.",
+      field_issues_encountered: "Minor delay due to late material delivery.",
+    },
+  },
+  {
+    id: "sub_002",
+    formId: "form_safety_incident",
+    formTitle: "Safety Incident Report",
+    submittedBy: "user_789",
+    submittedAt: "2026-01-24T14:15:00Z",
+    associations: {
+      project: { id: "proj_001", name: "A Really Big Lego House" },
+      equipment: null,
+      user: { id: "user_234", name: "Sarah Williams" },
+      vehicle: null,
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_incident_date: "2026-01-24T13:45:00Z",
+      field_incident_type: "near_miss",
+      field_incident_description: "Worker nearly stepped on exposed nail protruding from board at ground level near entrance scaffolding.",
+      field_injured_person: "Sarah Williams",
+      field_root_cause: "Debris cleanup not performed after morning framing work. Nails left exposed on discarded boards.",
+      field_corrective_action: "Immediate cleanup performed. Toolbox talk scheduled for tomorrow on proper debris management. Daily site inspections will include nail check.",
+      field_witness_names: "Tom Anderson, Lisa Chen",
+    },
+  },
+  {
+    id: "sub_003",
+    formId: "form_dvir",
+    formTitle: "Daily Vehicle Inspection Report",
+    submittedBy: "user_567",
+    submittedAt: "2026-01-26T07:15:00Z",
+    associations: {
+      project: null,
+      equipment: null,
+      user: { id: "user_567", name: "Robert Brown" },
+      vehicle: { id: "veh_truck_101", name: "TRUCK-101" },
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_vehicle_number: "TRUCK-101",
+      field_driver_name: "Robert Brown",
+      field_mileage: "47,582",
+      field_inspection_date: "2026-01-26",
+      field_inspection_type: "pre-trip",
+      field_vehicle_condition: "good",
+      field_inspection_items: [
+        "Tires & Wheels",
+        "Brakes",
+        "Lights & Signals",
+        "Fluid Levels",
+        "Mirrors & Windows",
+        "Seat Belts",
+      ],
+      field_defects_found: "no",
+      field_notes: "All systems operational. Vehicle ready for daily route.",
+    },
+  },
+  {
+    id: "sub_004",
+    formId: "form_daily_report",
+    formTitle: "Daily Work Report",
+    submittedBy: "user_234",
+    submittedAt: "2026-01-24T17:00:00Z",
+    associations: {
+      project: { id: "proj_002", name: "Westside Shopping Center" },
+      equipment: null,
+      user: { id: "user_234", name: "Sarah Williams" },
+      vehicle: null,
+      customer: null,
+      costCode: { id: "cc_105", name: "Electrical Work" },
+    },
+    data: {
+      field_report_date: "2026-01-24",
+      field_employee_name: "Sarah Williams",
+      field_hours_worked: "9.0",
+      field_tasks_completed: ["Installation", "Testing", "Documentation"],
+      field_work_summary: "Installed electrical conduit and wiring for retail spaces A-D. Completed testing and passed inspection.",
+      field_issues_encountered: "None reported.",
+    },
+  },
+  {
+    id: "sub_005",
+    formId: "form_daily_report",
+    formTitle: "Daily Work Report",
+    submittedBy: "user_891",
+    submittedAt: "2026-01-23T16:15:00Z",
+    associations: {
+      project: { id: "proj_001", name: "A Really Big Lego House" },
+      equipment: null,
+      user: { id: "user_891", name: "Tom Anderson" },
+      vehicle: null,
+      customer: null,
+      costCode: { id: "cc_102", name: "Framing" },
+    },
+    data: {
+      field_report_date: "2026-01-23",
+      field_employee_name: "Tom Anderson",
+      field_hours_worked: "8.0",
+      field_tasks_completed: ["Site Preparation", "Installation"],
+      field_work_summary: "Completed wall framing for second floor. Installed headers and door frames.",
+      field_issues_encountered: "Material shortage on 2x6 lumber. Ordered additional supplies.",
+    },
+  },
+  {
+    id: "sub_006",
+    formId: "form_daily_report",
+    formTitle: "Daily Work Report",
+    submittedBy: "user_345",
+    submittedAt: "2026-01-22T16:45:00Z",
+    associations: {
+      project: { id: "proj_003", name: "Harbor Bridge Maintenance" },
+      equipment: null,
+      user: { id: "user_345", name: "Lisa Chen" },
+      vehicle: null,
+      customer: null,
+      costCode: { id: "cc_110", name: "Bridge Repair" },
+    },
+    data: {
+      field_report_date: "2026-01-22",
+      field_employee_name: "Lisa Chen",
+      field_hours_worked: "7.5",
+      field_tasks_completed: ["Site Preparation", "Installation", "Cleanup"],
+      field_work_summary: "Completed deck surface repairs on span 3. Applied protective coating.",
+      field_issues_encountered: "Weather delay in afternoon due to high winds.",
+    },
+  },
+  {
+    id: "sub_007",
+    formId: "form_safety_incident",
+    formTitle: "Safety Incident Report",
+    submittedBy: "user_456",
+    submittedAt: "2026-01-23T11:30:00Z",
+    associations: {
+      project: { id: "proj_002", name: "Westside Shopping Center" },
+      equipment: null,
+      user: { id: "user_678", name: "David Martinez" },
+      vehicle: null,
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_incident_date: "2026-01-23T11:00:00Z",
+      field_incident_type: "hazard",
+      field_incident_description: "Unmarked wet floor in storage area created slip hazard.",
+      field_injured_person: "",
+      field_root_cause: "Cleaning crew failed to place warning signs after mopping.",
+      field_corrective_action: "Immediate signage placed. Reminder sent to cleaning supervisor about safety protocols.",
+      field_witness_names: "John Stevens",
+    },
+  },
+  {
+    id: "sub_008",
+    formId: "form_safety_incident",
+    formTitle: "Safety Incident Report",
+    submittedBy: "user_123",
+    submittedAt: "2026-01-21T15:45:00Z",
+    associations: {
+      project: { id: "proj_001", name: "A Really Big Lego House" },
+      equipment: null,
+      user: { id: "user_456", name: "Mike Johnson" },
+      vehicle: null,
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_incident_date: "2026-01-21T15:20:00Z",
+      field_incident_type: "injury",
+      field_incident_description: "Worker sustained minor cut on hand while handling sheet metal edging.",
+      field_injured_person: "Mike Johnson",
+      field_root_cause: "Worker not wearing cut-resistant gloves while handling sharp metal materials.",
+      field_corrective_action: "First aid administered. Worker reminded of PPE requirements. Additional gloves distributed to crew.",
+      field_witness_names: "Tom Anderson, Robert Brown",
+    },
+  },
+  {
+    id: "sub_009",
+    formId: "form_safety_incident",
+    formTitle: "Safety Incident Report",
+    submittedBy: "user_789",
+    submittedAt: "2026-01-20T09:15:00Z",
+    associations: {
+      project: { id: "proj_003", name: "Harbor Bridge Maintenance" },
+      equipment: null,
+      user: { id: "user_234", name: "Sarah Williams" },
+      vehicle: null,
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_incident_date: "2026-01-20T08:45:00Z",
+      field_incident_type: "near_miss",
+      field_incident_description: "Tool dropped from elevated platform, narrowly missing worker below.",
+      field_injured_person: "",
+      field_root_cause: "Tool not properly secured in tool belt. Inadequate tethering procedures followed.",
+      field_corrective_action: "Mandatory tool tethering training scheduled for all elevated work crew. Drop zone established below work area.",
+      field_witness_names: "Lisa Chen, David Martinez",
+    },
+  },
+  {
+    id: "sub_010",
+    formId: "form_dvir",
+    formTitle: "Daily Vehicle Inspection Report",
+    submittedBy: "user_456",
+    submittedAt: "2026-01-25T17:30:00Z",
+    associations: {
+      project: null,
+      equipment: null,
+      user: { id: "user_456", name: "Mike Johnson" },
+      vehicle: { id: "veh_truck_205", name: "TRUCK-205" },
+      customer: null,
+      costCode: null,
+    },
+    data: {
+      field_vehicle_number: "TRUCK-205",
+      field_driver_name: "Mike Johnson",
+      field_mileage: "52,891",
+      field_inspection_date: "2026-01-25",
+      field_inspection_type: "post-trip",
+      field_vehicle_condition: "fair",
+      field_inspection_items: [
+        "Tires & Wheels",
+        "Brakes",
+        "Lights & Signals",
+        "Fluid Levels",
+        "Horn & Wipers",
+        "Mirrors & Windows",
+      ],
+      field_defects_found: "yes",
+      field_defect_description: "Left rear tire showing excessive wear on outer edge. Brake fluid level slightly low.",
+      field_notes: "Vehicle serviceable for light duty. Recommend tire rotation and brake fluid top-off within 3 days.",
+    },
+  },
+];
+
+/**
+ * Get all submissions (with optional filters). Production: GET /submissions
+ */
+export const getAllSubmissions = (filters = {}) => {
+  let submissions = [...SAMPLE_SUBMISSIONS];
+
+  if (filters.formId) {
+    submissions = submissions.filter((sub) => sub.formId === filters.formId);
+  }
+
+  if (filters.submittedBy) {
+    submissions = submissions.filter((sub) => sub.submittedBy === filters.submittedBy);
+  }
+
+  // Filter by association
+  if (filters.associationType && filters.associationId) {
+    submissions = submissions.filter(
+      (sub) =>
+        sub.associations[filters.associationType] &&
+        sub.associations[filters.associationType].id === filters.associationId
+    );
+  }
+
+  return submissions.sort(
+    (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
+  );
+};
+
+/**
+ * Get submissions for a specific form. Production: GET /forms/:formId/submissions
+ */
+export const getFormSubmissions = (formId, filters = {}) => {
+  return getAllSubmissions({ ...filters, formId });
+};
+
+/**
+ * Get all submissions for an associated object. Production: GET /objects/:objectType/:objectId/submissions
+ */
+export const getObjectSubmissions = (objectType, objectId) => {
+  return getAllSubmissions({ associationType: objectType, associationId: objectId });
 };

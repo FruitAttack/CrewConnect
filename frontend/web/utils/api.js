@@ -294,30 +294,55 @@ export async function createCustomer(token, customerData) {
 // ============================================
 // FORMS (dummy data from sampleForms)
 // ============================================
-export async function getForms(token, companyId) {
-  // return dummy data structure consistent with API callers
-  return {
-    success: true,
-    message: "OK",
-    data: { forms: SAMPLE_FORMS },
-  }
+
+// Get all forms from backend
+export async function getForms(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(`forms${params ? `?${params}` : ''}`, token);
+}
+
+// Create a new form
+export async function createForm(token, formData) {
+  return apiCall('forms', token, 'POST', formData);
+}
+
+export async function updateForm(token, formId, updates) {
+  return apiCall(`forms/${formId}`, token, 'PUT', updates);
+}
+
+export async function deleteForm(token, formId) {
+  return apiCall(`forms/${formId}`, token, 'DELETE');
 }
 
 export async function getForm(token, formId) {
-  const form = SAMPLE_FORMS.find(f => f.id === formId)
-  if (!form) {
-    return { success: false, message: "Form not found" }
+  return apiCall(`forms/${formId}`, token);
+}
+
+// ============================================
+// FORM SUBMISSIONS
+// ============================================
+export async function getFormSubmissions(token, formId = null, filters = {}) {
+  const queryParams = { ...filters };
+  if (formId) {
+    queryParams.form_id = formId;
   }
-  return { success: true, message: "OK", data: { form } }
+  const params = new URLSearchParams(queryParams).toString();
+  return apiCall(`form-submissions${params ? `?${params}` : ''}`, token);
 }
 
 export async function submitForm(token, formId, payload) {
-  // echo submission for now
-  return {
-    success: true,
-    message: "Submission received",
-    data: { formId, payload },
-  }
+  return apiCall('form-submissions', token, 'POST', {
+    form_id: formId,
+    data: payload,
+  });
+}
+
+export async function updateFormSubmission(token, submissionId, updates) {
+  return apiCall(`form-submissions/${submissionId}`, token, 'PUT', updates);
+}
+
+export async function deleteFormSubmission(token, submissionId) {
+  return apiCall(`form-submissions/${submissionId}`, token, 'DELETE');
 }
 
 export async function updateCustomer(token, customerId, updates) {
@@ -442,4 +467,15 @@ export async function updateDailyProduction(token, id, updates) {
 
 export async function deleteDailyProduction(token, id) {
   return apiCall(`daily-production/${id}`, token, 'DELETE')
+}
+
+// ============================================
+// DEBUG/SEEDING (UNOFFICIAL)
+// ============================================
+export async function seedForms(token) {
+  return apiCall('forms/seed', token, 'POST', {})
+}
+
+export async function seedFormSubmissions(token) {
+  return apiCall('form-submissions/seed', token, 'POST', {})
 }
