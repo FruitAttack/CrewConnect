@@ -1,38 +1,48 @@
 import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React from 'react';
+import { router } from 'expo-router';
 
 const tiles = [
   { label: 'Daily Log', icon: require('../../../assets/icons/dailylog.png') },
   { label: 'Reports', icon: require('../../../assets/icons/reports.png') },
   { label: 'Schedule', icon: require('../../../assets/icons/schedule.png') },
   { label: 'Materials', icon: require('../../../assets/icons/materials.png') },
+  { label: 'DVIR', icon: require('../../../assets/icons/dvir.png'), route: 'dvir' },
+  { label: 'Forms', icon: require('../../../assets/icons/photos.png'), route: 'forms' },
   { label: 'Equipment', icon: require('../../../assets/icons/equipment.png') },
   { label: 'My Crew', icon: require('../../../assets/icons/myCrew.png') },
   { label: 'Toolbox Talk', icon: require('../../../assets/icons/toolbox.png') },
   { label: 'Observations', icon: require('../../../assets/icons/observation.png') },
-  { label: 'Contacts', icon: require('../../../assets/icons/contacts.png') },
+  { label: 'Contacts', icon: require('../../../assets/icons/contacts.png'), route: 'contacts_list' },
   { label: 'Change Order', icon: require('../../../assets/icons/change_order.png') },
-  { label: 'DVIR', icon: require('../../../assets/icons/dvir.png') },
-  { label: 'Gallery', icon: require('../../../assets/icons/photos.png') },
 ];
 
 export default function AppHome() {
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Image source={require('../../../assets/CC_logo_nobackground.png')} style={styles.logo} />
+  const handleTilePress = (tile) => {
+    if (tile.route) {
+      router.push(`/(dashboard)/(app_Screen)/${tile.route}`);
+    }
+  };
 
-      <View style={styles.grid}>
-        {tiles.map((tile, i) => (
-          <TouchableOpacity key={i} style={styles.tile}>
-            <Image source={tile.icon} style={styles.icon} />
-            <Text style={styles.label}>{tile.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Image source={require('../../../assets/CC_logo_nobackground.png')} style={styles.logo} />
+
+        <View style={styles.grid}>
+          {tiles.map((tile, i) => (
+            <TouchableOpacity key={i} style={styles.tile} onPress={() => handleTilePress(tile)}>
+              <Image source={tile.icon} style={styles.icon} />
+              <Text style={styles.label}>{tile.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
+  
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 40,
@@ -50,6 +60,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     paddingHorizontal: 10,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
   tile: {
     width: 110,

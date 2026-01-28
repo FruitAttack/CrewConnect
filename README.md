@@ -31,7 +31,7 @@ CrewConnect empowers construction companies to make smarter, data-driven decisio
 - Secure authentication and role-based access controls.
 
 ## Project Status
-This project is currently in the **prototyping phase (v1.0)**. Core features are under development, and testing with  is ongoing to refine workflows and usability.
+This project is currently in the **Alpha Phase (v1.1)**. Core features are all completed, and many side features are completed or have major work done.
 
 ## Contributors
 - Joel Moffatt  

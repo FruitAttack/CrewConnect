@@ -177,6 +177,19 @@ export async function deleteTimeEntry(token, entryId) {
 }
 
 // ============================================
+// TIMECARD APPROVALS
+// ============================================
+export async function getTimecardApprovals(token, companyId, weekStart) {
+  const params = new URLSearchParams({ company_id: companyId });
+  if (weekStart) params.append('week_start', weekStart);
+  return apiCall(`timecard-approvals?${params}`, token);
+}
+
+export async function bulkUpdateTimecardApprovals(token, data) {
+  return apiCall('timecard-approvals/bulk', token, 'POST', data);
+}
+
+// ============================================
 // FOREMAN/ADMIN MANAGEMENT
 // ============================================
 
@@ -394,6 +407,27 @@ export async function deleteCostCode(token, costCodeId) {
 // Returns the join table with nested cost_code objects
 export async function getProjectCostCodes(token, projectId) {
   return apiCall(`projects/${projectId}/cost-codes`, token)
+}
+
+// Gets both active and inactive cost codes
+export async function getAllProjectCostCodes(token, projectId) {
+  return apiCall(`projects/${projectId}/cost-codes?active_only=false`, token);
+}
+
+export async function assignCostCodeToProject(token, projectId, data) {
+  return apiCall(`projects/${projectId}/cost-codes`, token, 'POST', data)
+}
+
+export async function removeCostCodeFromProject(token, projectId, costCodeId) {
+  return apiCall(`projects/${projectId}/cost-codes/${costCodeId}`, token, 'DELETE')
+}
+
+export async function updateProjectCostCodeBudget(token, projectId, costCodeId, updates) {
+  return apiCall(`projects/${projectId}/cost-codes/${costCodeId}/budget`, token, 'PUT', updates)
+}
+
+export async function getProjectBudgetSummary(token, projectId) {
+  return apiCall(`projects/${projectId}/budget-summary`, token)
 }
 
 // ============================================

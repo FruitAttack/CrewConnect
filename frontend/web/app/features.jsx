@@ -243,4 +243,4 @@ const styles = StyleSheet.create({
   ctaButtonPrimaryText: { fontSize: 16, fontWeight: '600', color: colors.primary.orange },
   footer: { backgroundColor: colors.neutral.black, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, alignItems: 'center' },
   footerText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' },
-});
+})

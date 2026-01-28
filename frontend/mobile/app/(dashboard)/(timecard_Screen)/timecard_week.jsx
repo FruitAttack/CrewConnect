@@ -105,21 +105,6 @@ const Timecard_Screen = () => {
     other: 24,
   });
 
-  // Helper function to check if a time entry belongs to a specific day
-  const doesEntryBelongToDay = (entry, dateString) => {
-    // Parse the target date in local timezone
-    const [year, month, day] = dateString.split('-').map(Number);
-    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
-    
-    // Parse entry times
-    const clockIn = new Date(entry.clock_in);
-    const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
-    
-    // Check if there's any overlap with this day
-    return clockIn < dayEnd && clockOut > dayStart;
-  };
-
   // Helper function to calculate seconds for a specific day
   const calculateSecondsForDay = (timeEntries, dateString) => {
     if (!timeEntries || timeEntries.length === 0) return 0;
@@ -242,16 +227,32 @@ const Timecard_Screen = () => {
       
       setLastCalendarTap(now);
     } else {
-      // Time Off tab - toggle day selection (only if not already submitted)
+      // Time Off tab
       const dateStr = day.dateString;
-      const isAlreadySubmitted = submittedTimeOff.some(item => item.date === dateStr);
       
-      if (!isAlreadySubmitted) {
-        setSelectedDaysOff(prev => 
-          prev.includes(dateStr) 
-            ? prev.filter(d => d !== dateStr)
-            : [...prev, dateStr]
-        );
+      // Check if in cancel mode
+      if (timeOffType === "cancel") {
+        // Only allow selecting days that have submitted time off
+        const hasSubmittedTimeOff = submittedTimeOff.some(item => item.date === dateStr);
+        
+        if (hasSubmittedTimeOff) {
+          setSelectedDaysOff(prev => 
+            prev.includes(dateStr) 
+              ? prev.filter(d => d !== dateStr)
+              : [...prev, dateStr]
+          );
+        }
+      } else {
+        // Normal time off selection - only if not already submitted
+        const isAlreadySubmitted = submittedTimeOff.some(item => item.date === dateStr);
+        
+        if (!isAlreadySubmitted) {
+          setSelectedDaysOff(prev => 
+            prev.includes(dateStr) 
+              ? prev.filter(d => d !== dateStr)
+              : [...prev, dateStr]
+          );
+        }
       }
     }
   };
@@ -309,19 +310,34 @@ const Timecard_Screen = () => {
       return;
     }
 
-    // Create new submitted entries
-    const newSubmissions = selectedDaysOff.map(date => ({
-      date: date,
-      type: timeOffType
-    }));
+    if (timeOffType === "cancel") {
+      // Remove the selected days from submitted time off
+      setSubmittedTimeOff(prev => 
+        prev.filter(item => !selectedDaysOff.includes(item.date))
+      );
+      
+      // Clear the selection
+      setSelectedDaysOff([]);
+      
+      console.log('Cancelled time off for:', selectedDaysOff);
+      
+      // Show success message
+      alert(`Successfully cancelled ${selectedDaysOff.length} day(s) of time off`);
+    } else {
+      // Create new submitted entries
+      const newSubmissions = selectedDaysOff.map(date => ({
+        date: date,
+        type: timeOffType
+      }));
 
-    // Add to submitted time off
-    setSubmittedTimeOff(prev => [...prev, ...newSubmissions]);
-    
-    // Clear the selection
-    setSelectedDaysOff([]);
-    
-    console.log('Submitted time off:', newSubmissions);
+      // Add to submitted time off
+      setSubmittedTimeOff(prev => [...prev, ...newSubmissions]);
+      
+      // Clear the selection
+      setSelectedDaysOff([]);
+      
+      console.log('Submitted time off:', newSubmissions);
+    }
   };
 
   // Create marked dates object
@@ -345,14 +361,29 @@ const Timecard_Screen = () => {
         };
       });
 
-      // Mark currently selected days (not yet submitted) with orange
+      // Mark currently selected days
       selectedDaysOff.forEach(date => {
-        // Only mark if not already submitted
-        if (!submittedTimeOff.some(item => item.date === date)) {
-          marked[date] = {
-            selected: true,
-            selectedColor: "#ff7a00"
-          };
+        // Check if it's already submitted (for cancel mode)
+        const isSubmitted = submittedTimeOff.some(item => item.date === date);
+        
+        if (timeOffType === "cancel") {
+          // In cancel mode, show selected days with a red/warning color
+          if (isSubmitted) {
+            marked[date] = {
+              selected: true,
+              selectedColor: "#f44336", // Red for cancel selection
+              marked: true,
+              dotColor: "#fff"
+            };
+          }
+        } else {
+          // Normal mode - only mark if not already submitted
+          if (!isSubmitted) {
+            marked[date] = {
+              selected: true,
+              selectedColor: "#ff7a00"
+            };
+          }
         }
       });
     } else {
@@ -383,6 +414,12 @@ const Timecard_Screen = () => {
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     return `${hours}.${String(minutes).padStart(2, '0')}`;
   };
+
+  // Clear selections when switching time off type
+  useEffect(() => {
+    // Clear selections when switching between types
+    setSelectedDaysOff([]);
+  }, [timeOffType]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -424,6 +461,11 @@ const Timecard_Screen = () => {
         {activeTab === "My Hours" && (
           <Text style={styles.calendarHelperText}>
             Double-tap a date on calendar or timecard to view details
+          </Text>
+        )}
+        {activeTab === "Time Off" && timeOffType === "cancel" && (
+          <Text style={styles.calendarHelperText}>
+            Select days with submitted time off to cancel them
           </Text>
         )}
       </View>
@@ -503,11 +545,17 @@ const Timecard_Screen = () => {
               </View>
             </View>
 
-            <Text style={styles.formTitle}>Request Time Off</Text>
+            <Text style={styles.formTitle}>
+              {timeOffType === "cancel" ? "Cancel Time Off" : "Request Time Off"}
+            </Text>
             
             <View style={styles.formSection}>
               <Text style={styles.label}>Selected Days: {selectedDaysOff.length}</Text>
-              <Text style={styles.helperText}>Tap dates on the calendar above to select days off</Text>
+              <Text style={styles.helperText}>
+                {timeOffType === "cancel" 
+                  ? "Tap dates on the calendar that have submitted time off to cancel them"
+                  : "Tap dates on the calendar above to select days off"}
+              </Text>
             </View>
 
             <View style={styles.formSection}>
@@ -558,15 +606,20 @@ const Timecard_Screen = () => {
                     <Ionicons name="checkmark" size={18} color="#ff7a00" />
                   )}
                 </View>
-                <Text style={styles.checkboxLabel}>Cancel</Text>
+                <Text style={[styles.checkboxLabel, styles.cancelLabel]}>Cancel Submitted Time Off</Text>
               </Pressable>
             </View>
 
             <Pressable 
-              style={styles.submitButton}
+              style={[
+                styles.submitButton,
+                timeOffType === "cancel" && styles.cancelSubmitButton
+              ]}
               onPress={handleSubmitTimeOff}
             >
-              <Text style={styles.submitButtonText}>Submit Request</Text>
+              <Text style={styles.submitButtonText}>
+                {timeOffType === "cancel" ? "Cancel Selected Days" : "Submit Request"}
+              </Text>
             </Pressable>
 
             {/* Submitted Time Off List */}
@@ -817,6 +870,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#fff",
   },
+  cancelLabel: {
+    color: "#f44336",
+  },
   submitButton: {
     backgroundColor: "#ff7a00",
     paddingVertical: 14,
@@ -824,6 +880,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
     marginBottom: 20,
+  },
+  cancelSubmitButton: {
+    backgroundColor: "#f44336",
   },
   submitButtonText: {
     color: "#fff",
