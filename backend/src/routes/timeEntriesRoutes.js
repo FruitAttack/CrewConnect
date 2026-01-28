@@ -66,8 +66,8 @@ router.post('/validate-geofence', validateGeofence);
 
 // CRUD operations - parameterized routes go LAST
 router.get('/', getTimeEntries);
+router.patch('/:id/notes', updateNotes);
 router.put('/:id', updateTimeEntry);
-router.put('/:id/notes', updateNotes); 
 router.delete('/:id', deleteTimeEntry);
 
 export default router;

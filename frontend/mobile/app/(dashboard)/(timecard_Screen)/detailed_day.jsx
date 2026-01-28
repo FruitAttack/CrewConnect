@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Modal, TextInput, Alert} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
@@ -10,16 +10,14 @@ const Detailed_Day = () => {
   const router = useRouter();
   const { session } = useSession();
   const { date, dayOfWeek } = params;
-  const [menuVisible, setMenuVisible] = useState(null);
   const [timeEntries, setTimeEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notesModalVisible, setNotesModalVisible] = useState(false);
-  const [editNotesModalVisible, setEditNotesModalVisible] = useState(false);
-  const [selectedNotes, setSelectedNotes] = useState('');
-  const [editedNotes, setEditedNotes] = useState('');
-  const [selectedEntryTitle, setSelectedEntryTitle] = useState('');
-  const [selectedEntryId, setSelectedEntryId] = useState(null);
-  const [savingNotes, setSavingNotes] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [editNoteModal, setEditNoteModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState(null);
+  const [editedNote, setEditedNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  
 
   // Convert date string (M/D) to full date string (YYYY-MM-DD)
   const getFullDateString = () => {
@@ -121,71 +119,58 @@ const Detailed_Day = () => {
     }
   };
 
-  useEffect(() => {
-    fetchTimeEntries();
-  }, [session, date]);
-
-  const handleMenuPress = (entryId) => {
-    setMenuVisible(menuVisible === entryId ? null : entryId);
+  const handleEditNote = (entry) => {
+    setSelectedEntry(entry);
+    setEditedNote(entry.notes || '');
+    setEditNoteModal(true);
+    setActiveDropdown(null);
   };
 
-  const handleMenuOption = (option, entryId) => {
-    console.log(`Selected ${option} for entry ${entryId}`);
-    setMenuVisible(null);
+  const handleSaveNote = async () => {
+    if (!selectedEntry || !session?.access_token) return;
     
-    const entry = timeEntries.find(e => e.id === entryId);
-    if (!entry) return;
-    
-    const entryTitle = `${entry.project?.name || 'Unknown Project'} - ${entry.cost_code?.code || 'N/A'}`;
-    
-    if (option === 'View notes') {
-      setSelectedNotes(entry.notes || 'No notes available for this entry.');
-      setSelectedEntryTitle(entryTitle);
-      setNotesModalVisible(true);
-    } else if (option === 'Edit notes') {
-      setSelectedEntryId(entryId);
-      setEditedNotes(entry.notes || '');
-      setSelectedEntryTitle(entryTitle);
-      setEditNotesModalVisible(true);
-    }
-    // Add your logic here for other options
-  };
-
-  const handleSaveNotes = async () => {
-    if (!selectedEntryId || !session?.access_token) return;
-    
-    setSavingNotes(true);
+    setSavingNote(true);
     try {
       const response = await apiCall(
         session.access_token,
-        `time-entries/${selectedEntryId}/notes`,
-        'PUT',
-        { notes: editedNotes }
+        `time-entries/${selectedEntry.id}/notes`,
+        'PATCH',
+        { notes: editedNote }
       );
       
       if (response.success) {
         // Update local state
         setTimeEntries(prevEntries =>
           prevEntries.map(entry =>
-            entry.id === selectedEntryId
-              ? { ...entry, notes: editedNotes }
+            entry.id === selectedEntry.id
+              ? { ...entry, notes: editedNote }
               : entry
           )
         );
-        
-        setEditNotesModalVisible(false);
-        Alert.alert('Success', 'Notes updated successfully');
+        setEditNoteModal(false);
+        Alert.alert('Success', 'Note updated successfully');
       } else {
-        Alert.alert('Error', response.error || 'Failed to update notes');
+        Alert.alert('Error', 'Failed to update note');
       }
     } catch (error) {
-      console.error('Error updating notes:', error);
-      Alert.alert('Error', 'Failed to update notes');
+      console.error('Error updating note:', error);
+      Alert.alert('Error', 'Failed to update note');
     } finally {
-      setSavingNotes(false);
+      setSavingNote(false);
     }
   };
 
+  const handleRequestTimecardEdit = (entry) => {
+    setActiveDropdown(null);
+    // TODO: Implement request timecard edit functionality
+    Alert.alert('Youre edit has been submitted');
+  };
+
+  useEffect(() => {
+    fetchTimeEntries();
+  }, [session, date]);
+
+ 
   return (
     <View style={styles.container}>
       {/* Header with Date Only */}
@@ -234,39 +219,33 @@ const Detailed_Day = () => {
                       </Text>
                     )}
                   </View>
-                  <View>
-                    <Pressable onPress={() => handleMenuPress(entry.id)}>
-                      <Ionicons name="ellipsis-horizontal" size={20} color="#666" />
+                  
+                  {/* Three-dot menu */}
+                  <View style={styles.menuContainer}>
+                    <Pressable
+                      onPress={() => setActiveDropdown(activeDropdown === entry.id ? null : entry.id)}
+                      style={styles.menuButton}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={20} color="#666" />
                     </Pressable>
                     
-                    {menuVisible === entry.id && (
-                      <View style={styles.dropdownMenu}>
-                        <Pressable 
-                          style={styles.menuItem}
-                          onPress={() => handleMenuOption('Request clock in/out edit', entry.id)}
-                        >
-                          <Ionicons name="create-outline" size={18} color="#333" />
-                          <Text style={styles.menuText}>Request clock in/out edit</Text>
-                        </Pressable>
-                        
-                        <View style={styles.menuDivider} />
-                        
-                        <Pressable 
-                          style={styles.menuItem}
-                          onPress={() => handleMenuOption('View notes', entry.id)}
-                        >
-                          <Ionicons name="document-text-outline" size={18} color="#333" />
-                          <Text style={styles.menuText}>View notes</Text>
-                        </Pressable>
-                        
-                        <View style={styles.menuDivider} />
-                        
-                        <Pressable 
-                          style={styles.menuItem}
-                          onPress={() => handleMenuOption('Edit notes', entry.id)}
+                    {/* Dropdown */}
+                    {activeDropdown === entry.id && (
+                      <View style={styles.dropdown}>
+                        <Pressable
+                          onPress={() => handleEditNote(entry)}
+                          style={styles.dropdownItem}
                         >
                           <Ionicons name="pencil-outline" size={18} color="#333" />
-                          <Text style={styles.menuText}>Edit notes</Text>
+                          <Text style={styles.dropdownText}>Edit Note</Text>
+                        </Pressable>
+                        
+                        <Pressable
+                          onPress={() => handleRequestTimecardEdit(entry)}
+                          style={[styles.dropdownItem, styles.dropdownItemLast]}
+                        >
+                          <Ionicons name="create-outline" size={18} color="#333" />
+                          <Text style={styles.dropdownText}>Request Timecard Edit</Text>
                         </Pressable>
                       </View>
                     )}
@@ -327,110 +306,60 @@ const Detailed_Day = () => {
         </>
       )}
 
-      {/* Overlay to close menu when clicking outside */}
-      {menuVisible !== null && (
+      {/* Edit Note Modal */}
+      <Modal
+        visible={editNoteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setEditNoteModal(false)}
+      >
         <Pressable 
-          style={styles.overlay}
-          onPress={() => setMenuVisible(null)}
-        />
-      )}
-
-      {/* View Notes Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={notesModalVisible}
-        onRequestClose={() => setNotesModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          style={styles.modalOverlay}
+          onPress={() => setEditNoteModal(false)}
+        >
+          <Pressable 
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.modalHeader}>
-              <Ionicons name="document-text" size={24} color="#ff7a00" />
-              <Text style={styles.modalTitle}>Notes</Text>
-              <Pressable 
-                onPress={() => setNotesModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
+              <Text style={styles.modalTitle}>Edit Note</Text>
+              <Pressable onPress={() => setEditNoteModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
               </Pressable>
             </View>
-            
-            <View style={styles.modalDivider} />
-            
-            <Text style={styles.modalSubtitle}>{selectedEntryTitle}</Text>
-            
-            <ScrollView style={styles.notesScrollView}>
-              <Text style={styles.notesContent}>{selectedNotes}</Text>
-            </ScrollView>
-            
-            <Pressable 
-              style={styles.modalButton}
-              onPress={() => setNotesModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Notes Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={editNotesModalVisible}
-        onRequestClose={() => setEditNotesModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="pencil" size={24} color="#ff7a00" />
-              <Text style={styles.modalTitle}>Edit Notes</Text>
-              <Pressable 
-                onPress={() => setEditNotesModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </Pressable>
-            </View>
-            
-            <View style={styles.modalDivider} />
-            
-            <Text style={styles.modalSubtitle}>{selectedEntryTitle}</Text>
             
             <TextInput
-              style={styles.textInput}
-              value={editedNotes}
-              onChangeText={setEditedNotes}
-              placeholder="Enter notes..."
-              placeholderTextColor="#999"
+              style={styles.noteInput}
+              value={editedNote}
+              onChangeText={setEditedNote}
+              placeholder="Enter note..."
               multiline
-              numberOfLines={6}
+              numberOfLines={4}
               textAlignVertical="top"
             />
             
-            <View style={styles.buttonRow}>
-              <Pressable 
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setEditNoteModal(false)}
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setEditNotesModalVisible(false)}
-                disabled={savingNotes}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </Pressable>
               
-              <Pressable 
-                style={[styles.modalButton, styles.saveButton, savingNotes && styles.disabledButton]}
-                onPress={handleSaveNotes}
-                disabled={savingNotes}
+              <Pressable
+                onPress={handleSaveNote}
+                style={[styles.modalButton, styles.saveButton]}
+                disabled={savingNote}
               >
-                {savingNotes ? (
+                {savingNote ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.modalButtonText}>Save</Text>
+                  <Text style={styles.saveButtonText}>Save</Text>
                 )}
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -529,34 +458,42 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: "#333",
   },
-  dropdownMenu: {
-    position: "absolute",
-    top: 25,
+  menuContainer: {
+    position: 'relative',
+    marginLeft: 8,
+  },
+  menuButton: {
+    padding: 4,
+  },
+  dropdown: {
+    position: 'absolute',
+    top: 30,
     right: 0,
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
     borderRadius: 8,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
-    minWidth: 220,
+    minWidth: 200,
     zIndex: 1000,
   },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  menuText: {
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownText: {
     fontSize: 14,
-    color: "#333",
+    color: '#333',
     marginLeft: 12,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: "#f0f0f0",
   },
   timeRow: {
     flexDirection: "row",
@@ -646,112 +583,65 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ff7a00",
   },
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 999,
-  },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
-    width: '100%',
-    maxWidth: 500,
-    maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
+    width: '90%',
+    maxWidth: 400,
   },
   modalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#333',
-    marginLeft: 12,
-    flex: 1,
   },
-  closeButton: {
-    padding: 4,
-  },
-  modalDivider: {
-    height: 1,
-    backgroundColor: '#f0f0f0',
-    marginBottom: 16,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 16,
-  },
-  notesScrollView: {
-    maxHeight: 300,
-    marginBottom: 20,
-  },
-  notesContent: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
-  },
-  textInput: {
+  noteInput: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: '#333',
-    minHeight: 120,
-    marginBottom: 20,
-    backgroundColor: '#f9f9f9',
+    minHeight: 100,
+    marginBottom: 16,
   },
-  buttonRow: {
+  modalButtons: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: 12,
   },
   modalButton: {
-    flex: 1,
-    backgroundColor: '#ff7a00',
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     borderRadius: 8,
+    minWidth: 80,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
   },
   saveButton: {
     backgroundColor: '#ff7a00',
   },
-  cancelButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  saveButtonText: {
     color: '#fff',
-  },
-  disabledButton: {
-    opacity: 0.6,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
