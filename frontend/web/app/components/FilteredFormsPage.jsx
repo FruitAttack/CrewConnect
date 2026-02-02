@@ -1,15 +1,31 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getForms, getFormSubmissions } from "../../utils/api";
+import { getForms, getFormSubmissions, createForm } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
+import { useFormTab, useFormTabSafe } from "./formTabComponents/formTabContext";
 import FilteredFormSubmissionsPage from "./FilteredFormSubmissionsPage";
-import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
+import FormModal from "./formComponents/formModal";
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+} from "../../constants/theme";
 
 /**
  * Filtered Forms Page - displays all forms with submission statistics
  * Clicking a form row navigates to FilteredFormSubmissionsPage
- * 
+ *
  * @param {object} filter - Filter configuration
  * @param {string} filter.type - "all" | "project" | "equipment" | "user" | "vehicle" | "customer" | "costCode" | "form"
  * @param {string} filter.id - ID of the object to filter by (e.g., "proj_001")
@@ -18,12 +34,21 @@ import { colors, spacing, borderRadius, typography, shadows } from "../../consta
 export default function FilteredFormsPage({ filter = { type: "all" } }) {
   const { session } = useSession();
   const token = session?.access_token;
+  const contextFormTab = useFormTabSafe();
+  const [localCreateOpen, setLocalCreateOpen] = useState(false);
+  
+  // Use context if available, otherwise use local state
+  const createOpen = contextFormTab.createOpen || localCreateOpen;
+  const setCreateOpen = contextFormTab.setCreateOpen !== (() => {}) ? contextFormTab.setCreateOpen : setLocalCreateOpen;
+  
   const [forms, setForms] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [selectedForm, setSelectedForm] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingForm, setEditingForm] = useState(null);
 
   const fetchForms = useCallback(async () => {
     setError(null);
@@ -33,7 +58,7 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
       const formsResponse = await getForms(token);
       if (formsResponse.success && formsResponse.data?.forms) {
         let filteredForms = formsResponse.data.forms;
-        
+
         // Build query params based on filter type
         const queryParams = {};
         if (filter.type === "project" && filter.id) {
@@ -50,25 +75,34 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
         }
 
         console.log("Filter params:", queryParams);
-        
+
         // Fetch submissions with optional filters
-        const submissionsResponse = await getFormSubmissions(token, null, queryParams);
+        const submissionsResponse = await getFormSubmissions(
+          token,
+          null,
+          queryParams,
+        );
         let filteredSubmissions = [];
-        
-        if (submissionsResponse.success && submissionsResponse.data?.submissions) {
+
+        if (
+          submissionsResponse.success &&
+          submissionsResponse.data?.submissions
+        ) {
           filteredSubmissions = submissionsResponse.data.submissions;
-          
+
           // If filtering by project, only show forms that have submissions for this project
           if (filter.type === "project" && filter.id) {
             const projectSubmissionFormIds = new Set(
-              filteredSubmissions.map(s => s.form_id)
+              filteredSubmissions.map((s) => s.form_id),
             );
-            filteredForms = filteredForms.filter(f => projectSubmissionFormIds.has(f.id));
+            filteredForms = filteredForms.filter((f) =>
+              projectSubmissionFormIds.has(f.id),
+            );
           }
         } else {
           filteredSubmissions = [];
         }
-        
+
         setForms(filteredForms);
         setSubmissions(filteredSubmissions);
       } else {
@@ -92,10 +126,76 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     setRefreshing(false);
   }, [fetchForms]);
 
+  const handleEdit = (form) => {
+    setEditingForm(form);
+    setEditOpen(true);
+  };
+
+  const handleUpdate = async (updatedForm) => {
+    setLoading(true);
+    setEditOpen(false);
+    setError(null);
+    try {
+      const response = await import("../../utils/api").then((m) =>
+        m.apiCall(`forms/${editingForm.id}`, token, "PUT", updatedForm)
+      );
+      if (response.success) {
+        await fetchForms();
+      } else {
+        setError(response.message || "Failed to update form");
+      }
+    } catch (err) {
+      console.error("Error updating form:", err);
+      setError("Failed to update form");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setLoading(true);
+    setEditOpen(false);
+    setError(null);
+    try {
+      const response = await import("../../utils/api").then((m) =>
+        m.apiCall(`forms/${editingForm.id}`, token, "DELETE")
+      );
+      if (response.success) {
+        await fetchForms();
+      } else {
+        setError(response.message || "Failed to delete form");
+      }
+    } catch (err) {
+      console.error("Error deleting form:", err);
+      setError("Failed to delete form");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreate = async (newForm) => {
+    setLoading(true);
+    setCreateOpen(false);
+    setError(null);
+    try {
+      const response = await createForm(token, newForm);
+      if (response.success) {
+        await fetchForms();
+      } else {
+        setError(response.message || "Failed to create form");
+      }
+    } catch (err) {
+      console.error("Error creating form:", err);
+      setError("Failed to create form");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // If a form is selected, show the submissions page
   if (selectedForm) {
     return (
-      <FilteredFormSubmissionsPage 
+      <FilteredFormSubmissionsPage
         formId={selectedForm.formId}
         formTitle={selectedForm.formTitle}
         formIcon={selectedForm.formIcon}
@@ -109,11 +209,15 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     if (forms.length === 0) {
       return (
         <View style={styles.emptyState}>
-          <Ionicons name="document-outline" size={48} color={colors.text.tertiary} />
+          <Ionicons
+            name="document-outline"
+            size={48}
+            color={colors.text.tertiary}
+          />
           <Text style={styles.emptyTitle}>No forms found</Text>
           <Text style={styles.emptySubtitle}>
-            {filter.type === "all" 
-              ? "No forms yet" 
+            {filter.type === "all"
+              ? "No forms yet"
               : `No forms for this ${filter.type}`}
           </Text>
         </View>
@@ -122,7 +226,11 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
 
     return (
       <ScrollView style={styles.scrollContainer}>
-        <FormsTableView forms={forms} onSelectForm={setSelectedForm} />
+        <FormsTableView
+          forms={forms}
+          onSelectForm={setSelectedForm}
+          onEditForm={handleEdit}
+        />
       </ScrollView>
     );
   };
@@ -137,19 +245,28 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
   }
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.orange} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary.orange}
+        />
+      }
     >
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.pageTitle}>Forms</Text>
+          <Text style={styles.pageTitle}>
+            {filter.title || "Form Submissions"}
+          </Text>
           <Text style={styles.subtitle}>
-            {filter.type === "all" 
-              ? "All forms" 
-              : `Forms for ${filter.name || filter.type}`}
+            {filter.subtitle ||
+              (filter.type === "all"
+                ? "All forms"
+                : `Forms for ${filter.name || filter.type}`)}
           </Text>
         </View>
       </View>
@@ -157,7 +274,11 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
       {/* Error */}
       {error && (
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={20} color={colors.semantic.error} />
+          <Ionicons
+            name="alert-circle"
+            size={20}
+            color={colors.semantic.error}
+          />
           <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryButton} onPress={fetchForms}>
             <Text style={styles.retryText}>Retry</Text>
@@ -168,39 +289,61 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
       {/* Stats Summary - Forms-specific stats */}
       {!error && forms.length > 0 && (
         <View style={styles.statsRow}>
-          <StatCard 
-            icon="albums" 
-            label="Total Forms" 
-            value={forms.length} 
-            bg={colors.primary.orangeSubtle} 
-            color={colors.primary.orange} 
+          <StatCard
+            icon="albums"
+            label="Total Forms"
+            value={forms.length}
+            bg={colors.primary.orangeSubtle}
+            color={colors.primary.orange}
           />
 
-          <StatCard 
-            icon="document-text" 
-            label="Total Submissions" 
-            value={submissions.length} 
-            bg={colors.semantic.successLight} 
+          <StatCard
+            icon="document-text"
+            label="Total Submissions"
+            value={submissions.length}
+            bg={colors.semantic.successLight}
             color={colors.semantic.success}
           />
 
-          <StatCard 
-            icon="calendar" 
-            label="Submissions this Week" 
-            value={submissions.filter(s => {
-              const submittedDate = new Date(s.submitted_at || s.submittedAt);
-              const weekAgo = new Date();
-              weekAgo.setDate(weekAgo.getDate() - 7);
-              return submittedDate >= weekAgo;
-            }).length} 
-            bg={colors.semantic.infoLight} 
-            color={colors.semantic.info} 
+          <StatCard
+            icon="calendar"
+            label="Submissions this Week"
+            value={
+              submissions.filter((s) => {
+                const submittedDate = new Date(s.submitted_at || s.submittedAt);
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                return submittedDate >= weekAgo;
+              }).length
+            }
+            bg={colors.semantic.infoLight}
+            color={colors.semantic.info}
           />
         </View>
       )}
 
       {/* Content */}
       {renderTableView()}
+
+      {/* Edit Form Modal */}
+      <FormModal
+        mode="edit"
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        token={token}
+        initialFormData={editingForm}
+        onSubmit={handleUpdate}
+        onDelete={handleDelete}
+      />
+
+      {/* Create Form Modal */}
+      <FormModal
+        mode="create"
+        visible={createOpen}
+        onClose={() => setCreateOpen(false)}
+        token={token}
+        onSubmit={handleCreate}
+      />
     </ScrollView>
   );
 }
@@ -219,14 +362,14 @@ function StatCard({ icon, label, value, bg, color }) {
   );
 }
 
-function FormsTableView({ forms, onSelectForm }) {
+function FormsTableView({ forms, onSelectForm, onEditForm }) {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { 
-      month: "short", 
-      day: "numeric", 
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
       hour: "2-digit",
-      minute: "2-digit"
+      minute: "2-digit",
     });
   };
 
@@ -246,22 +389,24 @@ function FormsTableView({ forms, onSelectForm }) {
         <View style={[styles.tableCell, styles.colCreatedDate]}>
           <Text style={styles.tableHeaderText}>Created</Text>
         </View>
-        <View style={[styles.tableCell, styles.colActions]}>
-          <Text style={styles.tableHeaderText}>Actions</Text>
+        <View style={[styles.tableCell, styles.colEdit]}>
+          <Text style={styles.tableHeaderText}>Edit</Text>
         </View>
       </View>
 
       {/* Data Rows */}
       {forms.map((form) => {
         return (
-          <Pressable 
-            key={form.id} 
+          <Pressable
+            key={form.id}
             style={styles.tableDataRow}
-            onPress={() => onSelectForm({
-              formId: form.id,
-              formTitle: form.title,
-              formIcon: form.icon || "📄",
-            })}
+            onPress={() =>
+              onSelectForm({
+                formId: form.id,
+                formTitle: form.title,
+                formIcon: form.icon || "📄",
+              })
+            }
           >
             <View style={[styles.tableCell, styles.colFormName]}>
               <View style={styles.formNameContainer}>
@@ -281,19 +426,29 @@ function FormsTableView({ forms, onSelectForm }) {
             <View style={[styles.tableCell, styles.colFieldsCount]}>
               <Text style={styles.cellTextMedium}>
                 {(() => {
-                  const parsedFields = typeof form.fields === 'string' ? JSON.parse(form.fields || '[]') : (form.fields || []);
+                  const parsedFields =
+                    typeof form.fields === "string"
+                      ? JSON.parse(form.fields || "[]")
+                      : form.fields || [];
                   return parsedFields?.length || 0;
                 })()}
               </Text>
             </View>
             <View style={[styles.tableCell, styles.colCreatedDate]}>
               <Text style={styles.cellTextSmall} numberOfLines={1}>
-                {form.created_at ? formatDate(form.created_at) : 'N/A'}
+                {form.created_at ? formatDate(form.created_at) : "N/A"}
               </Text>
             </View>
-            <View style={[styles.tableCell, styles.colActions]}>
-              <Pressable style={styles.actionButton}>
-                <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary.orange} />
+            <View style={[styles.tableCell, styles.colEdit]}>
+              <Pressable
+                style={styles.editButton}
+                onPress={() => onEditForm(form)}
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={18}
+                  color={colors.primary.orange}
+                />
               </Pressable>
             </View>
           </Pressable>
@@ -466,7 +621,7 @@ const styles = StyleSheet.create({
   colCreatedDate: {
     flex: 1.5,
   },
-  colActions: {
+  colEdit: {
     flex: 0.5,
     flexDirection: "row",
     gap: 8,

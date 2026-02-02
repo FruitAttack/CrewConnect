@@ -13,7 +13,15 @@ export async function getAllFormSubmissions(req, res) {
 
     let query = supabase
       .from('form_submissions')
-      .select('*')
+      .select(`
+        *,
+        submitter:submitted_by(id, full_name, email),
+        project:associated_project_id(id, name),
+        equipment:associated_equipment_id(id, label),
+        user:associated_user_id(id, full_name),
+        customer:associated_customer_id(id, name),
+        cost_code:associated_cost_code_id(id, name)
+      `)
       .order('submitted_at', { ascending: false });
 
     // Filter by form

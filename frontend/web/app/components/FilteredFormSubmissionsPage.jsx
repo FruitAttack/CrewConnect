@@ -81,6 +81,13 @@ export default function FilteredFormSubmissionsPage({
   // Parse fields from JSON string if needed
   const parsedFields = form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : [];
   const displayFields = parsedFields?.slice(0, 4) || [];
+  
+  // Check which associations are enabled in the form
+  const showProject = form?.project_enabled || false;
+  const showEquipment = form?.equipment_enabled || false;
+  const showUser = form?.user_enabled || false;
+  const showCustomer = form?.customer_enabled || false;
+  const showCostCode = form?.cost_code_enabled || false;
 
   if (loading) {
     return (
@@ -161,6 +168,31 @@ export default function FilteredFormSubmissionsPage({
             <View style={[styles.tableCell, styles.colDate]}>
               <Text style={styles.tableHeaderText}>Date</Text>
             </View>
+            {showProject && (
+              <View style={[styles.tableCell, styles.colAssociation]}>
+                <Text style={styles.tableHeaderText}>{form?.project_question || "Project"}</Text>
+              </View>
+            )}
+            {showEquipment && (
+              <View style={[styles.tableCell, styles.colAssociation]}>
+                <Text style={styles.tableHeaderText}>{form?.equipment_question || "Equipment"}</Text>
+              </View>
+            )}
+            {showUser && (
+              <View style={[styles.tableCell, styles.colAssociation]}>
+                <Text style={styles.tableHeaderText}>{form?.user_question || "User"}</Text>
+              </View>
+            )}
+            {showCustomer && (
+              <View style={[styles.tableCell, styles.colAssociation]}>
+                <Text style={styles.tableHeaderText}>{form?.customer_question || "Customer"}</Text>
+              </View>
+            )}
+            {showCostCode && (
+              <View style={[styles.tableCell, styles.colAssociation]}>
+                <Text style={styles.tableHeaderText}>{form?.cost_code_question || "Cost Code"}</Text>
+              </View>
+            )}
             {displayFields.map((field) => (
               <View key={field.id} style={[styles.tableCell, styles.colField]}>
                 <Text style={styles.tableHeaderText} numberOfLines={1}>
@@ -183,7 +215,7 @@ export default function FilteredFormSubmissionsPage({
               </View>
               <View style={[styles.tableCell, styles.colSubmittedBy]}>
                 <Text style={styles.cellText} numberOfLines={1}>
-                  {submission.submitted_by || "Unknown"}
+                  {submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown"}
                 </Text>
               </View>
               <View style={[styles.tableCell, styles.colDate]}>
@@ -191,6 +223,41 @@ export default function FilteredFormSubmissionsPage({
                   {formatDate(submission.submitted_at)}
                 </Text>
               </View>
+              {showProject && (
+                <View style={[styles.tableCell, styles.colAssociation]}>
+                  <Text style={styles.cellText} numberOfLines={1}>
+                    {submission.project?.name || submission.associated_project_name || "-"}
+                  </Text>
+                </View>
+              )}
+              {showEquipment && (
+                <View style={[styles.tableCell, styles.colAssociation]}>
+                  <Text style={styles.cellText} numberOfLines={1}>
+                    {submission.equipment?.label || submission.associated_equipment_label || "-"}
+                  </Text>
+                </View>
+              )}
+              {showUser && (
+                <View style={[styles.tableCell, styles.colAssociation]}>
+                  <Text style={styles.cellText} numberOfLines={1}>
+                    {submission.user?.full_name || submission.associated_user_name || "-"}
+                  </Text>
+                </View>
+              )}
+              {showCustomer && (
+                <View style={[styles.tableCell, styles.colAssociation]}>
+                  <Text style={styles.cellText} numberOfLines={1}>
+                    {submission.customer?.name || submission.associated_customer_name || "-"}
+                  </Text>
+                </View>
+              )}
+              {showCostCode && (
+                <View style={[styles.tableCell, styles.colAssociation]}>
+                  <Text style={styles.cellText} numberOfLines={1}>
+                    {submission.cost_code?.name || submission.associated_cost_code_name || "-"}
+                  </Text>
+                </View>
+              )}
               {displayFields.map((field) => (
                 <View key={field.id} style={[styles.tableCell, styles.colField]}>
                   <Text style={styles.cellText} numberOfLines={2}>
@@ -439,6 +506,9 @@ const styles = StyleSheet.create({
   },
   colDate: {
     flex: 1.5,
+  },
+  colAssociation: {
+    flex: 1.2,
   },
   colField: {
     flex: 2.5,

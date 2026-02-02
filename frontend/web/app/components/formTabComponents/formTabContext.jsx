@@ -31,3 +31,17 @@ export function useFormTab() {
   }
   return ctx;
 }
+
+export function useFormTabSafe() {
+  const ctx = useContext(FormTabContext);
+  // If not in a provider, return dummy values that won't be used
+  if (!ctx) {
+    return {
+      activeTab: "forms",
+      setActiveTab: () => {},
+      createOpen: false,
+      setCreateOpen: () => {},
+    };
+  }
+  return ctx;
+}
