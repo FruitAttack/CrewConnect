@@ -159,7 +159,7 @@ export default function FormBuilder({ form, onSubmit }) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}

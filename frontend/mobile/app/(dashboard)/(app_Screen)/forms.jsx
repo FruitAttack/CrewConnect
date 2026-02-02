@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,17 +13,52 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getAllForms, searchForms } from "../../../utils/sampleForms";
+import { useSession } from "../../../utils/ctx";
+import { getForms } from "../../../utils/api";
 
 export default function FormsList() {
+  const { session } = useSession();
+  const token = session?.access_token;
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [forms, setForms] = useState([]);
+  const [error, setError] = useState(null);
 
-  const allForms = getAllForms();
+  const fetchForms = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    try {
+      console.log("Fetching forms with token:", token);
+      const response = await getForms(token);
+      console.log("Forms response:", response);
+      
+      if (response.success) {
+        // Backend returns { forms: data } directly in the response
+        const formsList = response.data?.forms || response.forms || [];
+        console.log("Parsed forms list:", formsList);
+        setForms(formsList);
+      } else {
+        setError(response.message || "Failed to load forms");
+      }
+    } catch (err) {
+      console.error("Error fetching forms:", err);
+      setError("Failed to load forms: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchForms();
+  }, [fetchForms]);
 
   const filteredForms = searchQuery.trim()
-    ? searchForms(searchQuery)
-    : allForms;
+    ? forms.filter(form => 
+        form.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        form.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : forms;
 
   const handleSelectForm = (formId) => {
     router.push({
@@ -63,34 +98,45 @@ export default function FormsList() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2196F3" />
           </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={48} color="#f44336" />
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable style={styles.retryButton} onPress={fetchForms}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filteredForms.length > 0 ? (
           <FlatList
             data={filteredForms}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.formCard}
-                onPress={() => handleSelectForm(item.id)}
-              >
-                <View style={styles.formCardIcon}>
-                  <Text style={styles.iconEmoji}>{item.icon}</Text>
-                </View>
-                <View style={styles.formCardContent}>
-                  <Text style={styles.formCardTitle}>{item.title}</Text>
-                  <Text style={styles.formCardDescription} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                  <View style={styles.formCardFooter}>
-                    <Text style={styles.categoryTag}>{item.category}</Text>
-                    <Text style={styles.fieldCount}>
-                      {item.fields.length} fields
-                    </Text>
+            renderItem={({ item }) => {
+              const parsedFields = typeof item.fields === 'string' ? JSON.parse(item.fields || '[]') : (item.fields || []);
+              return (
+                <Pressable
+                  style={styles.formCard}
+                  onPress={() => handleSelectForm(item.id)}
+                >
+                  <View style={styles.formCardIcon}>
+                    <Text style={styles.iconEmoji}>{item.icon || "📝"}</Text>
                   </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#2196F3" />
-              </Pressable>
-            )}
+                  <View style={styles.formCardContent}>
+                    <Text style={styles.formCardTitle}>{item.title}</Text>
+                    <Text style={styles.formCardDescription} numberOfLines={2}>
+                      {item.description || "No description"}
+                    </Text>
+                    <View style={styles.formCardFooter}>
+                      <Text style={styles.categoryTag}>{item.category || "General"}</Text>
+                      <Text style={styles.fieldCount}>
+                        {parsedFields.length} fields
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={24} color="#2196F3" />
+                </Pressable>
+              );
+            }}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
         ) : (
@@ -222,5 +268,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#bbb",
     marginTop: 4,
+  },
+  errorContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#f44336",
+    marginTop: 12,
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#2196F3",
+    borderRadius: 6,
+  },
+  retryText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });

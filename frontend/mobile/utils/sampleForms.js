@@ -7,7 +7,7 @@ import { FORM_FIELD_TYPES } from "./formSchema";
 
 export const SAMPLE_FORMS = [
   {
-    id: "form_dvir",
+    id: "9f21dc43-e775-4fe9-87fb-92942e016dc9",
     title: "Daily Vehicle Inspection Report",
     description: "Complete inspection of vehicle before and after operation",
     category: "Vehicle Maintenance",
@@ -119,7 +119,7 @@ export const SAMPLE_FORMS = [
     ],
   },
   {
-    id: "form_safety_incident",
+    id: "6d63c47a-2bcf-4954-9efd-2d85c37f4d3a",
     title: "Safety Incident Report",
     description: "Report and document workplace safety incidents",
     category: "Safety",
@@ -246,7 +246,7 @@ export const SAMPLE_FORMS = [
     ],
   },
   {
-    id: "form_daily_report",
+    id: "30292a64-2607-47d7-81a6-fe7a17e3ff25",
     title: "Daily Work Report",
     description: "Daily summary of work completed and hours",
     category: "Reporting",
