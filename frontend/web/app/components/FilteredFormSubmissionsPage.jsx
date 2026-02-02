@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getForm, getFormSubmissions } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
@@ -27,6 +27,8 @@ export default function FilteredFormSubmissionsPage({
   const [form, setForm] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterRules, setFilterRules] = useState([]);
+  const [openDropdown, setOpenDropdown] = useState(null);
 
   const fetchData = useCallback(async () => {
     if (!token || !formId) return;
@@ -89,6 +91,68 @@ export default function FilteredFormSubmissionsPage({
   const showCustomer = form?.customer_enabled || false;
   const showCostCode = form?.cost_code_enabled || false;
 
+  const getUniqueValues = useCallback((fieldId) => {
+    const values = new Set();
+    submissions.forEach((sub) => {
+      const value = sub.data?.[fieldId];
+      if (value !== null && value !== undefined && value !== "") {
+        values.add(String(value));
+      }
+    });
+    return Array.from(values).sort();
+  }, [submissions]);
+
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter((submission) => {
+      return filterRules.every((rule) => {
+        if (!rule.fieldId) return true;
+        const value = submission.data?.[rule.fieldId];
+
+        if (rule.type === "number") {
+          const numValue = parseFloat(value);
+          const target = parseFloat(rule.value);
+          if (isNaN(numValue) || isNaN(target)) return false;
+          if (rule.operator === "gt") return numValue > target;
+          if (rule.operator === "lt") return numValue < target;
+          if (rule.operator === "eq") return numValue === target;
+        }
+
+        if (rule.type === "text") {
+          if (!rule.values || rule.values.length === 0) return true;
+          return rule.values.includes(String(value));
+        }
+
+        return true;
+      });
+    });
+  }, [submissions, filterRules]);
+
+  const addFilterRule = () => {
+    if (!parsedFields.length) return;
+    const firstField = parsedFields[0];
+    setFilterRules((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        fieldId: firstField.id,
+        type: "text",
+        operator: "gt",
+        value: "",
+        values: [],
+      },
+    ]);
+  };
+
+  const updateRule = (ruleId, updates) => {
+    setFilterRules((prev) =>
+      prev.map((rule) => (rule.id === ruleId ? { ...rule, ...updates } : rule))
+    );
+  };
+
+  const removeRule = (ruleId) => {
+    setFilterRules((prev) => prev.filter((rule) => rule.id !== ruleId));
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -145,20 +209,189 @@ export default function FilteredFormSubmissionsPage({
   );
 
   const renderTableView = () => (
-    <ScrollView 
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1, minHeight: '100%' }}
-      showsVerticalScrollIndicator={true}
-    >
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={true} 
-        style={{ flex: 1, minHeight: '100%' }}
-        contentContainerStyle={{ flexGrow: 1 }}
+    <View style={{ flex: 1, position: "relative" }}>
+      {openDropdown && (
+        <Pressable
+          style={styles.dropdownBackdropFull}
+          onPress={() => setOpenDropdown(null)}
+        />
+      )}
+      <View style={styles.filterCard}>
+        <View style={styles.filterHeader}>
+          <Text style={styles.filterTitle}>Filters</Text>
+          <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
+            <Ionicons name="add" size={16} color="white" />
+            <Text style={styles.addFilterText}>Add filter</Text>
+          </Pressable>
+        </View>
+
+        {filterRules.length === 0 ? (
+          <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
+        ) : (
+          <View style={styles.filterRulesContainer}>
+            {filterRules.map((rule) => {
+              const field = parsedFields.find((f) => f.id === rule.fieldId);
+              const uniqueValues = rule.fieldId ? getUniqueValues(rule.fieldId) : [];
+              const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
+
+              return (
+                <View key={rule.id} style={styles.filterRuleRow}>
+                  <Pressable
+                    style={styles.filterSelect}
+                    onPress={() =>
+                      setOpenDropdown((prev) =>
+                        prev?.type === "field" && prev?.ruleId === rule.id
+                          ? null
+                          : { type: "field", ruleId: rule.id }
+                      )
+                    }
+                  >
+                    <Text style={styles.filterSelectText} numberOfLines={1}>
+                      {field?.question || "Select field"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
+                  </Pressable>
+                  {openDropdown?.type === "field" && openDropdown?.ruleId === rule.id && (
+                    <View style={styles.dropdown}>
+                      {parsedFields.map((f) => (
+                        <Pressable
+                          key={f.id}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            updateRule(rule.id, {
+                              fieldId: f.id,
+                              type: "text",
+                              values: [],
+                              operator: "gt",
+                              value: "",
+                            });
+                            setOpenDropdown(null);
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText} numberOfLines={1}>
+                            {f.question}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={styles.filterTypeToggle}>
+                    <Pressable
+                      style={[styles.filterTypeButton, rule.type === "text" && styles.filterTypeButtonActive]}
+                      onPress={() => updateRule(rule.id, { type: "text", values: [] })}
+                    >
+                      <Text style={[styles.filterTypeText, rule.type === "text" && styles.filterTypeTextActive]}>Text</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.filterTypeButton, rule.type === "number" && styles.filterTypeButtonActive]}
+                      onPress={() => updateRule(rule.id, { type: "number", operator: "gt", value: "" })}
+                    >
+                      <Text style={[styles.filterTypeText, rule.type === "number" && styles.filterTypeTextActive]}>Number</Text>
+                    </Pressable>
+                  </View>
+
+                  {rule.type === "number" ? (
+                    <View style={styles.numberFilterInline}>
+                      <Pressable
+                        style={[styles.filterOperatorBtn, rule.operator === "gt" && styles.filterOperatorBtnActive]}
+                        onPress={() => updateRule(rule.id, { operator: "gt" })}
+                      >
+                        <Text style={styles.filterOperatorText}>{">"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.filterOperatorBtn, rule.operator === "lt" && styles.filterOperatorBtnActive]}
+                        onPress={() => updateRule(rule.id, { operator: "lt" })}
+                      >
+                        <Text style={styles.filterOperatorText}>{"<"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.filterOperatorBtn, rule.operator === "eq" && styles.filterOperatorBtnActive]}
+                        onPress={() => updateRule(rule.id, { operator: "eq" })}
+                      >
+                        <Text style={styles.filterOperatorText}>{"="}</Text>
+                      </Pressable>
+                      <TextInput
+                        style={styles.filterInput}
+                        placeholder="Value"
+                        value={rule.value}
+                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.textFilterInline}>
+                      <Pressable
+                        style={styles.dropdownButton}
+                        onPress={() =>
+                          setOpenDropdown((prev) =>
+                            prev?.type === "values" && prev?.ruleId === rule.id
+                              ? null
+                              : { type: "values", ruleId: rule.id }
+                          )
+                        }
+                      >
+                        <Text style={styles.dropdownButtonText} numberOfLines={1}>
+                          {rule.values?.length > 0
+                            ? `${rule.values.length} selected`
+                            : "Select values"}
+                        </Text>
+                        <Ionicons name={isValuesOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.text.secondary} />
+                      </Pressable>
+                      {isValuesOpen && (
+                        <View style={styles.dropdown}>
+                          {uniqueValues.map((value) => {
+                            const isSelected = rule.values?.includes(value);
+                            return (
+                              <Pressable
+                                key={value}
+                                style={styles.dropdownItem}
+                                onPress={() => {
+                                  const currentValues = rule.values || [];
+                                  const newValues = isSelected
+                                    ? currentValues.filter((v) => v !== value)
+                                    : [...currentValues, value];
+                                  updateRule(rule.id, { values: newValues });
+                                }}
+                              >
+                                <Ionicons
+                                  name={isSelected ? "checkbox" : "square-outline"}
+                                  size={18}
+                                  color={isSelected ? colors.primary.orange : colors.text.secondary}
+                                />
+                                <Text style={styles.dropdownItemText} numberOfLines={1}>{value}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
+                    <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, zIndex: 1 }}
+        contentContainerStyle={{ flexGrow: 1, minHeight: "100%" }}
+        showsVerticalScrollIndicator={true}
       >
-        <View style={{ flex: 1, minWidth: '100%', minHeight: '100%' }}>
-          {/* Header Row */}
-          <View style={styles.tableHeaderRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={true}
+          style={{ flex: 1, minHeight: "100%" }}
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          <View style={{ flex: 1, minWidth: "100%", minHeight: "100%" }}>
+            {/* Header Row */}
+            <View style={styles.tableHeaderRow}>
             <View style={[styles.tableCell, styles.colSubmissionId]}>
               <Text style={styles.tableHeaderText}>ID</Text>
             </View>
@@ -206,7 +439,7 @@ export default function FilteredFormSubmissionsPage({
           </View>
 
           {/* Data Rows */}
-          {submissions.map((submission) => (
+          {filteredSubmissions.map((submission) => (
             <View key={submission.id} style={styles.tableDataRow}>
               <View style={[styles.tableCell, styles.colSubmissionId]}>
                 <Text style={styles.cellTextSmall} numberOfLines={1}>
@@ -275,6 +508,7 @@ export default function FilteredFormSubmissionsPage({
         </View>
       </ScrollView>
     </ScrollView>
+  </View>
   );
 
   const renderPlaceholder = (type) => (
@@ -544,5 +778,203 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
     maxWidth: 300,
+  },
+  filterCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    position: "relative",
+    zIndex: 20,
+    overflow: "visible",
+    ...shadows.small,
+  },
+  filterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text.primary,
+  },
+  addFilterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary.orange,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addFilterText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filterEmptyText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+  },
+  filterRulesContainer: {
+    gap: 12,
+    zIndex: 20,
+  },
+  filterRuleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    position: "relative",
+    zIndex: 20,
+  },
+  filterSelect: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#fff",
+    minWidth: 220,
+    maxWidth: 260,
+    position: "relative",
+  },
+  filterSelectText: {
+    fontSize: 13,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  filterTypeToggle: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  filterTypeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
+  },
+  filterTypeButtonActive: {
+    backgroundColor: colors.primary.orangeSubtle,
+  },
+  filterTypeText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: "500",
+  },
+  filterTypeTextActive: {
+    color: colors.primary.orange,
+    fontWeight: "700",
+  },
+  numberFilterInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  textFilterInline: {
+    minWidth: 220,
+    position: "relative",
+    zIndex: 20,
+  },
+  filterOperatorBtn: {
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    minWidth: 24,
+    alignItems: "center",
+  },
+  filterOperatorBtnActive: {
+    backgroundColor: colors.primary.orangeSubtle,
+    borderColor: colors.primary.orange,
+  },
+  filterOperatorText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text.primary,
+  },
+  filterInput: {
+    flex: 1,
+    padding: 4,
+    fontSize: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 4,
+    backgroundColor: "#fff",
+    minWidth: 60,
+  },
+  dropdownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 6,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 4,
+    backgroundColor: "#fff",
+    gap: 4,
+  },
+  dropdownButtonText: {
+    fontSize: 11,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  dropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    width: "100%",
+    maxWidth: 260,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 4,
+    marginTop: 2,
+    maxHeight: 200,
+    zIndex: 1000,
+    elevation: 6,
+    ...shadows.small,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  dropdownItemText: {
+    fontSize: 12,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  removeFilterButton: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: colors.semantic.errorLight,
+  },
+  dropdownBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+  },
+  dropdownBackdropFull: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 15,
   },
 });
