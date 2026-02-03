@@ -13,6 +13,7 @@ export default function RootLayout() {
     '/workforce',
     '/project',
     '/time',
+    '/map',
     '/safety',
     '/reports',
     '/form',

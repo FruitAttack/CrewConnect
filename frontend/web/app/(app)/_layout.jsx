@@ -28,6 +28,7 @@ export default function AppLayout() {
     projects: "Projects",
     workforce: "Workforce",
     time: "Time",
+    map: "Map",
     safety: "Safety",
     forms: "Forms",
     reports: "Reports",

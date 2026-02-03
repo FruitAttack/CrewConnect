@@ -1029,12 +1029,12 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 13, color: colors.text.primary, outlineStyle: 'none' },
 
   // Toggle buttons
-  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
-  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
-  viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
-  viewText: { fontSize: 12, fontWeight: '500', color: colors.text.tertiary },
+  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 8, padding: 4 },
+  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  viewBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  viewText: { fontSize: 13, fontWeight: '500', color: colors.text.tertiary },
   viewTextActive: { color: colors.text.primary },
-  viewBtnCount: { fontSize: 11, fontWeight: '600', color: colors.text.tertiary, minWidth: 16, textAlign: 'center' },
+  viewBtnCount: { fontSize: 12, fontWeight: '600', color: colors.text.tertiary, minWidth: 18, textAlign: 'center' },
   viewBtnCountActive: { color: colors.primary.orange },
 
   // Legacy status stats (keeping for reference, can remove)
