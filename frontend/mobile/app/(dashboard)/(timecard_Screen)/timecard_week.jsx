@@ -7,6 +7,10 @@ import {
   SafeAreaView,
   ScrollView,
   ActivityIndicator,
+  TextInput,
+  Modal,
+  Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar } from "react-native-calendars";
@@ -15,6 +19,29 @@ import { useSession } from "../../../utils/ctx";
 import { apiCall } from "../../../utils/api";
 
 const TABS = ["My Hours", "Time Off"];
+
+// Time off type options with colors
+const TIME_OFF_TYPES = [
+  { value: "VACATION", label: "Vacation", color: "#4CAF50" },
+  { value: "PERSONAL", label: "Personal", color: "#2196F3" },
+  { value: "SICK", label: "Sick", color: "#FF9800" },
+  { value: "OTHER", label: "Other", color: "#9C27B0" },
+];
+
+// Hours per day options
+const HOURS_OPTIONS = [
+  { value: 8, label: "8 hours (Full day)" },
+  { value: 4, label: "4 hours (Half day)" },
+  { value: 2, label: "2 hours" },
+];
+
+// Status colors for submitted requests
+const STATUS_COLORS = {
+  pending: { bg: "#FFF3E0", text: "#FF9800" },
+  approved: { bg: "#E8F5E9", text: "#4CAF50" },
+  denied: { bg: "#FFEBEE", text: "#F44336" },
+  cancelled: { bg: "#F5F5F5", text: "#9E9E9E" },
+};
 
 // Helper function to get the start of the week (Sunday) in local timezone
 const getWeekStart = (dateString) => {
@@ -78,6 +105,23 @@ const formatDateRange = (startDate) => {
   return `${startMonth}. ${startDay} - ${endMonth}. ${endDay}`;
 };
 
+// Calculate business days between two dates
+const calculateBusinessDays = (startDate, endDate) => {
+  let count = 0;
+  const current = new Date(startDate);
+  const end = new Date(endDate);
+  
+  while (current <= end) {
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return count;
+};
+
 const Timecard_Screen = () => {
   const { session } = useSession();
   const today = new Date();
@@ -93,23 +137,28 @@ const Timecard_Screen = () => {
   const [lastCalendarTap, setLastCalendarTap] = useState(null);
   const [loadingHours, setLoadingHours] = useState(false);
 
-  // Time Off form states
-  const [selectedDaysOff, setSelectedDaysOff] = useState([]);
-  const [timeOffType, setTimeOffType] = useState("vacation");
-  const [submittedTimeOff, setSubmittedTimeOff] = useState([]);
+  // Time Off states
+  const [selectedTimeOffDates, setSelectedTimeOffDates] = useState([]);
+  const [timeOffType, setTimeOffType] = useState("VACATION");
+  const [hoursPerDay, setHoursPerDay] = useState(8);
+  const [timeOffReason, setTimeOffReason] = useState("");
+  const [showHoursModal, setShowHoursModal] = useState(false);
+  const [submittingTimeOff, setSubmittingTimeOff] = useState(false);
   
-  // Time Off balances (in hours)
+  // Time Off data from API
+  const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [timeOffBalances, setTimeOffBalances] = useState({
-    vacation: 80,
-    personal: 40,
-    other: 24,
+    allocated_hours: 0,
+    used_hours: 0,
+    pending_hours: 0,
+    available_hours: 0,
   });
+  const [loadingTimeOff, setLoadingTimeOff] = useState(false);
 
   // Helper function to calculate seconds for a specific day
   const calculateSecondsForDay = (timeEntries, dateString) => {
     if (!timeEntries || timeEntries.length === 0) return 0;
     
-    // Parse date in LOCAL timezone (midnight to midnight in local time)
     const [year, month, day] = dateString.split('-').map(Number);
     const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
     const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
@@ -117,17 +166,14 @@ const Timecard_Screen = () => {
     let totalSeconds = 0;
     
     timeEntries.forEach(entry => {
-      // Parse UTC times from database
       const clockIn = new Date(entry.clock_in);
       const clockOut = entry.clock_out ? new Date(entry.clock_out) : new Date();
       
-      // Calculate overlap with this LOCAL day
       const overlapStart = Math.max(clockIn.getTime(), dayStart.getTime());
       const overlapEnd = Math.min(clockOut.getTime(), dayEnd.getTime());
       
       if (overlapStart < overlapEnd) {
         const overlapSeconds = (overlapEnd - overlapStart) / 1000;
-        // Subtract break minutes proportionally if the entry spans this day
         const entryDuration = (clockOut - clockIn) / 1000;
         const overlapRatio = overlapSeconds / entryDuration;
         const breakSeconds = (entry.break_minutes || 0) * 60 * overlapRatio;
@@ -146,15 +192,12 @@ const Timecard_Screen = () => {
     const weekStructure = generateWeekDataStructure(weekStart);
     
     try {
-      // Get the start and end of the week in LOCAL timezone
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       
-      // Format dates as YYYY-MM-DD and let backend append time
       const startDateStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}T00:00:00`;
       const endDateStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}T23:59:59`;
       
-      // Fetch all time entries for the week range
       const response = await apiCall(
         session.access_token,
         `time-entries?start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`,
@@ -164,7 +207,6 @@ const Timecard_Screen = () => {
       if (response.success && response.data?.time_entries) {
         const timeEntries = response.data.time_entries;
         
-        // Calculate hours for each day using local timezone
         const updatedWeekData = weekStructure.map(dayData => {
           const seconds = calculateSecondsForDay(timeEntries, dayData.fullDate);
           return {
@@ -186,10 +228,84 @@ const Timecard_Screen = () => {
     }
   };
 
+  // Fetch time-off balances from API
+  const fetchTimeOffBalances = async () => {
+    if (!session?.access_token) return;
+    
+    try {
+      const response = await apiCall(
+        session.access_token,
+        'time-off/balances',
+        'GET'
+      );
+      
+      // apiCall wraps response, so server's {success, data} is in response.data
+      const serverResponse = response.data;
+      
+      if (response.success && serverResponse?.success && serverResponse?.data) {
+        const balanceData = serverResponse.data;
+        setTimeOffBalances({
+          allocated_hours: balanceData.allocated_hours || 0,
+          used_hours: balanceData.used_hours || 0,
+          pending_hours: balanceData.pending_hours || 0,
+          available_hours: balanceData.available_hours || 0,
+        });
+      } else {
+        // Set default values on error
+        setTimeOffBalances({
+          allocated_hours: 0,
+          used_hours: 0,
+          pending_hours: 0,
+          available_hours: 0,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching time-off balances:', error);
+      setTimeOffBalances({
+        allocated_hours: 0,
+        used_hours: 0,
+        pending_hours: 0,
+        available_hours: 0,
+      });
+    }
+  };
+
+  // Fetch time-off requests from API
+  const fetchTimeOffRequests = async () => {
+    if (!session?.access_token) return;
+    
+    setLoadingTimeOff(true);
+    try {
+      const response = await apiCall(
+        session.access_token,
+        'time-off',
+        'GET'
+      );
+      
+      // apiCall wraps response, so server's {success, data} is in response.data
+      const serverResponse = response.data;
+      
+      if (response.success && serverResponse?.success && Array.isArray(serverResponse?.data)) {
+        setTimeOffRequests(serverResponse.data);
+      } else {
+        // Ensure we always have an array
+        setTimeOffRequests([]);
+      }
+    } catch (error) {
+      console.error('Error fetching time-off requests:', error);
+      setTimeOffRequests([]);
+    } finally {
+      setLoadingTimeOff(false);
+    }
+  };
+
   // Fetch hours when week changes or when tab becomes active
   useEffect(() => {
     if (activeTab === "My Hours") {
       fetchWeekHours(selectedWeekStart);
+    } else if (activeTab === "Time Off") {
+      fetchTimeOffBalances();
+      fetchTimeOffRequests();
     }
   }, [selectedWeekStart, activeTab, session]);
 
@@ -198,9 +314,7 @@ const Timecard_Screen = () => {
     const DOUBLE_TAP_DELAY = 300; 
     
     if (activeTab === "My Hours") {
-      // Check for double tap
       if (lastCalendarTap && (now - lastCalendarTap) < DOUBLE_TAP_DELAY) {
-        // Double tap detected - navigate to detail page
         const [year, month, dayNum] = day.dateString.split('-').map(Number);
         const selected = new Date(year, month - 1, dayNum);
         const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -214,53 +328,48 @@ const Timecard_Screen = () => {
           },
         });
       } else {
-        // Single tap - update selection
         const weekStart = getWeekStart(day.dateString);
         setSelectedWeekStart(weekStart);
         setDateRange(formatDateRange(weekStart));
         setSelectedDate(day.dateString);
         
-        // Update selected row to match calendar selection
         const [year, month, dayNum] = day.dateString.split('-').map(Number);
         setSelectedRowDate(`${month}/${dayNum}`);
       }
       
       setLastCalendarTap(now);
     } else {
-      // Time Off tab
+      // Time Off tab - toggle individual days
       const dateStr = day.dateString;
       
-      // Check if in cancel mode
-      if (timeOffType === "cancel") {
-        // Only allow selecting days that have submitted time off
-        const hasSubmittedTimeOff = submittedTimeOff.some(item => item.date === dateStr);
-        
-        if (hasSubmittedTimeOff) {
-          setSelectedDaysOff(prev => 
-            prev.includes(dateStr) 
-              ? prev.filter(d => d !== dateStr)
-              : [...prev, dateStr]
-          );
-        }
-      } else {
-        // Normal time off selection - only if not already submitted
-        const isAlreadySubmitted = submittedTimeOff.some(item => item.date === dateStr);
-        
-        if (!isAlreadySubmitted) {
-          setSelectedDaysOff(prev => 
-            prev.includes(dateStr) 
-              ? prev.filter(d => d !== dateStr)
-              : [...prev, dateStr]
-          );
-        }
+      // Check if date is already in a submitted request
+      const isSubmitted = timeOffRequests.some(req => 
+        req.status !== 'cancelled' && 
+        dateStr >= req.start_date && 
+        dateStr <= req.end_date
+      );
+      
+      if (isSubmitted) {
+        Alert.alert("Date Unavailable", "This date already has a time-off request.");
+        return;
       }
+      
+      // Toggle the date selection
+      setSelectedTimeOffDates(prev => {
+        if (prev.includes(dateStr)) {
+          // Remove if already selected
+          return prev.filter(d => d !== dateStr);
+        } else {
+          // Add and sort the dates
+          return [...prev, dateStr].sort();
+        }
+      });
     }
   };
 
   const handleRowPress = (dateString) => {
     setSelectedRowDate(dateString);
     
-    // Update calendar selection to match row click
     const [month, day] = dateString.split('/');
     const year = selectedWeekStart.getFullYear();
     const fullDateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -290,7 +399,6 @@ const Timecard_Screen = () => {
   };
 
   const handleOpenDetailPage = (item) => {
-    console.log('Opening detail page for:', item);
     router.push({
       pathname: "/detailed_day",
       params: {
@@ -304,39 +412,116 @@ const Timecard_Screen = () => {
     return selectedRowDate === dateString;
   };
 
-  const handleSubmitTimeOff = () => {
-    if (selectedDaysOff.length === 0) {
-      alert("Please select at least one day");
+  // Submit time-off request to API
+  const handleSubmitTimeOff = async () => {
+    if (selectedTimeOffDates.length === 0) {
+      Alert.alert("Select Dates", "Please select at least one day for your time off.");
       return;
     }
 
-    if (timeOffType === "cancel") {
-      // Remove the selected days from submitted time off
-      setSubmittedTimeOff(prev => 
-        prev.filter(item => !selectedDaysOff.includes(item.date))
-      );
-      
-      // Clear the selection
-      setSelectedDaysOff([]);
-      
-      console.log('Cancelled time off for:', selectedDaysOff);
-      
-      // Show success message
-      alert(`Successfully cancelled ${selectedDaysOff.length} day(s) of time off`);
-    } else {
-      // Create new submitted entries
-      const newSubmissions = selectedDaysOff.map(date => ({
-        date: date,
-        type: timeOffType
-      }));
+    const totalDays = selectedTimeOffDates.length;
+    const totalHours = totalDays * hoursPerDay;
 
-      // Add to submitted time off
-      setSubmittedTimeOff(prev => [...prev, ...newSubmissions]);
-      
-      // Clear the selection
-      setSelectedDaysOff([]);
-      
-      console.log('Submitted time off:', newSubmissions);
+    // Check if enough balance
+    if (timeOffBalances.available_hours < totalHours) {
+      Alert.alert(
+        "Insufficient Balance",
+        `You have ${timeOffBalances.available_hours} hours available but are requesting ${totalHours} hours.`
+      );
+      return;
+    }
+
+    // Sort dates to get start and end
+    const sortedDates = [...selectedTimeOffDates].sort();
+    const startDate = sortedDates[0];
+    const endDate = sortedDates[sortedDates.length - 1];
+
+    setSubmittingTimeOff(true);
+
+    try {
+      const response = await apiCall(
+        session.access_token,
+        'time-off',
+        'POST',
+        {
+          type: timeOffType,
+          start_date: startDate,
+          end_date: endDate,
+          hours_per_day: hoursPerDay,
+          total_hours: totalHours,
+          selected_dates: selectedTimeOffDates,
+          reason: timeOffReason.trim() || null,
+        }
+      );
+
+      // apiCall wraps response, so server's {success, data} is in response.data
+      const serverResponse = response.data;
+
+      if (response.success && serverResponse?.success) {
+        // Reset form and refresh data immediately
+        setSelectedTimeOffDates([]);
+        setTimeOffType("VACATION");
+        setHoursPerDay(8);
+        setTimeOffReason("");
+        
+        // Refresh data
+        fetchTimeOffBalances();
+        fetchTimeOffRequests();
+        
+        // Then show success alert
+        Alert.alert(
+          "Request Submitted",
+          "Your time-off request has been submitted for manager approval."
+        );
+      } else {
+        Alert.alert("Error", serverResponse?.error || response.message || "Failed to submit request.");
+      }
+    } catch (error) {
+      console.error('Error submitting time-off:', error);
+      Alert.alert("Error", "Failed to submit request. Please try again.");
+    } finally {
+      setSubmittingTimeOff(false);
+    }
+  };
+
+  // Cancel a pending request
+  const handleCancelRequest = async (requestId) => {
+    const doCancel = async () => {
+      try {
+        const response = await apiCall(
+          session.access_token,
+          `time-off/${requestId}`,
+          'DELETE'
+        );
+
+        // apiCall wraps response, so server's {success, data} is in response.data
+        const serverResponse = response.data;
+
+        if (response.success && serverResponse?.success) {
+          fetchTimeOffBalances();
+          fetchTimeOffRequests();
+        } else {
+          Alert.alert("Error", serverResponse?.error || response.message || "Failed to cancel request.");
+        }
+      } catch (error) {
+        console.error('Error cancelling request:', error);
+        Alert.alert("Error", "Failed to cancel request.");
+      }
+    };
+
+    // Use Platform to detect web vs native
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm("Are you sure you want to cancel this time-off request?");
+      if (confirmed) doCancel();
+    } else {
+      Alert.alert(
+        "Cancel Request",
+        "Are you sure you want to cancel this time-off request?",
+        [
+          { text: "No", style: "cancel" },
+          { text: "Yes, Cancel", style: "destructive", onPress: doCancel }
+        ]
+      );
     }
   };
 
@@ -345,47 +530,53 @@ const Timecard_Screen = () => {
     const marked = {};
 
     if (activeTab === "Time Off") {
-      // Mark submitted time off with different colors based on type
-      submittedTimeOff.forEach(item => {
-        let color = "#4CAF50"; // default green for vacation
-        if (item.type === "personal") {
-          color = "#2196F3"; // blue for personal
-        } else if (item.type === "other") {
-          color = "#9C27B0"; // purple for other
-        }
+      // Mark submitted time-off requests (weekdays only)
+      timeOffRequests.forEach(request => {
+        if (request.status === 'cancelled') return;
         
-        marked[item.date] = {
-          selected: true,
-          selectedColor: color,
-          marked: false // Remove the dot
-        };
+        const typeConfig = TIME_OFF_TYPES.find(t => t.value === request.type) || TIME_OFF_TYPES[0];
+        
+        // Parse dates correctly to avoid timezone issues
+        const [startYear, startMonth, startDay] = request.start_date.split('-').map(Number);
+        const [endYear, endMonth, endDay] = request.end_date.split('-').map(Number);
+        const current = new Date(startYear, startMonth - 1, startDay);
+        const end = new Date(endYear, endMonth - 1, endDay);
+        
+        while (current <= end) {
+          const dayOfWeek = current.getDay();
+          // Only mark weekdays (Monday-Friday, where Sunday=0, Saturday=6)
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            const year = current.getFullYear();
+            const month = String(current.getMonth() + 1).padStart(2, '0');
+            const day = String(current.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            marked[dateStr] = {
+              selected: true,
+              selectedColor: request.status === 'pending' 
+                ? typeConfig.color + '80' // Semi-transparent for pending
+                : typeConfig.color,
+              marked: request.status === 'pending',
+              dotColor: '#fff',
+            };
+          }
+          current.setDate(current.getDate() + 1);
+        }
       });
 
-      // Mark currently selected days
-      selectedDaysOff.forEach(date => {
-        // Check if it's already submitted (for cancel mode)
-        const isSubmitted = submittedTimeOff.some(item => item.date === date);
+      // Mark currently selected dates with the selected type's color
+      if (selectedTimeOffDates.length > 0) {
+        const selectedTypeConfig = TIME_OFF_TYPES.find(t => t.value === timeOffType) || TIME_OFF_TYPES[0];
         
-        if (timeOffType === "cancel") {
-          // In cancel mode, show selected days with a red/warning color
-          if (isSubmitted) {
-            marked[date] = {
+        selectedTimeOffDates.forEach(dateStr => {
+          // Don't override submitted dates
+          if (!marked[dateStr]) {
+            marked[dateStr] = {
               selected: true,
-              selectedColor: "#f44336", // Red for cancel selection
-              marked: true,
-              dotColor: "#fff"
+              selectedColor: selectedTypeConfig.color,
             };
           }
-        } else {
-          // Normal mode - only mark if not already submitted
-          if (!isSubmitted) {
-            marked[date] = {
-              selected: true,
-              selectedColor: "#ff7a00"
-            };
-          }
-        }
-      });
+        });
+      }
     } else {
       // My Hours tab
       if (selectedDate) {
@@ -415,11 +606,17 @@ const Timecard_Screen = () => {
     return `${hours}.${String(minutes).padStart(2, '0')}`;
   };
 
-  // Clear selections when switching time off type
-  useEffect(() => {
-    // Clear selections when switching between types
-    setSelectedDaysOff([]);
-  }, [timeOffType]);
+  // Calculate selected dates info
+  const getSelectedDatesInfo = () => {
+    if (selectedTimeOffDates.length === 0) return null;
+    
+    const totalDays = selectedTimeOffDates.length;
+    const totalHours = totalDays * hoursPerDay;
+    
+    return { totalDays, totalHours };
+  };
+
+  const selectedInfo = getSelectedDatesInfo();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -457,15 +654,14 @@ const Timecard_Screen = () => {
             arrowColor: "#ff7a00",
           }}
         />
-        {/* Helper text for double-tap */}
         {activeTab === "My Hours" && (
           <Text style={styles.calendarHelperText}>
             Double-tap a date on calendar or timecard to view details
           </Text>
         )}
-        {activeTab === "Time Off" && timeOffType === "cancel" && (
+        {activeTab === "Time Off" && (
           <Text style={styles.calendarHelperText}>
-            Select days with submitted time off to cancel them
+            Tap dates to select/deselect days off
           </Text>
         )}
       </View>
@@ -473,7 +669,6 @@ const Timecard_Screen = () => {
       {/* My Hours Card */}
       {activeTab === "My Hours" && (
         <View style={styles.card}>
-          {/* Header */}
           <View style={styles.cardHeader}>
             <Pressable onPress={() => navigateWeek(-1)}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -486,7 +681,6 @@ const Timecard_Screen = () => {
             </Pressable>
           </View>
 
-          {/* Loading indicator */}
           {loadingHours && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color="#fff" />
@@ -494,7 +688,6 @@ const Timecard_Screen = () => {
             </View>
           )}
 
-          {/* Rows */}
           {timeData.map((item, index) => (
             <Pressable
               key={`${item.date}-${index}`}
@@ -512,159 +705,216 @@ const Timecard_Screen = () => {
             </Pressable>
           ))}
 
-          {/* Total */}
           <View style={styles.totalRow}>
             <Text style={styles.totalText}>{calculateTotalHours()}</Text>
           </View>
         </View>
       )}
 
-      {/* Time Off Form */}
+      {/* Time Off Card */}
       {activeTab === "Time Off" && (
         <View style={styles.card}>
-          <ScrollView style={styles.formContainer}>
+          <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
             {/* Time Off Balances */}
             <View style={styles.balancesContainer}>
               <Text style={styles.balancesTitle}>Available Time Off</Text>
               <View style={styles.balancesGrid}>
                 <View style={styles.balanceCard}>
-                  <View style={[styles.balanceIndicator, { backgroundColor: "#4CAF50" }]} />
-                  <Text style={styles.balanceLabel}>Vacation</Text>
-                  <Text style={styles.balanceHours}>{timeOffBalances.vacation} hrs</Text>
+                  <Text style={styles.balanceLabel}>Available</Text>
+                  <Text style={[styles.balanceHours, { color: "#4CAF50" }]}>
+                    {timeOffBalances.available_hours} hrs
+                  </Text>
                 </View>
                 <View style={styles.balanceCard}>
-                  <View style={[styles.balanceIndicator, { backgroundColor: "#2196F3" }]} />
-                  <Text style={styles.balanceLabel}>Personal</Text>
-                  <Text style={styles.balanceHours}>{timeOffBalances.personal} hrs</Text>
+                  <Text style={styles.balanceLabel}>Used</Text>
+                  <Text style={styles.balanceHours}>
+                    {timeOffBalances.used_hours} hrs
+                  </Text>
                 </View>
                 <View style={styles.balanceCard}>
-                  <View style={[styles.balanceIndicator, { backgroundColor: "#9C27B0" }]} />
-                  <Text style={styles.balanceLabel}>Other</Text>
-                  <Text style={styles.balanceHours}>{timeOffBalances.other} hrs</Text>
+                  <Text style={styles.balanceLabel}>Pending</Text>
+                  <Text style={[styles.balanceHours, { color: "#FF9800" }]}>
+                    {timeOffBalances.pending_hours} hrs
+                  </Text>
                 </View>
               </View>
             </View>
 
-            <Text style={styles.formTitle}>
-              {timeOffType === "cancel" ? "Cancel Time Off" : "Request Time Off"}
-            </Text>
-            
+            <Text style={styles.formTitle}>Request Time Off</Text>
+
+            {/* Selected Dates */}
             <View style={styles.formSection}>
-              <Text style={styles.label}>Selected Days: {selectedDaysOff.length}</Text>
-              <Text style={styles.helperText}>
-                {timeOffType === "cancel" 
-                  ? "Tap dates on the calendar that have submitted time off to cancel them"
-                  : "Tap dates on the calendar above to select days off"}
-              </Text>
+              <Text style={styles.label}>Selected Dates</Text>
+              {selectedTimeOffDates.length > 0 ? (
+                <View style={styles.selectedDatesBox}>
+                  <Text style={styles.selectedDatesText}>
+                    {selectedTimeOffDates.map(d => formatDate(d)).join(', ')}
+                  </Text>
+                  {selectedInfo && (
+                    <Text style={styles.selectedDatesInfo}>
+                      {selectedInfo.totalDays} day{selectedInfo.totalDays !== 1 ? 's' : ''} • {selectedInfo.totalHours} hours
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={styles.helperText}>Tap dates on the calendar above</Text>
+              )}
             </View>
 
+            {/* Type Selection - Radio Buttons */}
             <View style={styles.formSection}>
               <Text style={styles.label}>Type of Time Off</Text>
-              
-              <Pressable 
-                onPress={() => setTimeOffType("vacation")}
-                style={styles.checkboxRow}
-              >
-                <View style={styles.checkbox}>
-                  {timeOffType === "vacation" && (
-                    <Ionicons name="checkmark" size={18} color="#ff7a00" />
-                  )}
-                </View>
-                <Text style={styles.checkboxLabel}>Vacation</Text>
-              </Pressable>
+              {TIME_OFF_TYPES.map((type) => (
+                <Pressable 
+                  key={type.value}
+                  onPress={() => setTimeOffType(type.value)}
+                  style={styles.radioRow}
+                >
+                  <View style={[styles.radioOuter, { borderColor: type.color }]}>
+                    {timeOffType === type.value && (
+                      <View style={[styles.radioInner, { backgroundColor: type.color }]} />
+                    )}
+                  </View>
+                  <View style={[styles.typeIndicator, { backgroundColor: type.color }]} />
+                  <Text style={styles.radioLabel}>{type.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
+            {/* Hours per Day */}
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Hours per Day</Text>
               <Pressable 
-                onPress={() => setTimeOffType("personal")}
-                style={styles.checkboxRow}
+                style={styles.hoursSelector}
+                onPress={() => setShowHoursModal(true)}
               >
-                <View style={styles.checkbox}>
-                  {timeOffType === "personal" && (
-                    <Ionicons name="checkmark" size={18} color="#ff7a00" />
-                  )}
-                </View>
-                <Text style={styles.checkboxLabel}>Personal</Text>
-              </Pressable>
-
-              <Pressable 
-                onPress={() => setTimeOffType("other")}
-                style={styles.checkboxRow}
-              >
-                <View style={styles.checkbox}>
-                  {timeOffType === "other" && (
-                    <Ionicons name="checkmark" size={18} color="#ff7a00" />
-                  )}
-                </View>
-                <Text style={styles.checkboxLabel}>Other</Text>
-              </Pressable>
-
-              <Pressable 
-                onPress={() => setTimeOffType("cancel")}
-                style={styles.checkboxRow}
-              >
-                <View style={styles.checkbox}>
-                  {timeOffType === "cancel" && (
-                    <Ionicons name="checkmark" size={18} color="#ff7a00" />
-                  )}
-                </View>
-                <Text style={[styles.checkboxLabel, styles.cancelLabel]}>Cancel Submitted Time Off</Text>
+                <Text style={styles.hoursSelectorText}>
+                  {HOURS_OPTIONS.find(h => h.value === hoursPerDay)?.label}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color="#fff" />
               </Pressable>
             </View>
 
+            {/* Reason (Optional) */}
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Reason (Optional)</Text>
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Enter reason for time off..."
+                placeholderTextColor="#666"
+                value={timeOffReason}
+                onChangeText={setTimeOffReason}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            {/* Submit Button */}
             <Pressable 
               style={[
                 styles.submitButton,
-                timeOffType === "cancel" && styles.cancelSubmitButton
+                (selectedTimeOffDates.length === 0 || submittingTimeOff) && styles.submitButtonDisabled
               ]}
               onPress={handleSubmitTimeOff}
+              disabled={selectedTimeOffDates.length === 0 || submittingTimeOff}
             >
-              <Text style={styles.submitButtonText}>
-                {timeOffType === "cancel" ? "Cancel Selected Days" : "Submit Request"}
-              </Text>
+              {submittingTimeOff ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Submit Request</Text>
+              )}
             </Pressable>
 
-            {/* Submitted Time Off List */}
-            {submittedTimeOff.length > 0 && (
+            {/* Submitted Requests List */}
+            {timeOffRequests.filter(r => r.status !== 'cancelled').length > 0 && (
               <View style={styles.submittedSection}>
-                <Text style={styles.submittedTitle}>Requested Time Off</Text>
+                <Text style={styles.submittedTitle}>My Requests</Text>
                 
-                {/* Legend */}
-                <View style={styles.legend}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: "#4CAF50" }]} />
-                    <Text style={styles.legendText}>Vacation</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: "#2196F3" }]} />
-                    <Text style={styles.legendText}>Personal</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: "#9C27B0" }]} />
-                    <Text style={styles.legendText}>Other</Text>
-                  </View>
-                </View>
-
-                {submittedTimeOff.map((item, index) => (
-                  <View key={index} style={styles.submittedItem}>
-                    <View style={styles.submittedItemLeft}>
-                      <View style={[
-                        styles.typeIndicator, 
-                        { backgroundColor: 
-                          item.type === "vacation" ? "#4CAF50" : 
-                          item.type === "personal" ? "#2196F3" : "#9C27B0" 
-                        }
-                      ]} />
-                      <Text style={styles.submittedDate}>{formatDate(item.date)}</Text>
+                {loadingTimeOff ? (
+                  <ActivityIndicator color="#fff" style={{ marginVertical: 20 }} />
+                ) : (
+                  timeOffRequests
+                    .filter(request => request.status !== 'cancelled')
+                    .map((request) => (
+                    <View key={request.id} style={styles.submittedItem}>
+                      <View style={styles.submittedItemLeft}>
+                        <View style={[
+                          styles.typeIndicatorLarge, 
+                          { backgroundColor: TIME_OFF_TYPES.find(t => t.value === request.type)?.color || "#9C27B0" }
+                        ]} />
+                        <View>
+                          <Text style={styles.submittedDate}>
+                            {formatDate(request.start_date)}
+                            {request.start_date !== request.end_date && ` - ${formatDate(request.end_date)}`}
+                          </Text>
+                          <Text style={styles.submittedHours}>
+                            {request.total_hours} hours • {request.type.charAt(0) + request.type.slice(1).toLowerCase()}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.submittedItemRight}>
+                        <View style={[
+                          styles.statusBadge,
+                          { backgroundColor: STATUS_COLORS[request.status]?.bg || "#F5F5F5" }
+                        ]}>
+                          <Text style={[
+                            styles.statusText,
+                            { color: STATUS_COLORS[request.status]?.text || "#666" }
+                          ]}>
+                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                          </Text>
+                        </View>
+                        {request.status === 'pending' && (
+                          <Pressable 
+                            style={styles.cancelBtn}
+                            onPress={() => handleCancelRequest(request.id)}
+                          >
+                            <Ionicons name="close" size={16} color="#F44336" />
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
-                    <Text style={styles.submittedType}>
-                      {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
-                    </Text>
-                  </View>
-                ))}
+                  ))
+                )}
               </View>
             )}
+
+            <View style={{ height: 20 }} />
           </ScrollView>
         </View>
       )}
+
+      {/* Hours Selection Modal */}
+      <Modal visible={showHoursModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowHoursModal(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Hours per Day</Text>
+            {HOURS_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.modalOption,
+                  hoursPerDay === option.value && styles.modalOptionSelected
+                ]}
+                onPress={() => {
+                  setHoursPerDay(option.value);
+                  setShowHoursModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.modalOptionText,
+                  hoursPerDay === option.value && styles.modalOptionTextSelected
+                ]}>
+                  {option.label}
+                </Text>
+                {hoursPerDay === option.value && (
+                  <Ionicons name="checkmark" size={20} color="#ff7a00" />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -787,16 +1037,16 @@ const styles = StyleSheet.create({
 
   /* Time Off Balances */
   balancesContainer: {
-    marginBottom: 24,
-    paddingBottom: 20,
+    marginBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#444",
   },
   balancesTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#fff",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   balancesGrid: {
     flexDirection: "row",
@@ -806,138 +1056,81 @@ const styles = StyleSheet.create({
   balanceCard: {
     flex: 1,
     backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 10,
+    padding: 10,
     alignItems: "center",
   },
-  balanceIndicator: {
-    width: 24,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 8,
-  },
   balanceLabel: {
-    fontSize: 12,
-    color: "#ccc",
+    fontSize: 11,
+    color: "#999",
     marginBottom: 4,
   },
   balanceHours: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#fff",
   },
 
-  /* Time Off Form */
+  /* Form */
   formContainer: {
     flex: 1,
   },
   formTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 20,
-  },
-  formSection: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 12,
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#ccc",
-    marginTop: 4,
-  },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#fff",
-    borderRadius: 4,
-    marginRight: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxLabel: {
-    fontSize: 16,
-    color: "#fff",
-  },
-  cancelLabel: {
-    color: "#f44336",
-  },
-  submitButton: {
-    backgroundColor: "#ff7a00",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  cancelSubmitButton: {
-    backgroundColor: "#f44336",
-  },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  /* Submitted Time Off */
-  submittedSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#444",
-  },
-  submittedTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#fff",
     marginBottom: 16,
   },
-  legend: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-    paddingVertical: 8,
+  formSection: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#888",
+  },
+
+  /* Selected Dates */
+  selectedDatesBox: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
+    padding: 12,
   },
-  legendItem: {
+  selectedDatesText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  selectedDatesInfo: {
+    fontSize: 13,
+    color: "#ff7a00",
+    marginTop: 4,
+  },
+
+  /* Radio Buttons */
+  radioRow: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 10,
   },
-  legendColor: {
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderRadius: 11,
+    marginRight: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 12,
-    color: "#ccc",
-  },
-  submittedItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  submittedItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
   },
   typeIndicator: {
     width: 10,
@@ -945,13 +1138,159 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginRight: 10,
   },
-  submittedDate: {
+  radioLabel: {
+    fontSize: 15,
+    color: "#fff",
+  },
+
+  /* Hours Selector */
+  hoursSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 12,
+  },
+  hoursSelectorText: {
+    fontSize: 15,
+    color: "#fff",
+  },
+
+  /* Reason Input */
+  reasonInput: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 12,
+    color: "#fff",
+    fontSize: 15,
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+
+  /* Submit Button */
+  submitButton: {
+    backgroundColor: "#ff7a00",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
+  },
+  submitButtonText: {
+    color: "#fff",
     fontSize: 16,
+    fontWeight: "700",
+  },
+
+  /* Submitted Requests */
+  submittedSection: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+  },
+  submittedTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 12,
+  },
+  submittedItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  submittedItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  typeIndicatorLarge: {
+    width: 8,
+    height: 40,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  submittedDate: {
+    fontSize: 14,
     color: "#fff",
     fontWeight: "600",
   },
-  submittedType: {
-    fontSize: 14,
-    color: "#ccc"
+  submittedHours: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  submittedItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  cancelBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(244,67,54,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Modal */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "#2b2b2b",
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  modalOptionSelected: {
+    backgroundColor: "#1a1a1a",
+  },
+  modalOptionText: {
+    fontSize: 15,
+    color: "#fff",
+  },
+  modalOptionTextSelected: {
+    fontWeight: "600",
+    color: "#ff7a00",
   },
 });
