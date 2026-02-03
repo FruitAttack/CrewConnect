@@ -34,12 +34,12 @@ export default function Sidebar() {
   // Main navigation items for the app (no dropdowns, direct links to index pages)
   const mainNavItems = [
     { icon: 'grid-outline', iconFilled: 'grid', label: 'Dashboard', route: '/(app)/dashboard', matchPath: '/dashboard' },
-    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/projects', matchPath: '/projects' },
+    { icon: 'folder-outline', iconFilled: 'folder', label: 'Projects', route: '/(app)/projects', matchPath: '/project' },
     { icon: 'people-outline', iconFilled: 'people', label: 'Workforce', route: '/(app)/workforce', matchPath: '/workforce' },
     { icon: 'time-outline', iconFilled: 'time', label: 'Time', route: '/(app)/time', matchPath: '/time' },
     { icon: 'map-outline', iconFilled: 'map', label: 'Map', route: '/(app)/map', matchPath: '/map' },
+    { icon: 'document-text-outline', iconFilled: 'document-text', label: 'Forms', route: '/(app)/form/formsOverview', matchPath: '/form' },
     { icon: 'stats-chart-outline', iconFilled: 'stats-chart', label: 'Reports', route: '/(app)/reports', matchPath: '/reports' },
-    { icon: 'document-text-outline', iconFilled: 'document-text', label: 'Forms', route: '/(app)/forms', matchPath: '/forms' },
   ];
 
   // Bottom navigation items
@@ -50,9 +50,14 @@ export default function Sidebar() {
   const isItemActive = (item) => {
     if (!pathname) return false;
     
-    // Special case for projects - match /project/ but not other paths
-    if (item.matchPath === '/project/') {
-      return pathname.includes('/project/');
+    // Projects should match /project or /projects, but /project takes priority
+    if (item.matchPath === '/project') {
+      return pathname.includes('/project');
+    }
+    
+    // Forms should only match /form, not /project/form
+    if (item.matchPath === '/form') {
+      return pathname.includes('/form') && !pathname.includes('/project');
     }
     
     return pathname.includes(item.matchPath);

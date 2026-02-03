@@ -62,7 +62,7 @@ export default function FilteredFormSubmissionsPage({
     } finally {
       setLoading(false);
     }
-  }, [token, formId, filter]);
+  }, [token, formId, filter.type, filter.id]);
 
   useEffect(() => {
     fetchData();

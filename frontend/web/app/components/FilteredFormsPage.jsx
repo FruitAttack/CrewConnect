@@ -80,7 +80,7 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     } finally {
       setLoading(false);
     }
-  }, [token, filter]);
+  }, [token, filter.type, filter.id]);
 
   useEffect(() => {
     fetchForms();
