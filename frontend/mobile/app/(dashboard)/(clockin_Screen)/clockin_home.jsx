@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Alert, AppState } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Alert, AppState, ActivityIndicator } from "react-native";
 import Octicons from "@expo/vector-icons/Octicons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { router, useFocusEffect } from "expo-router";
@@ -25,6 +25,7 @@ const Clockin_Home = () => {
   } = useTimeStore();
 
   const [tick, setTick] = useState(0);
+  const [isHydrating, setIsHydrating] = useState(true);
   const intervalRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
 
@@ -33,19 +34,23 @@ const Clockin_Home = () => {
     useCallback(() => {
       console.log("Clock screen focused - hydrating from server");
       if (session?.access_token) {
-        hydrateFromServer(session);
-        
-        // Start midnight watch if clocked in
-        if (isClockedIn) {
-          startMidnightWatch(session);
-        }
+        setIsHydrating(true);
+        hydrateFromServer(session).finally(() => {
+          setIsHydrating(false);
+          // Start midnight watch if clocked in (check after hydration)
+          if (useTimeStore.getState().isClockedIn) {
+            startMidnightWatch(session);
+          }
+        });
+      } else {
+        setIsHydrating(false);
       }
-      
+
       return () => {
         // Stop midnight watch when screen loses focus
         stopMidnightWatch();
       };
-    }, [session, isClockedIn])
+    }, [session])
   );
 
   // Handle app state changes (background/foreground)
@@ -88,6 +93,8 @@ const Clockin_Home = () => {
   const secondsShift = getSecondsWorkedShift();
 
   const handleClockButtonPressed = () => {
+    if (isHydrating) return; // Wait for hydration to complete
+    
     if (!isClockedIn) {
       router.push("/map_costcode_Screen");
     } else {
@@ -225,22 +232,31 @@ const Clockin_Home = () => {
       <TouchableOpacity
         style={[
           styles.circleButton,
-          { backgroundColor: isClockedIn ? "#ee0000ff" : "#0F96F5" },
+          { backgroundColor: isHydrating ? "#999" : isClockedIn ? "#ee0000ff" : "#0F96F5" },
         ]}
         onPress={handleClockButtonPressed}
+        disabled={isHydrating}
       >
-        {isClockedIn ? (
-          <FontAwesome6 name="circle-stop" size={90} color="#FBFBFB" />
+        {isHydrating ? (
+          <>
+            <ActivityIndicator size="large" color="#FBFBFB" />
+            <Text style={styles.buttonText}>Loading...</Text>
+          </>
+        ) : isClockedIn ? (
+          <>
+            <FontAwesome6 name="circle-stop" size={90} color="#FBFBFB" />
+            <Text style={styles.buttonText}>Clock Out</Text>
+          </>
         ) : (
-          <Octicons name="stopwatch" size={90} color="#FBFBFB" />
+          <>
+            <Octicons name="stopwatch" size={90} color="#FBFBFB" />
+            <Text style={styles.buttonText}>Clock In</Text>
+          </>
         )}
-        <Text style={styles.buttonText}>
-          {isClockedIn ? "Clock Out" : "Clock In"}
-        </Text>
       </TouchableOpacity>
 
       {/* Bottom Buttons */}
-      {isClockedIn && (
+      {isClockedIn && !isHydrating && (
         <View style={styles.bottomButtonRow}>
           <TouchableOpacity
             style={styles.bottomButton}
