@@ -25,12 +25,12 @@ export const useTimeStore = create((set, get) => ({
     try {
       const shiftResp = await apiCall(
         session.access_token,
-        "time-entries/seconds-shift",
+        "time-entries/seconds-worked/shift",
         "GET"
       );
       const todayResp = await apiCall(
         session.access_token,
-        "time-entries/seconds-today",
+        "time-entries/seconds-worked/today",
         "GET"
       );
 
