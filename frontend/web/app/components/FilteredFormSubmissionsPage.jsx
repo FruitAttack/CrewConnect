@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextI
 import { Ionicons } from "@expo/vector-icons";
 import { getForm, getFormSubmissions } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
-import { colors, spacing, borderRadius, typography, shadows } from "../../constants/theme";
+import { colors, spacing, typography, shadows } from "../../constants/theme";
+import { FORM_FIELD_TYPES } from "../../utils/formSchema";
 
 /**
  * Form Submissions Page - displays submissions for a specific form
@@ -28,7 +29,9 @@ export default function FilteredFormSubmissionsPage({
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterRules, setFilterRules] = useState([]);
+  const [appliedFilterRules, setAppliedFilterRules] = useState([]);
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token || !formId) return;
@@ -80,9 +83,32 @@ export default function FilteredFormSubmissionsPage({
     });
   };
 
+  const formatNumberDisplay = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return "-";
+    const normalized = String(raw).replace(/,/g, "");
+    if (normalized === "-") return "-";
+    const isNegative = normalized.startsWith("-");
+    const numeric = normalized.replace(/[^0-9.]/g, "");
+    if (numeric === "") return "-";
+    const [intPart = "", decPart = ""] = numeric.split(".");
+    const intWithCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const signed = isNegative && intWithCommas ? `-${intWithCommas}` : intWithCommas;
+    return decPart ? `${signed}.${decPart}` : signed;
+  };
+
+  const formatFieldValue = (field, value) => {
+    if (value === null || value === undefined || value === "") return "-";
+    if (Array.isArray(value)) return value.join(", ");
+    if (field?.type === FORM_FIELD_TYPES.NUMBER) return formatNumberDisplay(value);
+    return String(value);
+  };
+
   // Parse fields from JSON string if needed
-  const parsedFields = form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : [];
-  const displayFields = parsedFields?.slice(0, 4) || [];
+  const parsedFields = useMemo(
+    () => (form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : []),
+    [form?.fields]
+  );
+  const displayFields = parsedFields || [];
   
   // Check which associations are enabled in the form
   const showProject = form?.project_enabled || false;
@@ -91,52 +117,160 @@ export default function FilteredFormSubmissionsPage({
   const showCustomer = form?.customer_enabled || false;
   const showCostCode = form?.cost_code_enabled || false;
 
-  const getUniqueValues = useCallback((fieldId) => {
-    const values = new Set();
-    submissions.forEach((sub) => {
-      const value = sub.data?.[fieldId];
-      if (value !== null && value !== undefined && value !== "") {
-        values.add(String(value));
-      }
+  const filterableColumns = useMemo(() => {
+    const columns = [
+      {
+        id: "submission_id",
+        label: "Submission ID",
+        type: "text",
+        getValue: (s) => s.id,
+      },
+      {
+        id: "submitted_by",
+        label: "Submitted By",
+        type: "text",
+        getValue: (s) => s.submitter?.full_name || s.submitted_by_name || s.submitted_by,
+      },
+      {
+        id: "submitted_at",
+        label: "Submitted At",
+        type: "date",
+        getValue: (s) => s.submitted_at,
+      },
+    ];
+
+    if (showProject) {
+      columns.push({
+        id: "project",
+        label: form?.project_question || "Project",
+        type: "text",
+        getValue: (s) => s.project?.name || s.associated_project_name,
+      });
+    }
+    if (showEquipment) {
+      columns.push({
+        id: "equipment",
+        label: form?.equipment_question || "Equipment",
+        type: "text",
+        getValue: (s) => s.equipment?.label || s.associated_equipment_label,
+      });
+    }
+    if (showUser) {
+      columns.push({
+        id: "user",
+        label: form?.user_question || "User",
+        type: "text",
+        getValue: (s) => s.user?.full_name || s.associated_user_name,
+      });
+    }
+    if (showCustomer) {
+      columns.push({
+        id: "customer",
+        label: form?.customer_question || "Customer",
+        type: "text",
+        getValue: (s) => s.customer?.name || s.associated_customer_name,
+      });
+    }
+    if (showCostCode) {
+      columns.push({
+        id: "cost_code",
+        label: form?.cost_code_question || "Cost Code",
+        type: "text",
+        getValue: (s) => s.cost_code?.name || s.associated_cost_code_name,
+      });
+    }
+
+    parsedFields.forEach((field) => {
+      if (field.type === FORM_FIELD_TYPES.PHOTO) return;
+
+      let type = "text";
+      if (field.type === FORM_FIELD_TYPES.NUMBER) type = "number";
+      if (field.type === FORM_FIELD_TYPES.DATE) type = "date";
+      if (field.type === FORM_FIELD_TYPES.DATE_TIME) type = "date_time";
+      if (field.type === FORM_FIELD_TYPES.TIME) type = "time";
+      if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) type = "multiple_choice";
+      if (field.type === FORM_FIELD_TYPES.CHECKBOX) type = "checkbox";
+
+      columns.push({
+        id: field.id,
+        label: field.question,
+        type,
+        options: field.options || [],
+        getValue: (s) => s.data?.[field.id],
+      });
     });
-    return Array.from(values).sort();
-  }, [submissions]);
+
+    return columns;
+  }, [parsedFields, showProject, showEquipment, showUser, showCustomer, showCostCode, form]);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((submission) => {
-      return filterRules.every((rule) => {
-        if (!rule.fieldId) return true;
-        const value = submission.data?.[rule.fieldId];
+      return appliedFilterRules.every((rule) => {
+        if (!rule.columnId) return true;
+        const column = filterableColumns.find((col) => col.id === rule.columnId);
+        if (!column) return true;
+        const rawValue = column.getValue(submission);
 
-        if (rule.type === "number") {
-          const numValue = parseFloat(value);
-          const target = parseFloat(rule.value);
+        if (column.type === "number") {
+          const numValue = parseFloat(String(rawValue ?? "").replace(/,/g, ""));
+          const target = parseFloat(String(rule.value ?? "").replace(/,/g, ""));
           if (isNaN(numValue) || isNaN(target)) return false;
           if (rule.operator === "gt") return numValue > target;
+          if (rule.operator === "gte") return numValue >= target;
           if (rule.operator === "lt") return numValue < target;
+          if (rule.operator === "lte") return numValue <= target;
           if (rule.operator === "eq") return numValue === target;
+          if (rule.operator === "neq") return numValue !== target;
         }
 
-        if (rule.type === "text") {
+        if (column.type === "date" || column.type === "date_time" || column.type === "time") {
+          const valueDate = rawValue ? new Date(rawValue) : null;
+          const targetDate = rule.value ? new Date(rule.value) : null;
+          if (!valueDate || isNaN(valueDate) || !targetDate || isNaN(targetDate)) return false;
+          if (rule.operator === "gt") return valueDate > targetDate;
+          if (rule.operator === "lt") return valueDate < targetDate;
+          if (rule.operator === "eq") return valueDate.toString() === targetDate.toString();
+        }
+
+        if (column.type === "multiple_choice") {
           if (!rule.values || rule.values.length === 0) return true;
-          return rule.values.includes(String(value));
+          const selected = Array.isArray(rawValue) ? rawValue.map(String) : [String(rawValue || "")];
+          if (rule.operator === "is_not") {
+            return rule.values.every((v) => !selected.includes(String(v)));
+          }
+          return rule.values.some((v) => selected.includes(String(v)));
         }
 
+        if (column.type === "checkbox") {
+          if (!rule.values || rule.values.length === 0) return true;
+          const selected = Array.isArray(rawValue) ? rawValue.map(String) : [String(rawValue || "")];
+          if (rule.operator === "has_all") {
+            return rule.values.every((v) => selected.includes(String(v)));
+          }
+          return rule.values.some((v) => selected.includes(String(v)));
+        }
+
+        // text
+        const textValue = String(rawValue ?? "");
+        const targetText = String(rule.value ?? "");
+        if (!targetText) return true;
+        if (rule.operator === "contains") return textValue.toLowerCase().includes(targetText.toLowerCase());
+        if (rule.operator === "starts") return textValue.toLowerCase().startsWith(targetText.toLowerCase());
+        if (rule.operator === "ends") return textValue.toLowerCase().endsWith(targetText.toLowerCase());
+        if (rule.operator === "eq") return textValue.toLowerCase() === targetText.toLowerCase();
+        if (rule.operator === "neq") return textValue.toLowerCase() !== targetText.toLowerCase();
         return true;
       });
     });
-  }, [submissions, filterRules]);
+  }, [submissions, appliedFilterRules, filterableColumns]);
 
   const addFilterRule = () => {
-    if (!parsedFields.length) return;
-    const firstField = parsedFields[0];
     setFilterRules((prev) => [
       ...prev,
       {
         id: `${Date.now()}-${Math.random()}`,
-        fieldId: firstField.id,
-        type: "text",
-        operator: "gt",
+        columnId: "",
+        operator: "",
         value: "",
         values: [],
       },
@@ -208,7 +342,8 @@ export default function FilteredFormSubmissionsPage({
     </View>
   );
 
-  const renderTableView = () => (
+  const renderTableView = () => {
+    return (
     <View style={{ flex: 1, position: "relative" }}>
       {openDropdown && (
         <Pressable
@@ -216,300 +351,414 @@ export default function FilteredFormSubmissionsPage({
           onPress={() => setOpenDropdown(null)}
         />
       )}
-      <View style={styles.filterCard}>
-        <View style={styles.filterHeader}>
-          <Text style={styles.filterTitle}>Filters</Text>
-          <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
-            <Ionicons name="add" size={16} color="white" />
-            <Text style={styles.addFilterText}>Add filter</Text>
-          </Pressable>
-        </View>
+      <View style={styles.filterBar}>
+        <Pressable style={styles.filterToggle} onPress={() => setFiltersOpen((v) => !v)}>
+          <Ionicons name="filter" size={16} color={colors.text.secondary} />
+          <Text style={styles.filterToggleText}>Filters</Text>
+          {appliedFilterRules.length > 0 && (
+            <View style={styles.filterCountBadge}>
+              <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
 
-        {filterRules.length === 0 ? (
-          <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
-        ) : (
-          <View style={styles.filterRulesContainer}>
-            {filterRules.map((rule) => {
-              const field = parsedFields.find((f) => f.id === rule.fieldId);
-              const uniqueValues = rule.fieldId ? getUniqueValues(rule.fieldId) : [];
-              const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
+      {filtersOpen && (
+        <View style={styles.filterPopoverWrapper}>
+          <Pressable
+            style={styles.dropdownBackdrop}
+            onPress={() => setFiltersOpen(false)}
+          />
+          <View style={styles.filterPanel}>
+          {filterRules.length === 0 ? (
+            <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
+          ) : (
+            <View style={styles.filterRulesContainer}>
+              {filterRules.map((rule) => {
+                const column = filterableColumns.find((col) => col.id === rule.columnId);
+                const isColumnOpen = openDropdown?.type === "column" && openDropdown?.ruleId === rule.id;
+                const isOperatorOpen = openDropdown?.type === "operator" && openDropdown?.ruleId === rule.id;
+                const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
 
-              return (
-                <View key={rule.id} style={styles.filterRuleRow}>
-                  <Pressable
-                    style={styles.filterSelect}
-                    onPress={() =>
-                      setOpenDropdown((prev) =>
-                        prev?.type === "field" && prev?.ruleId === rule.id
-                          ? null
-                          : { type: "field", ruleId: rule.id }
-                      )
-                    }
-                  >
-                    <Text style={styles.filterSelectText} numberOfLines={1}>
-                      {field?.question || "Select field"}
-                    </Text>
-                    <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
-                  </Pressable>
-                  {openDropdown?.type === "field" && openDropdown?.ruleId === rule.id && (
-                    <View style={styles.dropdown}>
-                      {parsedFields.map((f) => (
-                        <Pressable
-                          key={f.id}
-                          style={styles.dropdownItem}
-                          onPress={() => {
-                            updateRule(rule.id, {
-                              fieldId: f.id,
-                              type: "text",
-                              values: [],
-                              operator: "gt",
-                              value: "",
-                            });
-                            setOpenDropdown(null);
-                          }}
-                        >
-                          <Text style={styles.dropdownItemText} numberOfLines={1}>
-                            {f.question}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
+                const operatorOptions = (() => {
+                  switch (column?.type) {
+                    case "number":
+                      return [
+                        { value: "gt", label: ">" },
+                        { value: "lt", label: "<" },
+                        { value: "eq", label: "=" },
+                      ];
+                    case "date":
+                    case "date_time":
+                    case "time":
+                      return [
+                        { value: "gt", label: ">" },
+                        { value: "lt", label: "<" },
+                        { value: "eq", label: "=" },
+                      ];
+                    case "multiple_choice":
+                      return [
+                        { value: "is", label: "Is" },
+                        { value: "is_not", label: "Is not" },
+                      ];
+                    case "checkbox":
+                      return [
+                        { value: "has_one", label: "Has one of" },
+                        { value: "has_all", label: "Has all of" },
+                      ];
+                    default:
+                      return [
+                        { value: "contains", label: "Contains" },
+                        { value: "starts", label: "Starts with" },
+                        { value: "ends", label: "Ends with" },
+                        { value: "eq", label: "Equals" },
+                        { value: "neq", label: "Not equals" },
+                      ];
+                  }
+                })();
 
-                  <View style={styles.filterTypeToggle}>
-                    <Pressable
-                      style={[styles.filterTypeButton, rule.type === "text" && styles.filterTypeButtonActive]}
-                      onPress={() => updateRule(rule.id, { type: "text", values: [] })}
-                    >
-                      <Text style={[styles.filterTypeText, rule.type === "text" && styles.filterTypeTextActive]}>Text</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.filterTypeButton, rule.type === "number" && styles.filterTypeButtonActive]}
-                      onPress={() => updateRule(rule.id, { type: "number", operator: "gt", value: "" })}
-                    >
-                      <Text style={[styles.filterTypeText, rule.type === "number" && styles.filterTypeTextActive]}>Number</Text>
-                    </Pressable>
-                  </View>
-
-                  {rule.type === "number" ? (
-                    <View style={styles.numberFilterInline}>
+                return (
+                  <View key={rule.id} style={styles.filterRuleRow}>
+                    <View style={styles.filterField}>
                       <Pressable
-                        style={[styles.filterOperatorBtn, rule.operator === "gt" && styles.filterOperatorBtnActive]}
-                        onPress={() => updateRule(rule.id, { operator: "gt" })}
-                      >
-                        <Text style={styles.filterOperatorText}>{">"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.filterOperatorBtn, rule.operator === "lt" && styles.filterOperatorBtnActive]}
-                        onPress={() => updateRule(rule.id, { operator: "lt" })}
-                      >
-                        <Text style={styles.filterOperatorText}>{"<"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.filterOperatorBtn, rule.operator === "eq" && styles.filterOperatorBtnActive]}
-                        onPress={() => updateRule(rule.id, { operator: "eq" })}
-                      >
-                        <Text style={styles.filterOperatorText}>{"="}</Text>
-                      </Pressable>
-                      <TextInput
-                        style={styles.filterInput}
-                        placeholder="Value"
-                        value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: text })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  ) : (
-                    <View style={styles.textFilterInline}>
-                      <Pressable
-                        style={styles.dropdownButton}
+                        style={styles.filterSelect}
                         onPress={() =>
                           setOpenDropdown((prev) =>
-                            prev?.type === "values" && prev?.ruleId === rule.id
+                            prev?.type === "column" && prev?.ruleId === rule.id
                               ? null
-                              : { type: "values", ruleId: rule.id }
+                              : { type: "column", ruleId: rule.id }
                           )
                         }
                       >
-                        <Text style={styles.dropdownButtonText} numberOfLines={1}>
-                          {rule.values?.length > 0
-                            ? `${rule.values.length} selected`
-                            : "Select values"}
+                        <Text style={styles.filterSelectText} numberOfLines={1}>
+                          {column?.label || "Select column"}
                         </Text>
-                        <Ionicons name={isValuesOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.text.secondary} />
+                        <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
                       </Pressable>
-                      {isValuesOpen && (
+                      {isColumnOpen && (
                         <View style={styles.dropdown}>
-                          {uniqueValues.map((value) => {
-                            const isSelected = rule.values?.includes(value);
-                            return (
+                          <ScrollView style={styles.dropdownScroll}>
+                            {filterableColumns.map((col) => (
                               <Pressable
-                                key={value}
+                                key={col.id}
                                 style={styles.dropdownItem}
                                 onPress={() => {
-                                  const currentValues = rule.values || [];
-                                  const newValues = isSelected
-                                    ? currentValues.filter((v) => v !== value)
-                                    : [...currentValues, value];
-                                  updateRule(rule.id, { values: newValues });
+                                  updateRule(rule.id, {
+                                    columnId: col.id,
+                                    operator: col.type === "number" ? "gt" : (col.type === "date" || col.type === "date_time" || col.type === "time") ? "gt" : col.type === "multiple_choice" ? "is" : col.type === "checkbox" ? "has_one" : "contains",
+                                    value: "",
+                                    values: [],
+                                  });
+                                  setOpenDropdown(null);
                                 }}
                               >
-                                <Ionicons
-                                  name={isSelected ? "checkbox" : "square-outline"}
-                                  size={18}
-                                  color={isSelected ? colors.primary.orange : colors.text.secondary}
-                                />
-                                <Text style={styles.dropdownItemText} numberOfLines={1}>{value}</Text>
+                                <Text style={styles.dropdownItemText} numberOfLines={1}>
+                                  {col.label}
+                                </Text>
                               </Pressable>
-                            );
-                          })}
+                            ))}
+                          </ScrollView>
                         </View>
                       )}
                     </View>
-                  )}
 
-                  <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
-                    <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
-                  </Pressable>
-                </View>
-              );
-            })}
+                    {!!rule.columnId && (
+                      <View style={styles.filterField}>
+                        <Pressable
+                          style={styles.filterSelect}
+                          onPress={() =>
+                            setOpenDropdown((prev) =>
+                              prev?.type === "operator" && prev?.ruleId === rule.id
+                                ? null
+                                : { type: "operator", ruleId: rule.id }
+                            )
+                          }
+                        >
+                          <Text style={styles.filterSelectText} numberOfLines={1}>
+                            {operatorOptions.find((op) => op.value === rule.operator)?.label || "Operator"}
+                          </Text>
+                          <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
+                        </Pressable>
+                        {isOperatorOpen && (
+                          <View style={styles.dropdown}>
+                            <ScrollView style={styles.dropdownScroll}>
+                              {operatorOptions.map((op) => (
+                                <Pressable
+                                  key={op.value}
+                                  style={styles.dropdownItem}
+                                  onPress={() => {
+                                    updateRule(rule.id, { operator: op.value });
+                                    setOpenDropdown(null);
+                                  }}
+                                >
+                                  <Text style={styles.dropdownItemText}>{op.label}</Text>
+                                </Pressable>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {!!rule.columnId && (column?.type === "multiple_choice" || column?.type === "checkbox") && (
+                      <View style={styles.filterField}>
+                        <Pressable
+                          style={styles.filterSelect}
+                          onPress={() =>
+                            setOpenDropdown((prev) =>
+                              prev?.type === "values" && prev?.ruleId === rule.id
+                                ? null
+                                : { type: "values", ruleId: rule.id }
+                            )
+                          }
+                        >
+                          <Text style={styles.filterSelectText} numberOfLines={1}>
+                            {rule.values?.length ? `${rule.values.length} selected` : "Select"}
+                          </Text>
+                          <Ionicons name={isValuesOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.text.secondary} />
+                        </Pressable>
+                        {isValuesOpen && (
+                          <View style={styles.dropdown}>
+                            <ScrollView style={styles.dropdownScroll}>
+                              {(column?.options || []).map((option) => {
+                                const optionValue = typeof option === "string" ? option : option.value;
+                                const optionLabel = typeof option === "string" ? option : option.label;
+                                const isSelected = rule.values?.includes(optionValue);
+                                return (
+                                  <Pressable
+                                    key={optionValue}
+                                    style={styles.dropdownItem}
+                                    onPress={() => {
+                                      const currentValues = rule.values || [];
+                                      const newValues = isSelected
+                                        ? currentValues.filter((v) => v !== optionValue)
+                                        : [...currentValues, optionValue];
+                                      updateRule(rule.id, { values: newValues });
+                                    }}
+                                  >
+                                    <Ionicons
+                                      name={isSelected ? "checkbox" : "square-outline"}
+                                      size={18}
+                                      color={isSelected ? colors.primary.orange : colors.text.secondary}
+                                    />
+                                    <Text style={styles.dropdownItemText} numberOfLines={1}>{optionLabel}</Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {!!rule.columnId && (column?.type === "text" || column?.type === "number") && (
+                      <TextInput
+                        style={styles.filterInput}
+                        placeholder={column?.type === "number" ? "Value" : "Text"}
+                        value={rule.value}
+                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                        keyboardType={column?.type === "number" ? "numeric" : "default"}
+                      />
+                    )}
+
+                    {!!rule.columnId && column?.type === "date" && (
+                      <TextInput
+                        style={styles.filterInput}
+                        placeholder="YYYY-MM-DD"
+                        value={rule.value}
+                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                      />
+                    )}
+
+                    {!!rule.columnId && column?.type === "date_time" && (
+                      <TextInput
+                        style={styles.filterInput}
+                        placeholder="YYYY-MM-DD HH:mm"
+                        value={rule.value}
+                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                      />
+                    )}
+
+                    {!!rule.columnId && column?.type === "time" && (
+                      <TextInput
+                        style={styles.filterInput}
+                        placeholder="HH:mm"
+                        value={rule.value}
+                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                      />
+                    )}
+
+                    <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
+                      <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          <View style={styles.filterActionsRow}>
+            <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
+              <Ionicons name="add" size={16} color="white" />
+              <Text style={styles.addFilterText}>Add filter</Text>
+            </Pressable>
+            <Pressable
+              style={styles.applyFilterButton}
+              onPress={() => {
+                setAppliedFilterRules(filterRules);
+                setFiltersOpen(false);
+              }}
+            >
+              <Text style={styles.applyFilterText}>Apply filter</Text>
+            </Pressable>
           </View>
-        )}
-      </View>
+        </View>
+        </View>
+      )}
 
       <ScrollView
         style={{ flex: 1, zIndex: 1 }}
         contentContainerStyle={{ flexGrow: 1, minHeight: "100%" }}
         showsVerticalScrollIndicator={true}
       >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={true}
-          style={{ flex: 1, minHeight: "100%" }}
-          contentContainerStyle={{ flexGrow: 1 }}
-        >
-          <View style={{ flex: 1, minWidth: "100%", minHeight: "100%" }}>
-            {/* Header Row */}
-            <View style={styles.tableHeaderRow}>
-            <View style={[styles.tableCell, styles.colSubmissionId]}>
-              <Text style={styles.tableHeaderText}>ID</Text>
-            </View>
-            <View style={[styles.tableCell, styles.colSubmittedBy]}>
-              <Text style={styles.tableHeaderText}>Submitted By</Text>
-            </View>
-            <View style={[styles.tableCell, styles.colDate]}>
-              <Text style={styles.tableHeaderText}>Date</Text>
-            </View>
-            {showProject && (
-              <View style={[styles.tableCell, styles.colAssociation]}>
-                <Text style={styles.tableHeaderText}>{form?.project_question || "Project"}</Text>
+        <View style={styles.tableWithActions}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={true}
+            style={styles.tableScroll}
+            contentContainerStyle={{ flexGrow: 1 }}
+          >
+            <View style={{ flex: 1, minWidth: "100%" }}>
+              {/* Header Row (scrollable columns) */}
+              <View style={styles.tableHeaderRow}>
+                <View style={[styles.tableCell, styles.colSubmissionId]}>
+                  <Text style={styles.tableHeaderText}>ID</Text>
+                </View>
+                <View style={[styles.tableCell, styles.colSubmittedBy]}>
+                  <Text style={styles.tableHeaderText}>Submitted By</Text>
+                </View>
+                <View style={[styles.tableCell, styles.colDate]}>
+                  <Text style={styles.tableHeaderText}>Date</Text>
+                </View>
+                {showProject && (
+                  <View style={[styles.tableCell, styles.colAssociation]}>
+                    <Text style={styles.tableHeaderText}>{form?.project_question || "Project"}</Text>
+                  </View>
+                )}
+                {showEquipment && (
+                  <View style={[styles.tableCell, styles.colAssociation]}>
+                    <Text style={styles.tableHeaderText}>{form?.equipment_question || "Equipment"}</Text>
+                  </View>
+                )}
+                {showUser && (
+                  <View style={[styles.tableCell, styles.colAssociation]}>
+                    <Text style={styles.tableHeaderText}>{form?.user_question || "User"}</Text>
+                  </View>
+                )}
+                {showCustomer && (
+                  <View style={[styles.tableCell, styles.colAssociation]}>
+                    <Text style={styles.tableHeaderText}>{form?.customer_question || "Customer"}</Text>
+                  </View>
+                )}
+                {showCostCode && (
+                  <View style={[styles.tableCell, styles.colAssociation]}>
+                    <Text style={styles.tableHeaderText}>{form?.cost_code_question || "Cost Code"}</Text>
+                  </View>
+                )}
+                {displayFields.map((field) => (
+                  <View key={field.id} style={[styles.tableCell, styles.colField]}>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {field.question}
+                    </Text>
+                  </View>
+                ))}
               </View>
-            )}
-            {showEquipment && (
-              <View style={[styles.tableCell, styles.colAssociation]}>
-                <Text style={styles.tableHeaderText}>{form?.equipment_question || "Equipment"}</Text>
-              </View>
-            )}
-            {showUser && (
-              <View style={[styles.tableCell, styles.colAssociation]}>
-                <Text style={styles.tableHeaderText}>{form?.user_question || "User"}</Text>
-              </View>
-            )}
-            {showCustomer && (
-              <View style={[styles.tableCell, styles.colAssociation]}>
-                <Text style={styles.tableHeaderText}>{form?.customer_question || "Customer"}</Text>
-              </View>
-            )}
-            {showCostCode && (
-              <View style={[styles.tableCell, styles.colAssociation]}>
-                <Text style={styles.tableHeaderText}>{form?.cost_code_question || "Cost Code"}</Text>
-              </View>
-            )}
-            {displayFields.map((field) => (
-              <View key={field.id} style={[styles.tableCell, styles.colField]}>
-                <Text style={styles.tableHeaderText} numberOfLines={1}>
-                  {field.question}
-                </Text>
-              </View>
-            ))}
-            <View style={[styles.tableCell, styles.colActions]}>
-              <Text style={styles.tableHeaderText}>Actions</Text>
-            </View>
-          </View>
 
-          {/* Data Rows */}
-          {filteredSubmissions.map((submission) => (
-            <View key={submission.id} style={styles.tableDataRow}>
-              <View style={[styles.tableCell, styles.colSubmissionId]}>
-                <Text style={styles.cellTextSmall} numberOfLines={1}>
-                  {submission.id?.substring(0, 8)}...
-                </Text>
-              </View>
-              <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                <Text style={styles.cellText} numberOfLines={1}>
-                  {submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown"}
-                </Text>
-              </View>
-              <View style={[styles.tableCell, styles.colDate]}>
-                <Text style={styles.cellTextSmall} numberOfLines={2}>
-                  {formatDate(submission.submitted_at)}
-                </Text>
-              </View>
-              {showProject && (
-                <View style={[styles.tableCell, styles.colAssociation]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.project?.name || submission.associated_project_name || "-"}
-                  </Text>
-                </View>
-              )}
-              {showEquipment && (
-                <View style={[styles.tableCell, styles.colAssociation]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.equipment?.label || submission.associated_equipment_label || "-"}
-                  </Text>
-                </View>
-              )}
-              {showUser && (
-                <View style={[styles.tableCell, styles.colAssociation]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.user?.full_name || submission.associated_user_name || "-"}
-                  </Text>
-                </View>
-              )}
-              {showCustomer && (
-                <View style={[styles.tableCell, styles.colAssociation]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.customer?.name || submission.associated_customer_name || "-"}
-                  </Text>
-                </View>
-              )}
-              {showCostCode && (
-                <View style={[styles.tableCell, styles.colAssociation]}>
-                  <Text style={styles.cellText} numberOfLines={1}>
-                    {submission.cost_code?.name || submission.associated_cost_code_name || "-"}
-                  </Text>
-                </View>
-              )}
-              {displayFields.map((field) => (
-                <View key={field.id} style={[styles.tableCell, styles.colField]}>
-                  <Text style={styles.cellText} numberOfLines={2}>
-                    {submission.data?.[field.id] || "-"}
-                  </Text>
+              {/* Data Rows (scrollable columns) */}
+              {filteredSubmissions.map((submission) => (
+                <View key={submission.id} style={styles.tableDataRow}>
+                  <View style={[styles.tableCell, styles.colSubmissionId]}>
+                    <Text style={styles.cellTextSmall} numberOfLines={1}>
+                      {submission.id?.substring(0, 8)}...
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.colSubmittedBy]}>
+                    <Text style={styles.cellText} numberOfLines={1}>
+                      {submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown"}
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.colDate]}>
+                    <Text style={styles.cellTextSmall} numberOfLines={2}>
+                      {formatDate(submission.submitted_at)}
+                    </Text>
+                  </View>
+                  {showProject && (
+                    <View style={[styles.tableCell, styles.colAssociation]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.project?.name || submission.associated_project_name || "-"}
+                      </Text>
+                    </View>
+                  )}
+                  {showEquipment && (
+                    <View style={[styles.tableCell, styles.colAssociation]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.equipment?.label || submission.associated_equipment_label || "-"}
+                      </Text>
+                    </View>
+                  )}
+                  {showUser && (
+                    <View style={[styles.tableCell, styles.colAssociation]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.user?.full_name || submission.associated_user_name || "-"}
+                      </Text>
+                    </View>
+                  )}
+                  {showCustomer && (
+                    <View style={[styles.tableCell, styles.colAssociation]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.customer?.name || submission.associated_customer_name || "-"}
+                      </Text>
+                    </View>
+                  )}
+                  {showCostCode && (
+                    <View style={[styles.tableCell, styles.colAssociation]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.cost_code?.name || submission.associated_cost_code_name || "-"}
+                      </Text>
+                    </View>
+                  )}
+                  {displayFields.map((field) => (
+                    <View key={field.id} style={[styles.tableCell, styles.colField]}>
+                      <Text style={styles.cellText} numberOfLines={2}>
+                        {formatFieldValue(field, submission.data?.[field.id])}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               ))}
-              <View style={[styles.tableCell, styles.colActions]}>
-                <Pressable style={styles.actionButton}>
-                  <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
-                </Pressable>
+            </View>
+          </ScrollView>
+
+          <View style={styles.tableActionsColumn}>
+            <View style={[styles.tableHeaderRow, styles.actionsHeaderRow]}>
+              <View style={[styles.tableCell, styles.colActionsSticky]}>
+                <Text style={styles.tableHeaderText}>Actions</Text>
               </View>
             </View>
-          ))}
+            {filteredSubmissions.map((submission) => (
+              <View key={submission.id} style={[styles.tableDataRow, styles.actionsRow]}>
+                <View style={[styles.tableCell, styles.colActionsSticky]}>
+                  <Pressable style={styles.actionButton}>
+                    <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
       </ScrollView>
-    </ScrollView>
   </View>
   );
+  };
 
   const renderPlaceholder = (type) => (
     <View style={styles.placeholderContainer}>
@@ -703,6 +952,30 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     ...shadows.small,
   },
+  tableWithActions: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  tableScroll: {
+    flex: 1,
+  },
+  tableActionsColumn: {
+    width: 90,
+    backgroundColor: "white",
+    borderLeftWidth: 1,
+    borderLeftColor: "#E0E0E0",
+  },
+  actionsHeaderRow: {
+    justifyContent: "center",
+  },
+  actionsRow: {
+    justifyContent: "center",
+  },
+  colActionsSticky: {
+    width: 90,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tableHeaderRow: {
     flexDirection: "row",
     backgroundColor: "#F5F5F5",
@@ -789,6 +1062,76 @@ const styles = StyleSheet.create({
     overflow: "visible",
     ...shadows.small,
   },
+  filterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  filterPopoverWrapper: {
+    position: "absolute",
+    top: 52,
+    left: 0,
+    zIndex: 50,
+    maxWidth: 520,
+  },
+  filterToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "white",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  filterToggleText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    fontWeight: "600",
+  },
+  filterCountBadge: {
+    backgroundColor: colors.primary.orange,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  filterCountText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  filterPanel: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    position: "relative",
+    zIndex: 20,
+    overflow: "visible",
+    ...shadows.small,
+  },
+  filterActionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    gap: 12,
+  },
+  applyFilterButton: {
+    backgroundColor: colors.neutral.white,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  applyFilterText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text.primary,
+  },
   filterHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -825,8 +1168,9 @@ const styles = StyleSheet.create({
   filterRuleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
+    gap: 8,
+    flexWrap: "nowrap",
+    width: "100%",
     position: "relative",
     zIndex: 20,
   },
@@ -840,9 +1184,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     backgroundColor: "#fff",
-    minWidth: 220,
-    maxWidth: 260,
+    minWidth: 160,
+    maxWidth: 200,
     position: "relative",
+  },
+  filterField: {
+    position: "relative",
+    zIndex: 20,
   },
   filterSelectText: {
     fontSize: 13,
@@ -909,7 +1257,8 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 4,
     backgroundColor: "#fff",
-    minWidth: 60,
+    minWidth: 80,
+    maxWidth: 140,
   },
   dropdownButton: {
     flexDirection: "row",
@@ -931,14 +1280,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: "100%",
     left: 0,
-    width: "100%",
-    maxWidth: 260,
+    right: 0,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 4,
     marginTop: 2,
     maxHeight: 200,
+    overflow: "hidden",
     zIndex: 1000,
     elevation: 6,
     ...shadows.small,
@@ -955,6 +1304,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text.primary,
     flex: 1,
+  },
+  dropdownScroll: {
+    maxHeight: 200,
   },
   removeFilterButton: {
     padding: 6,
