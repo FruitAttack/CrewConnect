@@ -103,6 +103,33 @@ export default function FilteredFormSubmissionsPage({
     return String(value);
   };
 
+  const formatDateInput = (text, mode) => {
+    const digits = String(text || "").replace(/\D/g, "");
+
+    if (mode === "date") {
+      const y = digits.slice(0, 4);
+      const m = digits.slice(4, 6);
+      const d = digits.slice(6, 8);
+      return [y, m, d].filter(Boolean).join("-");
+    }
+
+    if (mode === "time") {
+      const h = digits.slice(0, 2);
+      const min = digits.slice(2, 4);
+      return [h, min].filter(Boolean).join(":");
+    }
+
+    // date_time
+    const y = digits.slice(0, 4);
+    const m = digits.slice(4, 6);
+    const d = digits.slice(6, 8);
+    const h = digits.slice(8, 10);
+    const min = digits.slice(10, 12);
+    const date = [y, m, d].filter(Boolean).join("-");
+    const time = [h, min].filter(Boolean).join(":");
+    return time ? `${date} ${time}` : date;
+  };
+
   // Parse fields from JSON string if needed
   const parsedFields = useMemo(
     () => (form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : []),
@@ -228,7 +255,9 @@ export default function FilteredFormSubmissionsPage({
           const targetDate = rule.value ? new Date(rule.value) : null;
           if (!valueDate || isNaN(valueDate) || !targetDate || isNaN(targetDate)) return false;
           if (rule.operator === "gt") return valueDate > targetDate;
+          if (rule.operator === "gte") return valueDate >= targetDate;
           if (rule.operator === "lt") return valueDate < targetDate;
+          if (rule.operator === "lte") return valueDate <= targetDate;
           if (rule.operator === "eq") return valueDate.toString() === targetDate.toString();
         }
 
@@ -353,7 +382,7 @@ export default function FilteredFormSubmissionsPage({
       )}
       <View style={styles.filterBar}>
         <Pressable style={styles.filterToggle} onPress={() => setFiltersOpen((v) => !v)}>
-          <Ionicons name="filter" size={16} color={colors.text.secondary} />
+          <Ionicons name="filter" size={16} color="white" />
           <Text style={styles.filterToggleText}>Filters</Text>
           {appliedFilterRules.length > 0 && (
             <View style={styles.filterCountBadge}>
@@ -385,7 +414,9 @@ export default function FilteredFormSubmissionsPage({
                     case "number":
                       return [
                         { value: "gt", label: ">" },
+                        { value: "gte", label: ">=" },
                         { value: "lt", label: "<" },
+                        { value: "lte", label: "<=" },
                         { value: "eq", label: "=" },
                       ];
                     case "date":
@@ -393,7 +424,9 @@ export default function FilteredFormSubmissionsPage({
                     case "time":
                       return [
                         { value: "gt", label: ">" },
+                        { value: "gte", label: ">=" },
                         { value: "lt", label: "<" },
+                        { value: "lte", label: "<=" },
                         { value: "eq", label: "=" },
                       ];
                     case "multiple_choice":
@@ -463,9 +496,9 @@ export default function FilteredFormSubmissionsPage({
                     </View>
 
                     {!!rule.columnId && (
-                      <View style={styles.filterField}>
+                      <View style={[styles.filterField, styles.filterFieldOperator]}>
                         <Pressable
-                          style={styles.filterSelect}
+                          style={[styles.filterSelect, styles.filterSelectOperator]}
                           onPress={() =>
                             setOpenDropdown((prev) =>
                               prev?.type === "operator" && prev?.ruleId === rule.id
@@ -566,7 +599,7 @@ export default function FilteredFormSubmissionsPage({
                         style={styles.filterInput}
                         placeholder="YYYY-MM-DD"
                         value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date") })}
                       />
                     )}
 
@@ -575,7 +608,7 @@ export default function FilteredFormSubmissionsPage({
                         style={styles.filterInput}
                         placeholder="YYYY-MM-DD HH:mm"
                         value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date_time") })}
                       />
                     )}
 
@@ -584,7 +617,7 @@ export default function FilteredFormSubmissionsPage({
                         style={styles.filterInput}
                         placeholder="HH:mm"
                         value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: text })}
+                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "time") })}
                       />
                     )}
 
@@ -1079,26 +1112,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "white",
+    backgroundColor: colors.primary.orange,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.primary.orange,
   },
   filterToggleText: {
     fontSize: 13,
-    color: colors.text.secondary,
+    color: "white",
     fontWeight: "600",
   },
   filterCountBadge: {
-    backgroundColor: colors.primary.orange,
+    backgroundColor: "white",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   filterCountText: {
-    color: "white",
+    color: colors.primary.orange,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -1110,6 +1143,8 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 20,
     overflow: "visible",
+    borderWidth: 1,
+    borderColor: "#ddd",
     ...shadows.small,
   },
   filterActionsRow: {
@@ -1120,17 +1155,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   applyFilterButton: {
-    backgroundColor: colors.neutral.white,
+    backgroundColor: "#161519",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: "#161519",
   },
   applyFilterText: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.text.primary,
+    color: "white",
   },
   filterHeader: {
     flexDirection: "row",
@@ -1187,10 +1222,20 @@ const styles = StyleSheet.create({
     minWidth: 160,
     maxWidth: 200,
     position: "relative",
+    flexShrink: 1,
+  },
+  filterSelectOperator: {
+    minWidth: 70,
+    maxWidth: 90,
+    paddingHorizontal: 8,
   },
   filterField: {
     position: "relative",
     zIndex: 20,
+    flexShrink: 1,
+  },
+  filterFieldOperator: {
+    maxWidth: 90,
   },
   filterSelectText: {
     fontSize: 13,
