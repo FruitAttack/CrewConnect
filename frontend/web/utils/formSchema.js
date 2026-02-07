@@ -6,6 +6,7 @@
 
 export const FORM_FIELD_TYPES = {
   SHORT_ANSWER: "short_answer",
+  NUMBER: "number",
   LONG_ANSWER: "long_answer",
   MULTIPLE_CHOICE: "multiple_choice",
   CHECKBOX: "checkbox",

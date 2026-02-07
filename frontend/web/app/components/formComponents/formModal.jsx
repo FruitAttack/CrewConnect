@@ -89,6 +89,7 @@ export default function FormModal({
 
   const fieldTypes = [
     { value: FORM_FIELD_TYPES.SHORT_ANSWER, label: "Short Answer", icon: "text-outline" },
+    { value: FORM_FIELD_TYPES.NUMBER, label: "Number", icon: "calculator-outline" },
     { value: FORM_FIELD_TYPES.LONG_ANSWER, label: "Long Answer", icon: "document-text-outline" },
     { value: FORM_FIELD_TYPES.MULTIPLE_CHOICE, label: "Multiple Choice", icon: "radio-button-on-outline" },
     { value: FORM_FIELD_TYPES.CHECKBOX, label: "Checkboxes", icon: "checkbox-outline" },
@@ -557,7 +558,7 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
           </View>
 
           {/* Placeholder (for text fields) */}
-          {(field.type === FORM_FIELD_TYPES.SHORT_ANSWER || field.type === FORM_FIELD_TYPES.LONG_ANSWER) && (
+          {(field.type === FORM_FIELD_TYPES.SHORT_ANSWER || field.type === FORM_FIELD_TYPES.LONG_ANSWER || field.type === FORM_FIELD_TYPES.NUMBER) && (
             <View style={styles.fieldEditorRow}>
               <FormLabel icon="text-outline" text="Placeholder" />
               <TextInput

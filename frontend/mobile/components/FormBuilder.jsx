@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ShortAnswerQuestion,
+  NumberQuestion,
   LongAnswerQuestion,
   MultipleChoiceQuestion,
   CheckboxQuestion,
@@ -62,6 +63,17 @@ export default function FormBuilder({ form, onSubmit }) {
       case FORM_FIELD_TYPES.SHORT_ANSWER:
         return (
           <ShortAnswerQuestion
+            key={field.id}
+            {...commonProps}
+            value={value || ""}
+            onChangeText={(text) => handleFieldChange(field.id, text)}
+            placeholder={field.placeholder}
+          />
+        );
+
+      case FORM_FIELD_TYPES.NUMBER:
+        return (
+          <NumberQuestion
             key={field.id}
             {...commonProps}
             value={value || ""}
