@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getForm, getFormSubmissions } from "../../utils/api";
@@ -32,6 +32,8 @@ export default function FilteredFormSubmissionsPage({
   const [appliedFilterRules, setAppliedFilterRules] = useState([]);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pendingFocusRuleId, setPendingFocusRuleId] = useState(null);
+  const inputRefs = useRef({});
 
   const fetchData = useCallback(async () => {
     if (!token || !formId) return;
@@ -72,6 +74,16 @@ export default function FilteredFormSubmissionsPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!pendingFocusRuleId || !filtersOpen) return;
+    const target = inputRefs.current[pendingFocusRuleId];
+    if (!target || typeof target.focus !== "function") return;
+    const timer = setTimeout(() => {
+      target.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [pendingFocusRuleId, filtersOpen]);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -128,6 +140,33 @@ export default function FilteredFormSubmissionsPage({
     const date = [y, m, d].filter(Boolean).join("-");
     const time = [h, min].filter(Boolean).join(":");
     return time ? `${date} ${time}` : date;
+  };
+
+
+  const buildAppliedFilterLabel = (rule) => {
+    const column = filterableColumns.find((col) => col.id === rule.columnId);
+    if (!column) return "Filter";
+
+    const formatList = (values) => {
+      const cleaned = values.map((v) => String(v)).filter(Boolean);
+      if (cleaned.length <= 2) return cleaned.join(", ");
+      return `${cleaned.slice(0, 2).join(", ")} +${cleaned.length - 2}`;
+    };
+
+    if (column.type === "multiple_choice" || column.type === "checkbox") {
+      const values = rule.values || [];
+      const listLabel = values.length ? formatList(values) : "any";
+      return `${column.label} | ${listLabel}`.trim();
+    }
+
+    if (column.type === "number" || column.type === "date" || column.type === "date_time" || column.type === "time") {
+      const op = { gt: ">", gte: ">=", lt: "<", lte: "<=", eq: "=" }[rule.operator] || "";
+      const val = rule.value ? String(rule.value) : "any";
+      return `${column.label} ${op} ${val}`.trim();
+    }
+
+    const val = rule.value ? String(rule.value) : "any";
+    return `${column.label} | ${val}`.trim();
   };
 
   // Parse fields from JSON string if needed
@@ -381,15 +420,47 @@ export default function FilteredFormSubmissionsPage({
         />
       )}
       <View style={styles.filterBar}>
-        <Pressable style={styles.filterToggle} onPress={() => setFiltersOpen((v) => !v)}>
-          <Ionicons name="filter" size={16} color="white" />
-          <Text style={styles.filterToggleText}>Filters</Text>
-          {appliedFilterRules.length > 0 && (
-            <View style={styles.filterCountBadge}>
-              <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
-            </View>
-          )}
-        </Pressable>
+        <View style={styles.filterControls}>
+          <Pressable style={styles.filterToggle} onPress={() => setFiltersOpen((v) => !v)}>
+            <Ionicons name="filter" size={16} color="white" />
+            <Text style={styles.filterToggleText}>Filters</Text>
+            {appliedFilterRules.length > 0 && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+        {appliedFilterRules.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.appliedFiltersRow}
+          >
+            {appliedFilterRules.map((rule) => (
+              <Pressable
+                key={rule.id}
+                style={styles.appliedFilterChip}
+                onPress={() => {
+                  const column = filterableColumns.find((col) => col.id === rule.columnId);
+                  const isTextInput =
+                    column?.type === "text" ||
+                    column?.type === "number" ||
+                    column?.type === "date" ||
+                    column?.type === "date_time" ||
+                    column?.type === "time";
+                  setFiltersOpen(true);
+                  setOpenDropdown(isTextInput ? null : { type: "values", ruleId: rule.id });
+                  setPendingFocusRuleId(isTextInput ? rule.id : null);
+                }}
+              >
+                <Text style={styles.appliedFilterText} numberOfLines={1}>
+                  {buildAppliedFilterLabel(rule)}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {filtersOpen && (
@@ -413,11 +484,12 @@ export default function FilteredFormSubmissionsPage({
                 <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
               ) : (
                 <View style={styles.filterRulesContainer}>
-                  {filterRules.map((rule) => {
+                  {filterRules.map((rule, index) => {
                 const column = filterableColumns.find((col) => col.id === rule.columnId);
                 const isColumnOpen = openDropdown?.type === "column" && openDropdown?.ruleId === rule.id;
                 const isOperatorOpen = openDropdown?.type === "operator" && openDropdown?.ruleId === rule.id;
                 const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
+                const isRowOpen = isColumnOpen || isOperatorOpen || isValuesOpen;
 
                 const operatorOptions = (() => {
                   switch (column?.type) {
@@ -461,8 +533,14 @@ export default function FilteredFormSubmissionsPage({
                 })();
 
                     return (
-                      <View key={rule.id} style={styles.filterRuleRow}>
-                    <View style={styles.filterField}>
+                      <View
+                        key={rule.id}
+                        style={[
+                          styles.filterRuleRow,
+                          isRowOpen ? styles.filterRuleRowOpen : styles.filterRuleRowClosed,
+                        ]}
+                      >
+                    <View style={[styles.filterField, styles.filterFieldColumn]}>
                       <Pressable
                         style={styles.filterSelect}
                         onPress={() =>
@@ -544,7 +622,7 @@ export default function FilteredFormSubmissionsPage({
                     )}
 
                     {!!rule.columnId && (column?.type === "multiple_choice" || column?.type === "checkbox") && (
-                      <View style={styles.filterField}>
+                      <View style={[styles.filterField, styles.filterFieldValues]}>
                         <Pressable
                           style={styles.filterSelect}
                           onPress={() =>
@@ -596,38 +674,50 @@ export default function FilteredFormSubmissionsPage({
 
                     {!!rule.columnId && (column?.type === "text" || column?.type === "number") && (
                       <TextInput
-                        style={styles.filterInput}
+                        style={[styles.filterInput, styles.filterInputField]}
                         placeholder={column?.type === "number" ? "Value" : "Text"}
                         value={rule.value}
                         onChangeText={(text) => updateRule(rule.id, { value: text })}
                         keyboardType={column?.type === "number" ? "numeric" : "default"}
+                        ref={(ref) => {
+                          inputRefs.current[rule.id] = ref;
+                        }}
                       />
                     )}
 
                     {!!rule.columnId && column?.type === "date" && (
                       <TextInput
-                        style={styles.filterInput}
+                        style={[styles.filterInput, styles.filterInputField]}
                         placeholder="YYYY-MM-DD"
                         value={rule.value}
                         onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date") })}
+                        ref={(ref) => {
+                          inputRefs.current[rule.id] = ref;
+                        }}
                       />
                     )}
 
                     {!!rule.columnId && column?.type === "date_time" && (
                       <TextInput
-                        style={styles.filterInput}
+                        style={[styles.filterInput, styles.filterInputField]}
                         placeholder="YYYY-MM-DD HH:mm"
                         value={rule.value}
                         onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date_time") })}
+                        ref={(ref) => {
+                          inputRefs.current[rule.id] = ref;
+                        }}
                       />
                     )}
 
                     {!!rule.columnId && column?.type === "time" && (
                       <TextInput
-                        style={styles.filterInput}
+                        style={[styles.filterInput, styles.filterInputField]}
                         placeholder="HH:mm"
                         value={rule.value}
                         onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "time") })}
+                        ref={(ref) => {
+                          inputRefs.current[rule.id] = ref;
+                        }}
                       />
                     )}
 
@@ -675,37 +765,47 @@ export default function FilteredFormSubmissionsPage({
               {/* Header Row (scrollable columns) */}
               <View style={styles.tableHeaderRow}>
                 <View style={[styles.tableCell, styles.colSubmissionId]}>
-                  <Text style={styles.tableHeaderText}>ID</Text>
+                  <Text style={styles.tableHeaderText} numberOfLines={1}>ID</Text>
                 </View>
                 <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                  <Text style={styles.tableHeaderText}>Submitted By</Text>
+                  <Text style={styles.tableHeaderText} numberOfLines={1}>Submitted By</Text>
                 </View>
                 <View style={[styles.tableCell, styles.colDate]}>
-                  <Text style={styles.tableHeaderText}>Date</Text>
+                  <Text style={styles.tableHeaderText} numberOfLines={1}>Date</Text>
                 </View>
                 {showProject && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
-                    <Text style={styles.tableHeaderText}>{form?.project_question || "Project"}</Text>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {form?.project_question || "Project"}
+                    </Text>
                   </View>
                 )}
                 {showEquipment && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
-                    <Text style={styles.tableHeaderText}>{form?.equipment_question || "Equipment"}</Text>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {form?.equipment_question || "Equipment"}
+                    </Text>
                   </View>
                 )}
                 {showUser && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
-                    <Text style={styles.tableHeaderText}>{form?.user_question || "User"}</Text>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {form?.user_question || "User"}
+                    </Text>
                   </View>
                 )}
                 {showCustomer && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
-                    <Text style={styles.tableHeaderText}>{form?.customer_question || "Customer"}</Text>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {form?.customer_question || "Customer"}
+                    </Text>
                   </View>
                 )}
                 {showCostCode && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
-                    <Text style={styles.tableHeaderText}>{form?.cost_code_question || "Cost Code"}</Text>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>
+                      {form?.cost_code_question || "Cost Code"}
+                    </Text>
                   </View>
                 )}
                 {displayFields.map((field) => (
@@ -785,7 +885,7 @@ export default function FilteredFormSubmissionsPage({
           <View style={styles.tableActionsColumn}>
             <View style={[styles.tableHeaderRow, styles.actionsHeaderRow]}>
               <View style={[styles.tableCell, styles.colActionsSticky]}>
-                <Text style={styles.tableHeaderText}>Actions</Text>
+                <Text style={styles.tableHeaderText} numberOfLines={1}>Actions</Text>
               </View>
             </View>
             {filteredSubmissions.map((submission) => (
@@ -1113,10 +1213,17 @@ const styles = StyleSheet.create({
     ...shadows.small,
   },
   filterBar: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+    zIndex: 80,
+  },
+  filterControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   filterDrawerOverlay: {
     position: "absolute",
@@ -1124,7 +1231,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 60,
+    zIndex: 200,
+    elevation: 20,
     flexDirection: "row",
     justifyContent: "flex-end",
   },
@@ -1137,7 +1245,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   filterDrawer: {
-    width: 420,
+    width: 480,
     maxWidth: "85%",
     backgroundColor: "white",
     borderWidth: 1,
@@ -1187,6 +1295,25 @@ const styles = StyleSheet.create({
     color: colors.primary.orange,
     fontSize: 11,
     fontWeight: "700",
+  },
+  appliedFiltersRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 8,
+  },
+  appliedFilterChip: {
+    backgroundColor: "#F0F0F0",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    maxWidth: 220,
+  },
+  appliedFilterText: {
+    fontSize: 12,
+    color: colors.text.secondary,
   },
   filterPanel: {
     backgroundColor: "white",
@@ -1260,7 +1387,12 @@ const styles = StyleSheet.create({
     flexWrap: "nowrap",
     width: "100%",
     position: "relative",
-    zIndex: 20,
+  },
+  filterRuleRowOpen: {
+    zIndex: 2000,
+  },
+  filterRuleRowClosed: {
+    zIndex: 1,
   },
   filterSelect: {
     flexDirection: "row",
@@ -1272,23 +1404,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     backgroundColor: "#fff",
-    minWidth: 160,
-    maxWidth: 200,
+    width: "100%",
     position: "relative",
-    flexShrink: 1,
   },
   filterSelectOperator: {
-    minWidth: 70,
-    maxWidth: 90,
     paddingHorizontal: 8,
   },
   filterField: {
     position: "relative",
     zIndex: 20,
+  },
+  filterFieldColumn: {
+    flexBasis: "32%",
+    flexGrow: 1,
     flexShrink: 1,
+    minWidth: 100,
+    maxWidth: 280,
   },
   filterFieldOperator: {
-    maxWidth: 90,
+    flexBasis: "20%",
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 70,
+    maxWidth: 140,
+  },
+  filterFieldValues: {
+    flexBasis: "32%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 120,
+    maxWidth: 240,
   },
   filterSelectText: {
     fontSize: 13,
@@ -1349,14 +1494,19 @@ const styles = StyleSheet.create({
   },
   filterInput: {
     flex: 1,
-    padding: 4,
-    fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 4,
     backgroundColor: "#fff",
-    minWidth: 80,
-    maxWidth: 140,
+    width: "100%",
+  },
+  filterInputField: {
+    flexBasis: "32%",
+    flexGrow: 0,
+    flexShrink: 1,
   },
   dropdownButton: {
     flexDirection: "row",
@@ -1410,6 +1560,7 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 6,
     backgroundColor: colors.semantic.errorLight,
+    flexShrink: 0,
   },
   dropdownBackdrop: {
     position: "absolute",
