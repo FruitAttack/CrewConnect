@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname, useLocalSearchParams } from "expo-router";
+import { useRouter, usePathname, useGlobalSearchParams } from "expo-router";
 import { useProjectTab } from "./projectTabContext";
+import { useProject } from "./projectContext";
 import { colors, spacing, borderRadius, typography } from "../../../constants/theme";
 
 const TABS = [
@@ -17,38 +18,37 @@ export default function ProjectTabBar() {
   const pathname = usePathname();
   const { activeTab, setActiveTab } = useProjectTab();
 
-  const params = useLocalSearchParams();
-  const projectId = params?.projectId;
+  const globalParams = useGlobalSearchParams();
+  const raw = globalParams?.projectId;
+  const paramProjectId = Array.isArray(raw) ? raw[0] : raw;
 
-useEffect(() => {
-  if (!pathname) return;
+  const { selectedProject, selectedProjectId } = useProject();
 
-  const current = TABS.find(tab => pathname.includes(tab.matchPath));
-  if (current && current.key !== activeTab) {
-    setActiveTab(current.key);
+  // pick the best available source of truth
+  const projectId =
+    (paramProjectId != null ? String(paramProjectId) : null) ||
+    (selectedProject?.id != null ? String(selectedProject.id) : null) ||
+    (selectedProjectId != null ? String(selectedProjectId) : null);
+
+  useEffect(() => {
+    if (!pathname) return;
+    const current = TABS.find((tab) => pathname.includes(tab.matchPath));
+    if (current && current.key !== activeTab) setActiveTab(current.key);
+  }, [pathname, activeTab, setActiveTab]);
+
+  function onPressTab(tab) {
+    setActiveTab(tab.key);
+    router.push({
+      pathname: tab.route,
+      params: projectId ? { projectId } : {},
+    });
   }
-
-  // If nothing matches, keep whatever is already active
-  if (!current && !activeTab) {
-    setActiveTab(TABS[0].key);
-  }
-}, [pathname, activeTab, setActiveTab]);
-
-function onPressTab(tab) {
-  setActiveTab(tab.key);
-
-  router.push({
-    pathname: tab.route,
-    params: projectId ? { projectId } : {},
-  });
-}
 
   return (
     <View style={styles.wrapper}>
       <View style={styles.container}>
-        {/* Tabs */}
         <View style={styles.tabsContainer}>
-          {TABS.map(tab => {
+          {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <Pressable
@@ -60,10 +60,10 @@ function onPressTab(tab) {
                   hovered && !isActive && styles.tabHovered,
                 ]}
               >
-                <Ionicons 
-                  name={tab.icon} 
-                  size={16} 
-                  color={isActive ? colors.primary.orange : colors.text.tertiary} 
+                <Ionicons
+                  name={tab.icon}
+                  size={16}
+                  color={isActive ? colors.primary.orange : colors.text.tertiary}
                 />
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                   {tab.label}

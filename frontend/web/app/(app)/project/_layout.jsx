@@ -8,25 +8,19 @@ import { ProjectProvider } from "../../components/projectComponents/projectConte
 export default function ProjectLayout() {
   return (
     <ProjectTabProvider>
-      <View style={styles.container}>
-        <ProjectTabBar />
-
-        <ProjectProvider>
+      <ProjectProvider>
+        <View style={styles.container}>
+          <ProjectTabBar />
           <View style={styles.content}>
             <Slot />
           </View>
-        </ProjectProvider>
-      </View>
+        </View>
+      </ProjectProvider>
     </ProjectTabProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingTop: 8,
-  },
+  container: { flex: 1 },
+  content: { flex: 1, paddingTop: 8 },
 });

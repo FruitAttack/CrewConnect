@@ -65,7 +65,7 @@ export default function ProjectOverview() {
 
   const [deleteError, setDeleteError] = useState(null);
 
-  // Load project (same logic you had, just adds local loading flag)
+  // Load project
   useEffect(() => {
     let mounted = true;
 
