@@ -393,17 +393,27 @@ export default function FilteredFormSubmissionsPage({
       </View>
 
       {filtersOpen && (
-        <View style={styles.filterPopoverWrapper}>
+        <View style={styles.filterDrawerOverlay}>
           <Pressable
-            style={styles.dropdownBackdrop}
-            onPress={() => setFiltersOpen(false)}
+            style={styles.drawerBackdrop}
+            onPress={() => {
+              setFiltersOpen(false);
+              setOpenDropdown(null);
+            }}
           />
-          <View style={styles.filterPanel}>
-          {filterRules.length === 0 ? (
-            <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
-          ) : (
-            <View style={styles.filterRulesContainer}>
-              {filterRules.map((rule) => {
+          <View style={styles.filterDrawer}>
+            <View style={styles.drawerHeader}>
+              <Text style={styles.drawerTitle}>Filters</Text>
+              <Pressable onPress={() => setFiltersOpen(false)}>
+                <Ionicons name="close" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.drawerBody} contentContainerStyle={{ paddingBottom: spacing.md }}>
+              {filterRules.length === 0 ? (
+                <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
+              ) : (
+                <View style={styles.filterRulesContainer}>
+                  {filterRules.map((rule) => {
                 const column = filterableColumns.find((col) => col.id === rule.columnId);
                 const isColumnOpen = openDropdown?.type === "column" && openDropdown?.ruleId === rule.id;
                 const isOperatorOpen = openDropdown?.type === "operator" && openDropdown?.ruleId === rule.id;
@@ -450,8 +460,8 @@ export default function FilteredFormSubmissionsPage({
                   }
                 })();
 
-                return (
-                  <View key={rule.id} style={styles.filterRuleRow}>
+                    return (
+                      <View key={rule.id} style={styles.filterRuleRow}>
                     <View style={styles.filterField}>
                       <Pressable
                         style={styles.filterSelect}
@@ -625,26 +635,27 @@ export default function FilteredFormSubmissionsPage({
                       <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
                     </Pressable>
                   </View>
-                );
-              })}
+                    );
+                  })}
+                </View>
+              )}
+            </ScrollView>
+            <View style={styles.filterActionsRow}>
+              <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
+                <Ionicons name="add" size={16} color="white" />
+                <Text style={styles.addFilterText}>Add filter</Text>
+              </Pressable>
+              <Pressable
+                style={styles.applyFilterButton}
+                onPress={() => {
+                  setAppliedFilterRules(filterRules);
+                  setFiltersOpen(false);
+                }}
+              >
+                <Text style={styles.applyFilterText}>Apply filter</Text>
+              </Pressable>
             </View>
-          )}
-          <View style={styles.filterActionsRow}>
-            <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
-              <Ionicons name="add" size={16} color="white" />
-              <Text style={styles.addFilterText}>Add filter</Text>
-            </Pressable>
-            <Pressable
-              style={styles.applyFilterButton}
-              onPress={() => {
-                setAppliedFilterRules(filterRules);
-                setFiltersOpen(false);
-              }}
-            >
-              <Text style={styles.applyFilterText}>Apply filter</Text>
-            </Pressable>
           </View>
-        </View>
         </View>
       )}
 
@@ -983,11 +994,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "white",
     borderRadius: 10,
+    padding: 16,
     ...shadows.small,
   },
   tableWithActions: {
     flexDirection: "row",
     alignItems: "flex-start",
+    backgroundColor: "white",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    overflow: "hidden",
   },
   tableScroll: {
     flex: 1,
@@ -1101,12 +1118,48 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  filterPopoverWrapper: {
+  filterDrawerOverlay: {
     position: "absolute",
-    top: 52,
+    top: 0,
     left: 0,
-    zIndex: 50,
-    maxWidth: 520,
+    right: 0,
+    bottom: 0,
+    zIndex: 60,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  drawerBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent",
+  },
+  filterDrawer: {
+    width: 420,
+    maxWidth: "85%",
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 12,
+    padding: 16,
+    height: "100%",
+    ...shadows.small,
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  drawerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text.primary,
+  },
+  drawerBody: {
+    flex: 1,
   },
   filterToggle: {
     flexDirection: "row",
