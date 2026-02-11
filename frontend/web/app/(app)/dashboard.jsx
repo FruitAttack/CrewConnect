@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../utils/ctx';
+import { useRouter } from 'expo-router';
 import { reportsApi, projectsApi, usersApi } from '../../services/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 
@@ -10,6 +11,8 @@ export default function Dashboard() {
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const router = useRouter();
   
   const [stats, setStats] = useState({
     activeProjects: 0,
@@ -285,6 +288,11 @@ export default function Dashboard() {
                 <Pressable 
                   key={index} 
                   style={({ hovered }) => [styles.actionItem, hovered && styles.actionItemHovered]}
+                  onPress={() => {
+                    if (action.label === 'New Project') {
+                      router.push('/(app)/projects?create=true');
+                    }
+                  }}
                 >
                   <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
                     <Ionicons name={action.icon} size={22} color={action.color} />

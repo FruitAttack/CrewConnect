@@ -14,6 +14,7 @@ export default function Projects() {
   const { session } = useSession();
   const isLargeScreen = width >= 1024;
   const { setSelectedProject, setSelectedProjectID } = useProject();
+  const { create } = useLocalSearchParams();
   
   const [projects, setProjects] = useState([]);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -110,6 +111,13 @@ export default function Projects() {
       setProjects([]);
     }
   }, [companyId, fetchProjects]);
+
+  // opens the create project modal if we navigate from the dashboard quick action
+  useEffect(() => {
+    if (create == 'true') {
+      setCreateOpen(true);
+    }
+  }, [create]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
