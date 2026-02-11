@@ -13,6 +13,7 @@ export default function DateTimeQuestion({
   maximumDate = null,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [webInputValue, setWebInputValue] = useState("");
 
   const handleDateTimeChange = (event, selectedDateTime) => {
     if (Platform.OS === "android") {
@@ -48,15 +49,48 @@ export default function DateTimeQuestion({
   };
 
   const handleWebChange = (text) => {
-    if (!text) {
+    const digits = text.replace(/\D/g, "").slice(0, 12);
+    let formatted = digits;
+    if (digits.length >= 5) {
+      formatted = `${digits.slice(0, 4)}-${digits.slice(4, 6)}`;
+      if (digits.length >= 7) {
+        formatted = `${formatted}-${digits.slice(6, 8)}`;
+      }
+      if (digits.length >= 9) {
+        formatted = `${formatted} ${digits.slice(8, 10)}`;
+        if (digits.length >= 11) {
+          formatted = `${formatted}:${digits.slice(10, 12)}`;
+        }
+      }
+    }
+    setWebInputValue(formatted);
+    if (digits.length === 12) {
+      const parsed = new Date(formatted.replace(" ", "T"));
+      if (!Number.isNaN(parsed.getTime())) {
+        onValueChange(parsed);
+      }
+    }
+  };
+
+  const handleWebBlur = () => {
+    const trimmed = webInputValue.trim();
+    if (!trimmed) {
       onValueChange(null);
       return;
     }
-    const normalized = text.replace(" ", "T");
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(trimmed)) {
+      return;
+    }
+    const normalized = trimmed.replace(" ", "T");
     const parsed = new Date(normalized);
     if (Number.isNaN(parsed.getTime())) return;
     onValueChange(parsed);
   };
+
+  React.useEffect(() => {
+    if (Platform.OS !== "web") return;
+    setWebInputValue(formatDateTimeInput(value));
+  }, [value]);
 
   return (
     <View style={styles.container}>
@@ -68,8 +102,9 @@ export default function DateTimeQuestion({
       {Platform.OS === "web" ? (
         <TextInput
           style={[styles.datetimeButton, !editable && styles.datetimeButtonDisabled]}
-          value={formatDateTimeInput(value)}
+          value={webInputValue}
           onChangeText={handleWebChange}
+          onBlur={handleWebBlur}
           editable={editable}
           placeholder="YYYY-MM-DD HH:mm"
           placeholderTextColor="#999"

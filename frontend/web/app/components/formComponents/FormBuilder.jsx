@@ -301,10 +301,27 @@ export default function FormBuilder({
   }, [form?.project_enabled, projectId]);
 
   const handleSubmit = () => {
+    const sanitizedData = { ...formData };
+    delete sanitizedData.project_id;
+    delete sanitizedData.cost_code_id;
+    delete sanitizedData.equipment_id;
+    delete sanitizedData.user_id;
+    Object.keys(sanitizedData).forEach((key) => {
+      const value = sanitizedData[key];
+      if (value instanceof Date) {
+        sanitizedData[key] = value.toISOString();
+        return;
+      }
+      if (Array.isArray(value)) {
+        sanitizedData[key] = value.map((item) =>
+          item instanceof Date ? item.toISOString() : item
+        );
+      }
+    });
     const submission = {
       formId: form.id,
       formTitle: form.title,
-      data: formData,
+      data: sanitizedData,
       submittedAt: new Date().toISOString(),
       associatedProjectId: projectId || null,
       associatedEquipmentId: equipmentId || null,

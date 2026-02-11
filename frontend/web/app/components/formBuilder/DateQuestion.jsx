@@ -13,6 +13,7 @@ export default function DateQuestion({
   maximumDate = null,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [webInputValue, setWebInputValue] = useState("");
 
   const handleDateChange = (event, selectedDate) => {
     if (Platform.OS === "android") {
@@ -43,14 +44,41 @@ export default function DateQuestion({
   };
 
   const handleWebChange = (text) => {
-    if (!text) {
+    const digits = text.replace(/\D/g, "").slice(0, 8);
+    let formatted = digits;
+    if (digits.length >= 5) {
+      formatted = `${digits.slice(0, 4)}-${digits.slice(4, 6)}`;
+      if (digits.length >= 7) {
+        formatted = `${formatted}-${digits.slice(6, 8)}`;
+      }
+    }
+    setWebInputValue(formatted);
+    if (digits.length === 8) {
+      const parsed = new Date(`${formatted}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        onValueChange(parsed);
+      }
+    }
+  };
+
+  const handleWebBlur = () => {
+    const trimmed = webInputValue.trim();
+    if (!trimmed) {
       onValueChange(null);
       return;
     }
-    const parsed = new Date(`${text}T00:00:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return;
+    }
+    const parsed = new Date(`${trimmed}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return;
     onValueChange(parsed);
   };
+
+  React.useEffect(() => {
+    if (Platform.OS !== "web") return;
+    setWebInputValue(formatDateInput(value));
+  }, [value]);
 
   return (
     <View style={styles.container}>
@@ -62,8 +90,9 @@ export default function DateQuestion({
       {Platform.OS === "web" ? (
         <TextInput
           style={[styles.dateButton, !editable && styles.dateButtonDisabled]}
-          value={formatDateInput(value)}
+          value={webInputValue}
           onChangeText={handleWebChange}
+          onBlur={handleWebBlur}
           editable={editable}
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#999"

@@ -11,6 +11,7 @@ export default function TimeQuestion({
   editable = true,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [webInputValue, setWebInputValue] = useState("");
 
   const handleTimeChange = (event, selectedTime) => {
     if (Platform.OS === "android") {
@@ -40,13 +41,38 @@ export default function TimeQuestion({
   };
 
   const handleWebChange = (text) => {
-    if (!text) {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    let formatted = digits;
+    if (digits.length >= 3) {
+      formatted = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+    }
+    setWebInputValue(formatted);
+    if (digits.length === 4) {
+      const now = new Date();
+      const parsed = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        Number(digits.slice(0, 2)),
+        Number(digits.slice(2, 4))
+      );
+      if (!Number.isNaN(parsed.getTime())) {
+        onValueChange(parsed);
+      }
+    }
+  };
+
+  const handleWebBlur = () => {
+    const trimmed = webInputValue.trim();
+    if (!trimmed) {
       onValueChange(null);
       return;
     }
+    if (!/^\d{2}:\d{2}$/.test(trimmed)) {
+      return;
+    }
     const now = new Date();
-    const [hours, minutes] = text.split(":");
-    if (hours === undefined || minutes === undefined) return;
+    const [hours, minutes] = trimmed.split(":");
     const parsed = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -58,6 +84,11 @@ export default function TimeQuestion({
     onValueChange(parsed);
   };
 
+  React.useEffect(() => {
+    if (Platform.OS !== "web") return;
+    setWebInputValue(formatTimeInput(value));
+  }, [value]);
+
   return (
     <View style={styles.container}>
       <View style={styles.questionHeader}>
@@ -68,8 +99,9 @@ export default function TimeQuestion({
       {Platform.OS === "web" ? (
         <TextInput
           style={[styles.timeButton, !editable && styles.timeButtonDisabled]}
-          value={formatTimeInput(value)}
+          value={webInputValue}
           onChangeText={handleWebChange}
+          onBlur={handleWebBlur}
           editable={editable}
           placeholder="HH:mm"
           placeholderTextColor="#999"
