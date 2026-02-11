@@ -1551,13 +1551,16 @@ const styles = StyleSheet.create({
     flex: 2,
   },
   colDate: {
-    flex: 1.5,
+    flex: 2,
+    minWidth: 150,
   },
   colAssociation: {
-    flex: 1.2,
+    flex: 3,
+    minWidth: 150,
   },
   colField: {
     flex: 2.5,
+    minWidth: 100,
   },
   colActions: {
     flex: 0.5,

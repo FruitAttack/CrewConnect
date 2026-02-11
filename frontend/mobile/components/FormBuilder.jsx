@@ -533,245 +533,205 @@ export default function FormBuilder({ form, onSubmit }) {
           <Text style={styles.description}>{form.description}</Text>
         </View>
 
-        <View
-          style={[
-            styles.containerQuestion,
-            {
-              zIndex: getAssociationStackIndex("project"),
-              elevation: getAssociationElevation("project"),
-            },
-          ]}
-        >
-          {form?.project_enabled && (
-            <View
-              style={[
-                styles.associationBlock,
-                {
-                  zIndex: getAssociationStackIndex("project"),
-                  elevation: getAssociationElevation("project"),
-                },
-              ]}
-            >
-              <Text style={styles.associationLabel}>
-                {form.project_question || "Select Project"}
-              </Text>
-              {loadingProjects ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#000" />
-                  <Text style={styles.loadingText}>Loading projects...</Text>
-                </View>
-              ) : (
-                <View style={{ zIndex: 5000 }}>
-                  <DropDownPicker
-                    open={projectOpen}
-                    onOpen={() => {
-                      closeAllPickers();
-                      setActiveAssociation("project");
-                      setProjectOpen(true);
-                    }}
-                    onClose={() => {
-                      setProjectOpen(false);
-                      setActiveAssociation(null);
-                    }}
-                    value={projectId}
-                    items={projectItems}
-                    setOpen={setProjectOpen}
-                    setValue={setProjectId}
-                    setItems={setProjectItems}
-                    placeholder="Select Project"
-                    style={styles.dropdown}
-                    dropDownContainerStyle={styles.dropdownContainer}
-                    onChangeValue={(value) => {
-                      handleFieldChange("project_id", value || null);
-                    }}
-                  />
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+        {form?.project_enabled && (
+          <View
+            style={[
+              styles.containerQuestion,
+              {
+                zIndex: getAssociationStackIndex("project"),
+                elevation: getAssociationElevation("project"),
+              },
+            ]}
+          >
+            <Text style={styles.associationLabel}>
+              {form.project_question || "Select Project"}
+            </Text>
+            {loadingProjects ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#000" />
+                <Text style={styles.loadingText}>Loading projects...</Text>
+              </View>
+            ) : (
+              <View style={{ zIndex: 5000 }}>
+                <DropDownPicker
+                  open={projectOpen}
+                  onOpen={() => {
+                    closeAllPickers();
+                    setActiveAssociation("project");
+                    setProjectOpen(true);
+                  }}
+                  onClose={() => {
+                    setProjectOpen(false);
+                    setActiveAssociation(null);
+                  }}
+                  value={projectId}
+                  items={projectItems}
+                  setOpen={setProjectOpen}
+                  setValue={setProjectId}
+                  setItems={setProjectItems}
+                  placeholder="Select Project"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  onChangeValue={(value) => {
+                    handleFieldChange("project_id", value || null);
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
-        <View
-          style={[
-            styles.containerQuestion,
-            {
-              zIndex: getAssociationStackIndex("costCode"),
-              elevation: getAssociationElevation("costCode"),
-            },
-          ]}
-        >
-          {form?.cost_code_enabled && (
-            <View
-              style={[
-                styles.associationBlock,
-                {
-                  zIndex: getAssociationStackIndex("costCode"),
-                  elevation: getAssociationElevation("costCode"),
-                },
-              ]}
-            >
-              <Text style={styles.associationLabel}>
-                {form.cost_code_question || "Select Cost Code"}
-              </Text>
-              {loadingCostCodes ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#000" />
-                  <Text style={styles.loadingText}>Loading cost codes...</Text>
-                </View>
-              ) : (
-                <View style={{ zIndex: 4000 }}>
-                  <DropDownPicker
-                    open={costCodeOpen}
-                    onOpen={() => {
-                      if (form?.project_enabled && !projectId) return;
-                      closeAllPickers();
-                      setActiveAssociation("costCode");
-                      setCostCodeOpen(true);
-                    }}
-                    onClose={() => {
-                      setCostCodeOpen(false);
-                      setActiveAssociation(null);
-                    }}
-                    value={costCodeId}
-                    items={costCodeItems}
-                    setOpen={setCostCodeOpen}
-                    setValue={setCostCodeId}
-                    setItems={setCostCodeItems}
-                    placeholder={
-                      form?.project_enabled
-                        ? projectId
-                          ? "Select Cost Code"
-                          : "Select a project first"
-                        : "Select Cost Code"
-                    }
-                    disabled={form?.project_enabled && !projectId}
-                    style={styles.dropdown}
-                    dropDownContainerStyle={styles.dropdownContainer}
-                    onChangeValue={(value) => {
-                      handleFieldChange("cost_code_id", value || null);
-                    }}
-                  />
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+        {form?.cost_code_enabled && (
+          <View
+            style={[
+              styles.containerQuestion,
+              {
+                zIndex: getAssociationStackIndex("costCode"),
+                elevation: getAssociationElevation("costCode"),
+              },
+            ]}
+          >
+            <Text style={styles.associationLabel}>
+              {form.cost_code_question || "Select Cost Code"}
+            </Text>
+            {loadingCostCodes ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#000" />
+                <Text style={styles.loadingText}>Loading cost codes...</Text>
+              </View>
+            ) : (
+              <View style={{ zIndex: 4000 }}>
+                <DropDownPicker
+                  open={costCodeOpen}
+                  onOpen={() => {
+                    if (form?.project_enabled && !projectId) return;
+                    closeAllPickers();
+                    setActiveAssociation("costCode");
+                    setCostCodeOpen(true);
+                  }}
+                  onClose={() => {
+                    setCostCodeOpen(false);
+                    setActiveAssociation(null);
+                  }}
+                  value={costCodeId}
+                  items={costCodeItems}
+                  setOpen={setCostCodeOpen}
+                  setValue={setCostCodeId}
+                  setItems={setCostCodeItems}
+                  placeholder={
+                    form?.project_enabled
+                      ? projectId
+                        ? "Select Cost Code"
+                        : "Select a project first"
+                      : "Select Cost Code"
+                  }
+                  disabled={form?.project_enabled && !projectId}
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  onChangeValue={(value) => {
+                    handleFieldChange("cost_code_id", value || null);
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
-        <View
-          style={[
-            styles.containerQuestion,
-            {
-              zIndex: getAssociationStackIndex("user"),
-              elevation: getAssociationElevation("user"),
-            },
-          ]}
-        >
-          {form?.user_enabled && (
-            <View
-              style={[
-                styles.associationBlock,
-                {
-                  zIndex: getAssociationStackIndex("user"),
-                  elevation: getAssociationElevation("user"),
-                },
-              ]}
-            >
-              <Text style={styles.associationLabel}>
-                {form.user_question || "Select User"}
-              </Text>
-              {loadingUsers ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#000" />
-                  <Text style={styles.loadingText}>Loading users...</Text>
-                </View>
-              ) : (
-                <View style={{ zIndex: 3000 }}>
-                  <DropDownPicker
-                    open={userOpen}
-                    onOpen={() => {
-                      closeAllPickers();
-                      setActiveAssociation("user");
-                      setUserOpen(true);
-                    }}
-                    onClose={() => {
-                      setUserOpen(false);
-                      setActiveAssociation(null);
-                    }}
-                    value={userId}
-                    items={userItems}
-                    setOpen={setUserOpen}
-                    setValue={setUserId}
-                    setItems={setUserItems}
-                    placeholder="Select User"
-                    style={styles.dropdown}
-                    dropDownContainerStyle={styles.dropdownContainer}
-                    onChangeValue={(value) => {
-                      handleFieldChange("user_id", value || null);
-                    }}
-                  />
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+        {form?.user_enabled && (
+          <View
+            style={[
+              styles.containerQuestion,
+              {
+                zIndex: getAssociationStackIndex("user"),
+                elevation: getAssociationElevation("user"),
+              },
+            ]}
+          >
+            <Text style={styles.associationLabel}>
+              {form.user_question || "Select User"}
+            </Text>
+            {loadingUsers ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#000" />
+                <Text style={styles.loadingText}>Loading users...</Text>
+              </View>
+            ) : (
+              <View style={{ zIndex: 3000 }}>
+                <DropDownPicker
+                  open={userOpen}
+                  onOpen={() => {
+                    closeAllPickers();
+                    setActiveAssociation("user");
+                    setUserOpen(true);
+                  }}
+                  onClose={() => {
+                    setUserOpen(false);
+                    setActiveAssociation(null);
+                  }}
+                  value={userId}
+                  items={userItems}
+                  setOpen={setUserOpen}
+                  setValue={setUserId}
+                  setItems={setUserItems}
+                  placeholder="Select User"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  onChangeValue={(value) => {
+                    handleFieldChange("user_id", value || null);
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
-        <View
-          style={[
-            styles.containerQuestion,
-            {
-              zIndex: getAssociationStackIndex("equipment"),
-              elevation: getAssociationElevation("equipment"),
-            },
-          ]}
-        >
-          {form?.equipment_enabled && (
-            <View
-              style={[
-                styles.associationBlock,
-                {
-                  zIndex: getAssociationStackIndex("equipment"),
-                  elevation: getAssociationElevation("equipment"),
-                },
-              ]}
-            >
-              <Text style={styles.associationLabel}>
-                {form.equipment_question || "Select Equipment"}
-              </Text>
-              {loadingEquipment ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#000" />
-                  <Text style={styles.loadingText}>Loading equipment...</Text>
-                </View>
-              ) : (
-                <View style={{ zIndex: 2000 }}>
-                  <DropDownPicker
-                    open={equipmentOpen}
-                    onOpen={() => {
-                      closeAllPickers();
-                      setActiveAssociation("equipment");
-                      setEquipmentOpen(true);
-                    }}
-                    onClose={() => {
-                      setEquipmentOpen(false);
-                      setActiveAssociation(null);
-                    }}
-                    value={equipmentId}
-                    items={equipmentItems}
-                    setOpen={setEquipmentOpen}
-                    setValue={setEquipmentId}
-                    setItems={setEquipmentItems}
-                    placeholder="Select Equipment"
-                    style={styles.dropdown}
-                    dropDownContainerStyle={styles.dropdownContainer}
-                    onChangeValue={(value) => {
-                      handleFieldChange("equipment_id", value || null);
-                    }}
-                  />
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+        {form?.equipment_enabled && (
+          <View
+            style={[
+              styles.containerQuestion,
+              {
+                zIndex: getAssociationStackIndex("equipment"),
+                elevation: getAssociationElevation("equipment"),
+              },
+            ]}
+          >
+            <Text style={styles.associationLabel}>
+              {form.equipment_question || "Select Equipment"}
+            </Text>
+            {loadingEquipment ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#000" />
+                <Text style={styles.loadingText}>Loading equipment...</Text>
+              </View>
+            ) : (
+              <View style={{ zIndex: 2000 }}>
+                <DropDownPicker
+                  open={equipmentOpen}
+                  onOpen={() => {
+                    closeAllPickers();
+                    setActiveAssociation("equipment");
+                    setEquipmentOpen(true);
+                  }}
+                  onClose={() => {
+                    setEquipmentOpen(false);
+                    setActiveAssociation(null);
+                  }}
+                  value={equipmentId}
+                  items={equipmentItems}
+                  setOpen={setEquipmentOpen}
+                  setValue={setEquipmentId}
+                  setItems={setEquipmentItems}
+                  placeholder="Select Equipment"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  onChangeValue={(value) => {
+                    handleFieldChange("equipment_id", value || null);
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.formFieldsSection}>
           {form.fields.map((field) => renderField(field))}
