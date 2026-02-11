@@ -4,9 +4,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   Pressable,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DropDownPicker from "react-native-dropdown-picker";
@@ -20,39 +20,71 @@ import {
   DateTimeQuestion,
   TimeQuestion,
   PhotoUploadQuestion,
-} from "./formBuilder/index.js";
-import { FORM_FIELD_TYPES } from "../utils/formSchema";
-import { useSession } from "../utils/ctx";
-import { apiCall } from "../utils/api";
+} from "../formBuilder/index.js";
+import { FORM_FIELD_TYPES } from "../../../utils/formSchema";
+import { useSession } from "../../../utils/ctx";
+import { apiCall } from "../../../utils/api";
 
 /**
- * Generic FormBuilder component that renders forms from JSON schema
+ * Web FormBuilder component that renders forms from JSON schema
  */
-export default function FormBuilder({ form, onSubmit }) {
-  const [formData, setFormData] = React.useState({});
+export default function FormBuilder({
+  form,
+  onSubmit,
+  submitLabel = "Submit Form",
+  showHeader = true,
+  initialData = {},
+  initialAssociations = {},
+}) {
+  const [formData, setFormData] = React.useState(initialData || {});
   const { session } = useSession();
   const token = session?.access_token;
+  const parsedFields = React.useMemo(() => {
+    if (!form?.fields) return [];
+    try {
+      return typeof form.fields === "string" ? JSON.parse(form.fields) : form.fields;
+    } catch (_err) {
+      return [];
+    }
+  }, [form?.fields]);
 
   const [projectOpen, setProjectOpen] = React.useState(false);
-  const [projectId, setProjectId] = React.useState(null);
+  const [projectId, setProjectId] = React.useState(initialAssociations.projectId || null);
   const [projectItems, setProjectItems] = React.useState([]);
   const [loadingProjects, setLoadingProjects] = React.useState(false);
 
   const [equipmentOpen, setEquipmentOpen] = React.useState(false);
-  const [equipmentId, setEquipmentId] = React.useState(null);
+  const [equipmentId, setEquipmentId] = React.useState(initialAssociations.equipmentId || null);
   const [equipmentItems, setEquipmentItems] = React.useState([]);
   const [loadingEquipment, setLoadingEquipment] = React.useState(false);
 
   const [userOpen, setUserOpen] = React.useState(false);
-  const [userId, setUserId] = React.useState(null);
+  const [userId, setUserId] = React.useState(initialAssociations.userId || null);
   const [userItems, setUserItems] = React.useState([]);
   const [loadingUsers, setLoadingUsers] = React.useState(false);
   const [userQuery, setUserQuery] = React.useState("");
 
   const [costCodeOpen, setCostCodeOpen] = React.useState(false);
-  const [costCodeId, setCostCodeId] = React.useState(null);
+  const [costCodeId, setCostCodeId] = React.useState(initialAssociations.costCodeId || null);
   const [costCodeItems, setCostCodeItems] = React.useState([]);
   const [loadingCostCodes, setLoadingCostCodes] = React.useState(false);
+
+  React.useEffect(() => {
+    setFormData(initialData || {});
+  }, [form?.id, initialData]);
+
+  React.useEffect(() => {
+    setProjectId(initialAssociations.projectId || null);
+    setEquipmentId(initialAssociations.equipmentId || null);
+    setUserId(initialAssociations.userId || null);
+    setCostCodeId(initialAssociations.costCodeId || null);
+  }, [
+    form?.id,
+    initialAssociations.projectId,
+    initialAssociations.equipmentId,
+    initialAssociations.userId,
+    initialAssociations.costCodeId,
+  ]);
 
   const handleFieldChange = (fieldId, value) => {
     setFormData((prev) => ({
@@ -83,6 +115,11 @@ export default function FormBuilder({ form, onSubmit }) {
     setUserOpen(true);
   };
 
+  const onCostCodeOpen = () => {
+    closeAllPickers();
+    setCostCodeOpen(true);
+  };
+
   const filteredUserItems = React.useMemo(() => {
     if (!userQuery.trim()) return userItems;
     const query = userQuery.trim().toLowerCase();
@@ -97,18 +134,13 @@ export default function FormBuilder({ form, onSubmit }) {
     return match?.label || "";
   }, [userId, userItems]);
 
-  const onCostCodeOpen = () => {
-    closeAllPickers();
-    setCostCodeOpen(true);
-  };
-
   React.useEffect(() => {
     if (!form?.project_enabled || !token) return;
     let isMounted = true;
     (async () => {
       setLoadingProjects(true);
       try {
-        const res = await apiCall(token, "projects", "GET");
+        const res = await apiCall("projects", token, "GET");
         if (res.success && res.data) {
           const projectsData = Array.isArray(res.data)
             ? res.data
@@ -137,7 +169,7 @@ export default function FormBuilder({ form, onSubmit }) {
     (async () => {
       setLoadingEquipment(true);
       try {
-        const res = await apiCall(token, "equipment", "GET");
+        const res = await apiCall("equipment", token, "GET");
         if (res.success && res.data) {
           const equipmentData = Array.isArray(res.data)
             ? res.data
@@ -172,7 +204,7 @@ export default function FormBuilder({ form, onSubmit }) {
       try {
         const companyId = session?.user?.default_company_id;
         const queryParams = companyId ? `?company_id=${companyId}&active=true` : "?active=true";
-        const res = await apiCall(token, `users${queryParams}`, "GET");
+        const res = await apiCall(`users${queryParams}`, token, "GET");
         if (res.success && res.data?.users) {
           if (isMounted) {
             setUserItems(
@@ -218,7 +250,7 @@ export default function FormBuilder({ form, onSubmit }) {
         }
         let res = null;
         if (form?.project_enabled && projectId) {
-          res = await apiCall(token, `projects/${projectId}/cost-codes`, "GET");
+          res = await apiCall(`projects/${projectId}/cost-codes`, token, "GET");
           if (res.success && res.data) {
             const costCodesData = Array.isArray(res.data)
               ? res.data
@@ -235,7 +267,7 @@ export default function FormBuilder({ form, onSubmit }) {
             }
           }
         } else {
-          res = await apiCall(token, "cost-codes", "GET");
+          res = await apiCall("cost-codes", token, "GET");
           if (res.success && res.data) {
             const costCodesData = Array.isArray(res.data)
               ? res.data
@@ -283,7 +315,6 @@ export default function FormBuilder({ form, onSubmit }) {
   };
 
   const renderField = (field) => {
-    // Check if field should be shown based on conditional logic
     if (field.conditional) {
       const { dependsOn, value } = field.conditional;
       if (formData[dependsOn] !== value) {
@@ -415,10 +446,12 @@ export default function FormBuilder({ form, onSubmit }) {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>{form.title}</Text>
-          <Text style={styles.description}>{form.description}</Text>
-        </View>
+        {showHeader && (
+          <View style={styles.header}>
+            <Text style={styles.title}>{form.title}</Text>
+            <Text style={styles.description}>{form.description}</Text>
+          </View>
+        )}
 
         {(form?.project_enabled || form?.equipment_enabled || form?.user_enabled || form?.cost_code_enabled) && (
           <View style={styles.associationSection}>
@@ -597,14 +630,12 @@ export default function FormBuilder({ form, onSubmit }) {
           </View>
         )}
 
-        <View style={styles.formFieldsSection}>
-          {form.fields.map((field) => renderField(field))}
+        {parsedFields.map((field) => renderField(field))}
 
-          <View style={styles.buttonContainer}>
-            <Pressable style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>Submit Form</Text>
-            </Pressable>
-          </View>
+        <View style={styles.buttonContainer}>
+          <Pressable style={styles.submitButton} onPress={handleSubmit}>
+            <Text style={styles.submitButtonText}>{submitLabel}</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -614,14 +645,16 @@ export default function FormBuilder({ form, onSubmit }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "white",
   },
   container: {
     flex: 1,
+    backgroundColor: "white",
   },
   contentContainer: {
     padding: 16,
     paddingBottom: 40,
+    flexGrow: 1,
   },
   header: {
     marginBottom: 24,
@@ -661,10 +694,6 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 14,
     color: "#666",
-  },
-  formFieldsSection: {
-    position: "relative",
-    zIndex: 0,
   },
   buttonContainer: {
     gap: 12,

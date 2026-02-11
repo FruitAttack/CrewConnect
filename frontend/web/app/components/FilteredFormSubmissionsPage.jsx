@@ -6,6 +6,7 @@ import { useSession } from "../../utils/ctx";
 import { useFormTabSafe } from "./formTabComponents/formTabContext";
 import { colors, spacing, typography, shadows } from "../../constants/theme";
 import { FORM_FIELD_TYPES } from "../../utils/formSchema";
+import FormBuilder from "./formComponents/FormBuilder";
 
 /**
  * Form Submissions Page - displays submissions for a specific form
@@ -495,6 +496,62 @@ export default function FilteredFormSubmissionsPage({
 
       if (!response.success) {
         setSubmissionError(response.message || "Failed to save submission");
+        return;
+      }
+
+      closeSubmissionModal();
+      await fetchData();
+    } catch (_err) {
+      setSubmissionError("Failed to save submission");
+    } finally {
+      setSubmissionSaving(false);
+    }
+  };
+
+  const saveSubmissionFromBuilder = async (submission) => {
+    if (!token || !formId) return;
+    const submissionData = submission?.data || {};
+    const missingRequired = displayFields.find((field) => {
+      if (!field.required) return false;
+      const value = submissionData[field.id];
+      if (field.type === FORM_FIELD_TYPES.CHECKBOX) {
+        return !Array.isArray(value) || value.length === 0;
+      }
+      return value === null || value === undefined || String(value).trim() === "";
+    });
+
+    if (missingRequired) {
+      setSubmissionError(`"${missingRequired.question}" is required`);
+      return;
+    }
+
+    setSubmissionSaving(true);
+    setSubmissionError(null);
+    try {
+      let response = null;
+      if (submissionModalMode === "create") {
+        const payload = {
+          formId,
+          data: submissionData,
+          associatedProjectId: submission?.associatedProjectId || null,
+          associatedEquipmentId: submission?.associatedEquipmentId || null,
+          associatedUserId: submission?.associatedUserId || null,
+          associatedCostCodeId: submission?.associatedCostCodeId || null,
+        };
+        response = await createFormSubmission(token, payload);
+      } else {
+        const updates = {
+          data: submissionData,
+          associated_project_id: submission?.associatedProjectId || null,
+          associated_equipment_id: submission?.associatedEquipmentId || null,
+          associated_user_id: submission?.associatedUserId || null,
+          associated_cost_code_id: submission?.associatedCostCodeId || null,
+        };
+        response = await updateFormSubmission(token, editingSubmission?.id, updates);
+      }
+
+      if (!response?.success) {
+        setSubmissionError(response?.message || "Failed to save submission");
         return;
       }
 
@@ -1219,84 +1276,26 @@ export default function FilteredFormSubmissionsPage({
             </Pressable>
           </View>
 
-          <ScrollView style={styles.submissionModalBody} contentContainerStyle={{ paddingBottom: spacing.lg }}>
-            {displayFields.map((field) => {
-              const rawOptions = field.options || [];
-              const options = rawOptions.map((opt) => (typeof opt === "string" ? { label: opt, value: opt } : opt));
-              const currentValue = submissionDraft[field.id];
-
-              if (field.type === FORM_FIELD_TYPES.CHECKBOX) {
-                return (
-                  <View key={field.id} style={styles.submissionFieldWrap}>
-                    <Text style={styles.submissionFieldLabel}>
-                      {field.question}{field.required ? " *" : ""}
-                    </Text>
-                    <View style={styles.submissionCheckboxGroup}>
-                      {options.map((opt) => {
-                        const selected = Array.isArray(currentValue) && currentValue.includes(opt.value);
-                        return (
-                          <Pressable
-                            key={opt.value}
-                            style={styles.submissionCheckboxRow}
-                            onPress={() => toggleSubmissionCheckbox(field.id, opt.value)}
-                          >
-                            <Ionicons
-                              name={selected ? "checkbox" : "square-outline"}
-                              size={18}
-                              color={selected ? colors.primary.orange : colors.text.secondary}
-                            />
-                            <Text style={styles.submissionCheckboxText}>{opt.label}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              }
-
-              if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
-                return (
-                  <View key={field.id} style={styles.submissionFieldWrap}>
-                    <Text style={styles.submissionFieldLabel}>
-                      {field.question}{field.required ? " *" : ""}
-                    </Text>
-                    <View style={styles.submissionChoiceGroup}>
-                      {options.map((opt) => {
-                        const selected = currentValue === opt.value;
-                        return (
-                          <Pressable
-                            key={opt.value}
-                            style={[styles.submissionChoiceChip, selected && styles.submissionChoiceChipActive]}
-                            onPress={() => updateSubmissionField(field.id, opt.value)}
-                          >
-                            <Text style={[styles.submissionChoiceText, selected && styles.submissionChoiceTextActive]}>
-                              {opt.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              }
-
-              return (
-                <View key={field.id} style={styles.submissionFieldWrap}>
-                  <Text style={styles.submissionFieldLabel}>
-                    {field.question}{field.required ? " *" : ""}
-                  </Text>
-                  <TextInput
-                    style={[styles.submissionInput, field.type === FORM_FIELD_TYPES.LONG_ANSWER && styles.submissionInputMultiline]}
-                    multiline={field.type === FORM_FIELD_TYPES.LONG_ANSWER}
-                    numberOfLines={field.type === FORM_FIELD_TYPES.LONG_ANSWER ? 4 : 1}
-                    value={currentValue === null || currentValue === undefined ? "" : String(currentValue)}
-                    onChangeText={(value) => updateSubmissionField(field.id, value)}
-                    placeholder={field.placeholder || field.question}
-                    keyboardType={field.type === FORM_FIELD_TYPES.NUMBER ? "numeric" : "default"}
-                  />
-                </View>
-              );
-            })}
+          <View style={styles.submissionModalBody}>
+            {form ? (
+              <FormBuilder
+                form={form}
+                onSubmit={saveSubmissionFromBuilder}
+                submitLabel={submissionModalMode === "create" ? "Create Submission" : "Save Changes"}
+                showHeader={false}
+                initialData={submissionDraft}
+                initialAssociations={{
+                  projectId: editingSubmission?.associated_project_id || editingSubmission?.associatedProjectId || null,
+                  equipmentId: editingSubmission?.associated_equipment_id || editingSubmission?.associatedEquipmentId || null,
+                  userId: editingSubmission?.associated_user_id || editingSubmission?.associatedUserId || null,
+                  costCodeId: editingSubmission?.associated_cost_code_id || editingSubmission?.associatedCostCodeId || null,
+                }}
+              />
+            ) : (
+              <View style={styles.submissionErrorBox}>
+                <Text style={styles.submissionErrorText}>Form data is not available.</Text>
+              </View>
+            )}
 
             {submissionError && (
               <View style={styles.submissionErrorBox}>
@@ -1304,26 +1303,6 @@ export default function FilteredFormSubmissionsPage({
                 <Text style={styles.submissionErrorText}>{submissionError}</Text>
               </View>
             )}
-          </ScrollView>
-
-          <View style={styles.submissionModalFooter}>
-            <Pressable style={styles.submissionCancelButton} onPress={closeSubmissionModal}>
-              <Text style={styles.submissionCancelText}>Cancel</Text>
-            </Pressable>
-            {submissionModalMode === "edit" && (
-              <Pressable style={styles.submissionDeleteButton} onPress={removeSubmission} disabled={submissionSaving}>
-                <Text style={styles.submissionDeleteText}>Delete</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.submissionSaveButton} onPress={saveSubmission} disabled={submissionSaving}>
-              {submissionSaving ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text style={styles.submissionSaveText}>
-                  {submissionModalMode === "create" ? "Create Submission" : "Save Changes"}
-                </Text>
-              )}
-            </Pressable>
           </View>
         </View>
       </View>
@@ -1966,6 +1945,8 @@ const styles = StyleSheet.create({
   submissionModalBody: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    flex: 1,
+    minHeight: 0,
   },
   submissionFieldWrap: {
     marginBottom: spacing.md,
