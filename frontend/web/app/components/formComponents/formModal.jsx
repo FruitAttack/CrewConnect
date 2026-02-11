@@ -537,22 +537,24 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
 
             {typeOpen && (
               <View style={styles.dropdownMenu}>
-                {fieldTypes.map((type) => (
-                  <Pressable
-                    key={type.value}
-                    onPress={() => {
-                      onUpdate(index, { type: type.value });
-                      setTypeOpen(false);
-                    }}
-                    style={[
-                      styles.dropdownItem,
-                      field.type === type.value && styles.dropdownItemActive,
-                    ]}
-                  >
-                    <Ionicons name={type.icon} size={16} color={colors.text.secondary} />
-                    <Text style={styles.dropdownItemText}>{type.label}</Text>
-                  </Pressable>
-                ))}
+                <ScrollView style={{ maxHeight: 220 }}>
+                  {fieldTypes.map((type) => (
+                    <Pressable
+                      key={type.value}
+                      onPress={() => {
+                        onUpdate(index, { type: type.value });
+                        setTypeOpen(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        field.type === type.value && styles.dropdownItemActive,
+                      ]}
+                    >
+                      <Ionicons name={type.icon} size={16} color={colors.text.secondary} />
+                      <Text style={styles.dropdownItemText}>{type.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </View>
             )}
           </View>
