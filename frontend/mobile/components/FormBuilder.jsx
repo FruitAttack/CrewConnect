@@ -4,10 +4,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   Pressable,
   ActivityIndicator,
 } from "react-native";
+import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ShortAnswerQuestion,
@@ -555,73 +555,38 @@ export default function FormBuilder({ form, onSubmit }) {
               <Text style={styles.associationLabel}>
                 {form.project_question || "Select Project"}
               </Text>
-              <View>
-                {loadingProjects ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#000" />
-                    <Text style={styles.loadingText}>Loading projects...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.userSelectContainer}>
-                    <TextInput
-                      value={
-                        projectQuery !== ""
-                          ? projectQuery
-                          : selectedProjectLabel
-                      }
-                      onFocus={onProjectOpen}
-                      onBlur={() =>
-                        setTimeout(() => {
-                          setProjectOpen(false);
-                          setActiveAssociation(null);
-                        }, 150)
-                      }
-                      onChangeText={(text) => {
-                        if (projectId) setProjectId(null);
-                        setProjectQuery(text);
-                        handleFieldChange("project_id", null);
-                        setProjectOpen(true);
-                      }}
-                      placeholder="Select Project"
-                      style={styles.userSelectInput}
-                    />
-                    {projectOpen && (
-                      <View style={[styles.userSelectDropdown, { elevation: getAssociationElevation("project") }]}>
-                        {filteredProjectItems.length > 0 ? (
-                          <ScrollView style={styles.userSelectList}>
-                            {filteredProjectItems.map((item) => (
-                              <Pressable
-                                key={item.value}
-                                onPress={() => {
-                                  setProjectId(item.value);
-                                  setProjectQuery(item.label || "");
-                                  handleFieldChange(
-                                    "project_id",
-                                    item.value || null,
-                                  );
-                                  setProjectOpen(false);
-                                  setActiveAssociation(null);
-                                }}
-                                style={styles.userSelectItem}
-                              >
-                                <Text style={styles.userSelectItemText}>
-                                  {item.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        ) : (
-                          <View style={styles.userSelectEmpty}>
-                            <Text style={styles.userSelectEmptyText}>
-                              No projects found
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+              {loadingProjects ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading projects...</Text>
+                </View>
+              ) : (
+                <View style={{ zIndex: 5000 }}>
+                  <DropDownPicker
+                    open={projectOpen}
+                    onOpen={() => {
+                      closeAllPickers();
+                      setActiveAssociation("project");
+                      setProjectOpen(true);
+                    }}
+                    onClose={() => {
+                      setProjectOpen(false);
+                      setActiveAssociation(null);
+                    }}
+                    value={projectId}
+                    items={projectItems}
+                    setOpen={setProjectOpen}
+                    setValue={setProjectId}
+                    setItems={setProjectItems}
+                    placeholder="Select Project"
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownContainer}
+                    onChangeValue={(value) => {
+                      handleFieldChange("project_id", value || null);
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -648,87 +613,46 @@ export default function FormBuilder({ form, onSubmit }) {
               <Text style={styles.associationLabel}>
                 {form.cost_code_question || "Select Cost Code"}
               </Text>
-              <View>
-                {loadingCostCodes ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#000" />
-                    <Text style={styles.loadingText}>
-                      Loading cost codes...
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.userSelectContainer}>
-                    <TextInput
-                      value={
-                        costCodeQuery !== ""
-                          ? costCodeQuery
-                          : selectedCostCodeLabel
-                      }
-                      onFocus={onCostCodeOpen}
-                      onBlur={() =>
-                        setTimeout(() => {
-                          setCostCodeOpen(false);
-                          setActiveAssociation(null);
-                        }, 150)
-                      }
-                      onChangeText={(text) => {
-                        if (costCodeId) setCostCodeId(null);
-                        setCostCodeQuery(text);
-                        handleFieldChange("cost_code_id", null);
-                        setCostCodeOpen(true);
-                      }}
-                      placeholder={
-                        form?.project_enabled
-                          ? projectId
-                            ? "Select Cost Code"
-                            : "Select a project first"
-                          : "Select Cost Code"
-                      }
-                      editable={!(form?.project_enabled && !projectId)}
-                      style={[
-                        styles.userSelectInput,
-                        form?.project_enabled && !projectId
-                          ? styles.userSelectInputDisabled
-                          : null,
-                      ]}
-                    />
-                    {costCodeOpen && (
-                      <View style={[styles.userSelectDropdown, { elevation: getAssociationElevation("costCode") }]}>
-                        {filteredCostCodeItems.length > 0 ? (
-                          <ScrollView style={styles.userSelectList}>
-                            {filteredCostCodeItems.map((item) => (
-                              <Pressable
-                                key={item.value}
-                                onPress={() => {
-                                  setCostCodeId(item.value);
-                                  setCostCodeQuery(item.label || "");
-                                  handleFieldChange(
-                                    "cost_code_id",
-                                    item.value || null,
-                                  );
-                                  setCostCodeOpen(false);
-                                  setActiveAssociation(null);
-                                }}
-                                style={styles.userSelectItem}
-                              >
-                                <Text style={styles.userSelectItemText}>
-                                  {item.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        ) : (
-                          <View style={styles.userSelectEmpty}>
-                            <Text style={styles.userSelectEmptyText}>
-                              No cost codes found
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+              {loadingCostCodes ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading cost codes...</Text>
+                </View>
+              ) : (
+                <View style={{ zIndex: 4000 }}>
+                  <DropDownPicker
+                    open={costCodeOpen}
+                    onOpen={() => {
+                      if (form?.project_enabled && !projectId) return;
+                      closeAllPickers();
+                      setActiveAssociation("costCode");
+                      setCostCodeOpen(true);
+                    }}
+                    onClose={() => {
+                      setCostCodeOpen(false);
+                      setActiveAssociation(null);
+                    }}
+                    value={costCodeId}
+                    items={costCodeItems}
+                    setOpen={setCostCodeOpen}
+                    setValue={setCostCodeId}
+                    setItems={setCostCodeItems}
+                    placeholder={
+                      form?.project_enabled
+                        ? projectId
+                          ? "Select Cost Code"
+                          : "Select a project first"
+                        : "Select Cost Code"
+                    }
+                    disabled={form?.project_enabled && !projectId}
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownContainer}
+                    onChangeValue={(value) => {
+                      handleFieldChange("cost_code_id", value || null);
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -755,69 +679,38 @@ export default function FormBuilder({ form, onSubmit }) {
               <Text style={styles.associationLabel}>
                 {form.user_question || "Select User"}
               </Text>
-              <View>
-                {loadingUsers ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#000" />
-                    <Text style={styles.loadingText}>Loading users...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.userSelectContainer}>
-                    <TextInput
-                      value={userQuery !== "" ? userQuery : selectedUserLabel}
-                      onFocus={onUserOpen}
-                      onBlur={() =>
-                        setTimeout(() => {
-                          setUserOpen(false);
-                          setActiveAssociation(null);
-                        }, 150)
-                      }
-                      onChangeText={(text) => {
-                        if (userId) setUserId(null);
-                        setUserQuery(text);
-                        handleFieldChange("user_id", null);
-                        setUserOpen(true);
-                      }}
-                      placeholder="Select User"
-                      style={styles.userSelectInput}
-                    />
-                    {userOpen && (
-                      <View style={[styles.userSelectDropdown, { elevation: getAssociationElevation("user") }]}>
-                        {filteredUserItems.length > 0 ? (
-                          <ScrollView style={styles.userSelectList}>
-                            {filteredUserItems.map((item) => (
-                              <Pressable
-                                key={item.value}
-                                onPress={() => {
-                                  setUserId(item.value);
-                                  setUserQuery(item.label || "");
-                                  handleFieldChange(
-                                    "user_id",
-                                    item.value || null,
-                                  );
-                                  setUserOpen(false);
-                                  setActiveAssociation(null);
-                                }}
-                                style={styles.userSelectItem}
-                              >
-                                <Text style={styles.userSelectItemText}>
-                                  {item.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        ) : (
-                          <View style={styles.userSelectEmpty}>
-                            <Text style={styles.userSelectEmptyText}>
-                              No users found
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+              {loadingUsers ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading users...</Text>
+                </View>
+              ) : (
+                <View style={{ zIndex: 3000 }}>
+                  <DropDownPicker
+                    open={userOpen}
+                    onOpen={() => {
+                      closeAllPickers();
+                      setActiveAssociation("user");
+                      setUserOpen(true);
+                    }}
+                    onClose={() => {
+                      setUserOpen(false);
+                      setActiveAssociation(null);
+                    }}
+                    value={userId}
+                    items={userItems}
+                    setOpen={setUserOpen}
+                    setValue={setUserId}
+                    setItems={setUserItems}
+                    placeholder="Select User"
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownContainer}
+                    onChangeValue={(value) => {
+                      handleFieldChange("user_id", value || null);
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -844,73 +737,38 @@ export default function FormBuilder({ form, onSubmit }) {
               <Text style={styles.associationLabel}>
                 {form.equipment_question || "Select Equipment"}
               </Text>
-              <View>
-                {loadingEquipment ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#000" />
-                    <Text style={styles.loadingText}>Loading equipment...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.userSelectContainer}>
-                    <TextInput
-                      value={
-                        equipmentQuery !== ""
-                          ? equipmentQuery
-                          : selectedEquipmentLabel
-                      }
-                      onFocus={onEquipmentOpen}
-                      onBlur={() =>
-                        setTimeout(() => {
-                          setEquipmentOpen(false);
-                          setActiveAssociation(null);
-                        }, 150)
-                      }
-                      onChangeText={(text) => {
-                        if (equipmentId) setEquipmentId(null);
-                        setEquipmentQuery(text);
-                        handleFieldChange("equipment_id", null);
-                        setEquipmentOpen(true);
-                      }}
-                      placeholder="Select Equipment"
-                      style={styles.userSelectInput}
-                    />
-                    {equipmentOpen && (
-                      <View style={[styles.userSelectDropdown, { elevation: getAssociationElevation("equipment") }]}>
-                        {filteredEquipmentItems.length > 0 ? (
-                          <ScrollView style={styles.userSelectList}>
-                            {filteredEquipmentItems.map((item) => (
-                              <Pressable
-                                key={item.value}
-                                onPress={() => {
-                                  setEquipmentId(item.value);
-                                  setEquipmentQuery(item.label || "");
-                                  handleFieldChange(
-                                    "equipment_id",
-                                    item.value || null,
-                                  );
-                                  setEquipmentOpen(false);
-                                  setActiveAssociation(null);
-                                }}
-                                style={styles.userSelectItem}
-                              >
-                                <Text style={styles.userSelectItemText}>
-                                  {item.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        ) : (
-                          <View style={styles.userSelectEmpty}>
-                            <Text style={styles.userSelectEmptyText}>
-                              No equipment found
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+              {loadingEquipment ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading equipment...</Text>
+                </View>
+              ) : (
+                <View style={{ zIndex: 2000 }}>
+                  <DropDownPicker
+                    open={equipmentOpen}
+                    onOpen={() => {
+                      closeAllPickers();
+                      setActiveAssociation("equipment");
+                      setEquipmentOpen(true);
+                    }}
+                    onClose={() => {
+                      setEquipmentOpen(false);
+                      setActiveAssociation(null);
+                    }}
+                    value={equipmentId}
+                    items={equipmentItems}
+                    setOpen={setEquipmentOpen}
+                    setValue={setEquipmentId}
+                    setItems={setEquipmentItems}
+                    placeholder="Select Equipment"
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownContainer}
+                    onChangeValue={(value) => {
+                      handleFieldChange("equipment_id", value || null);
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -1077,5 +935,19 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: "#666",
     fontSize: 14,
+  },
+  dropdown: {
+    borderColor: "#aaa",
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "white",
+  },
+  dropdownContainer: {
+    borderColor: "#aaa",
+    borderWidth: 1,
+    borderRadius: 6,
+    backgroundColor: "white",
   },
 });

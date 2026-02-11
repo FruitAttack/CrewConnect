@@ -96,7 +96,7 @@ export default function FormModal({
     { value: FORM_FIELD_TYPES.DATE, label: "Date", icon: "calendar-outline" },
     { value: FORM_FIELD_TYPES.DATE_TIME, label: "Date & Time", icon: "time-outline" },
     { value: FORM_FIELD_TYPES.TIME, label: "Time Only", icon: "alarm-outline" },
-    { value: FORM_FIELD_TYPES.PHOTO, label: "Photo Upload", icon: "camera-outline" },
+    // { value: FORM_FIELD_TYPES.PHOTO, label: "Photo Upload", icon: "camera-outline" }, // Disable photo upload for now since we don't have a good way to handle uploads in the form submission API yet
   ];
 
   const canProceed = () => {
@@ -131,20 +131,14 @@ export default function FormModal({
 
   const addOption = (fieldIndex) => {
     const field = form.fields[fieldIndex];
-    const newOption = field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE 
-      ? { value: `option_${Date.now()}`, label: "" }
-      : "";
+    const newOption = "";
     updateField(fieldIndex, { options: [...(field.options || []), newOption] });
   };
 
   const updateOption = (fieldIndex, optionIndex, value) => {
     const field = form.fields[fieldIndex];
     const newOptions = [...field.options];
-    if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
-      newOptions[optionIndex] = { ...newOptions[optionIndex], label: value };
-    } else {
-      newOptions[optionIndex] = value;
-    }
+    newOptions[optionIndex] = value;
     updateField(fieldIndex, { options: newOptions });
   };
 
@@ -192,7 +186,7 @@ export default function FormModal({
       if (mode === "create") setForm(emptyForm);
       setCurrentStep(1);
       onClose();
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to submit form");
     } finally {
       setSaving(false);
@@ -591,7 +585,7 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
                 <View key={optIndex} style={styles.optionRow}>
                   <TextInput
                     style={[styles.input, { flex: 1 }]}
-                    value={typeof option === 'string' ? option : option.label}
+                    value={option}
                     onChangeText={(text) => onUpdateOption(index, optIndex, text)}
                     placeholder={`Option ${optIndex + 1}`}
                     placeholderTextColor={colors.text.tertiary}
