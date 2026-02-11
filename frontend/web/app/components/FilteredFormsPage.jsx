@@ -34,12 +34,17 @@ import {
 export default function FilteredFormsPage({ filter = { type: "all" } }) {
   const { session } = useSession();
   const token = session?.access_token;
-  const contextFormTab = useFormTabSafe();
+  const {
+    createOpen: contextCreateOpen,
+    setCreateOpen: contextSetCreateOpen,
+    setCreateLabel,
+    setCreateHandler,
+  } = useFormTabSafe();
   const [localCreateOpen, setLocalCreateOpen] = useState(false);
   
   // Use context if available, otherwise use local state
-  const createOpen = contextFormTab.createOpen || localCreateOpen;
-  const setCreateOpen = contextFormTab.setCreateOpen !== (() => {}) ? contextFormTab.setCreateOpen : setLocalCreateOpen;
+  const createOpen = contextCreateOpen || localCreateOpen;
+  const setCreateOpen = contextSetCreateOpen !== (() => {}) ? contextSetCreateOpen : setLocalCreateOpen;
   
   const [forms, setForms] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -49,6 +54,16 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
   const [selectedForm, setSelectedForm] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingForm, setEditingForm] = useState(null);
+
+  useEffect(() => {
+    if (selectedForm) {
+      setCreateLabel("New Submission");
+      setCreateHandler(null);
+    } else {
+      setCreateLabel("New Form");
+      setCreateHandler(null);
+    }
+  }, [selectedForm, setCreateLabel, setCreateHandler]);
 
   const fetchForms = useCallback(async () => {
     setError(null);
@@ -463,11 +478,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FBFBFB",
     padding: 20,
+    ...shadows.small,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "white",
+    borderRadius: 10,
+    ...shadows.small,
   },
   loadingText: {
     fontSize: 14,
@@ -522,6 +541,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
+    ...shadows.small,
   },
   formTableContainer: {
     backgroundColor: "white",

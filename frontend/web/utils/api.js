@@ -332,9 +332,13 @@ export async function getFormSubmissions(token, formId = null, filters = {}) {
 
 export async function submitForm(token, formId, payload) {
   return apiCall('form-submissions', token, 'POST', {
-    form_id: formId,
+    formId,
     data: payload,
   });
+}
+
+export async function createFormSubmission(token, body) {
+  return apiCall('form-submissions', token, 'POST', body);
 }
 
 export async function updateFormSubmission(token, submissionId, updates) {

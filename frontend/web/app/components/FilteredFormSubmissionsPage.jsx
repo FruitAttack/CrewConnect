@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Modal } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { getForm, getFormSubmissions } from "../../utils/api";
+import { getForm, getFormSubmissions, createFormSubmission, updateFormSubmission, deleteFormSubmission } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
+import { useFormTabSafe } from "./formTabComponents/formTabContext";
 import { colors, spacing, typography, shadows } from "../../constants/theme";
 import { FORM_FIELD_TYPES } from "../../utils/formSchema";
 
@@ -24,6 +25,7 @@ export default function FilteredFormSubmissionsPage({
 }) {
   const { session } = useSession();
   const token = session?.access_token;
+  const { setCreateLabel, setCreateHandler } = useFormTabSafe();
   const [viewType, setViewType] = useState("table"); // "table", "graph", "donut"
   const [form, setForm] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -34,6 +36,12 @@ export default function FilteredFormSubmissionsPage({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
   const [pendingFocusRuleId, setPendingFocusRuleId] = useState(null);
+  const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
+  const [submissionModalMode, setSubmissionModalMode] = useState("create");
+  const [editingSubmission, setEditingSubmission] = useState(null);
+  const [submissionDraft, setSubmissionDraft] = useState({});
+  const [submissionSaving, setSubmissionSaving] = useState(false);
+  const [submissionError, setSubmissionError] = useState(null);
   const inputRefs = useRef({});
 
   const fetchData = useCallback(async () => {
@@ -176,6 +184,23 @@ export default function FilteredFormSubmissionsPage({
     [form?.fields]
   );
   const displayFields = useMemo(() => parsedFields || [], [parsedFields]);
+
+  const buildSubmissionDraft = useCallback((sourceData = {}) => {
+    const draft = {};
+    displayFields.forEach((field) => {
+      const raw = sourceData?.[field.id];
+      if (field.type === FORM_FIELD_TYPES.CHECKBOX) {
+        draft[field.id] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        return;
+      }
+      if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
+        draft[field.id] = Array.isArray(raw) ? (raw[0] || "") : (raw ?? "");
+        return;
+      }
+      draft[field.id] = raw ?? "";
+    });
+    return draft;
+  }, [displayFields]);
   
   // Check which associations are enabled in the form
   const showProject = form?.project_enabled || false;
@@ -393,6 +418,404 @@ export default function FilteredFormSubmissionsPage({
     setFilterRules((prev) => prev.filter((rule) => rule.id !== ruleId));
   };
 
+  const openCreateSubmissionModal = useCallback(() => {
+    setSubmissionModalMode("create");
+    setEditingSubmission(null);
+    setSubmissionDraft(buildSubmissionDraft());
+    setSubmissionError(null);
+    setSubmissionModalOpen(true);
+  }, [buildSubmissionDraft]);
+
+  useEffect(() => {
+    setCreateLabel("New Submission");
+    setCreateHandler(() => openCreateSubmissionModal);
+
+    return () => {
+      setCreateLabel("New Form");
+      setCreateHandler(null);
+    };
+  }, [setCreateLabel, setCreateHandler, openCreateSubmissionModal]);
+
+  const openEditSubmissionModal = (submission) => {
+    setSubmissionModalMode("edit");
+    setEditingSubmission(submission);
+    setSubmissionDraft(buildSubmissionDraft(submission?.data || {}));
+    setSubmissionError(null);
+    setSubmissionModalOpen(true);
+  };
+
+  const closeSubmissionModal = () => {
+    setSubmissionModalOpen(false);
+    setSubmissionError(null);
+    setSubmissionSaving(false);
+    setEditingSubmission(null);
+  };
+
+  const updateSubmissionField = (fieldId, value) => {
+    setSubmissionDraft((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const toggleSubmissionCheckbox = (fieldId, optionValue) => {
+    setSubmissionDraft((prev) => {
+      const current = Array.isArray(prev[fieldId]) ? prev[fieldId] : [];
+      const next = current.includes(optionValue)
+        ? current.filter((v) => v !== optionValue)
+        : [...current, optionValue];
+      return { ...prev, [fieldId]: next };
+    });
+  };
+
+  const saveSubmission = async () => {
+    if (!token || !formId) return;
+    const missingRequired = displayFields.find((field) => {
+      if (!field.required) return false;
+      const value = submissionDraft[field.id];
+      if (field.type === FORM_FIELD_TYPES.CHECKBOX) {
+        return !Array.isArray(value) || value.length === 0;
+      }
+      return value === null || value === undefined || String(value).trim() === "";
+    });
+
+    if (missingRequired) {
+      setSubmissionError(`"${missingRequired.question}" is required`);
+      return;
+    }
+
+    setSubmissionSaving(true);
+    setSubmissionError(null);
+    try {
+      const payload = {
+        formId,
+        data: submissionDraft,
+      };
+
+      const response = submissionModalMode === "create"
+        ? await createFormSubmission(token, payload)
+        : await updateFormSubmission(token, editingSubmission?.id, { data: submissionDraft });
+
+      if (!response.success) {
+        setSubmissionError(response.message || "Failed to save submission");
+        return;
+      }
+
+      closeSubmissionModal();
+      await fetchData();
+    } catch (_err) {
+      setSubmissionError("Failed to save submission");
+    } finally {
+      setSubmissionSaving(false);
+    }
+  };
+
+  const removeSubmission = async () => {
+    if (!editingSubmission?.id || !token) return;
+    setSubmissionSaving(true);
+    setSubmissionError(null);
+    try {
+      const response = await deleteFormSubmission(token, editingSubmission.id);
+      if (!response.success) {
+        setSubmissionError(response.message || "Failed to delete submission");
+        return;
+      }
+      closeSubmissionModal();
+      await fetchData();
+    } catch (_err) {
+      setSubmissionError("Failed to delete submission");
+    } finally {
+      setSubmissionSaving(false);
+    }
+  };
+
+  const closeFilterDrawer = useCallback(() => {
+    setFiltersOpen(false);
+    setOpenDropdown(null);
+    setColumnSelectorOpen(false);
+  }, []);
+
+  const renderFilterDrawer = (overlayStyle = null) => {
+    if (!filtersOpen) return null;
+
+    return (
+      <View style={[styles.filterDrawerOverlay, overlayStyle]}>
+        <Pressable style={styles.drawerBackdrop} onPress={closeFilterDrawer} />
+        <View style={styles.filterDrawer}>
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Filters</Text>
+            <Pressable onPress={closeFilterDrawer}>
+              <Ionicons name="close" size={18} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.drawerBody} contentContainerStyle={{ paddingBottom: spacing.md }}>
+            {filterRules.length === 0 ? (
+              <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
+            ) : (
+              <View style={styles.filterRulesContainer}>
+                {filterRules.map((rule, index) => {
+              const column = filterableColumns.find((col) => col.id === rule.columnId);
+              const isColumnOpen = openDropdown?.type === "column" && openDropdown?.ruleId === rule.id;
+              const isOperatorOpen = openDropdown?.type === "operator" && openDropdown?.ruleId === rule.id;
+              const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
+              const isRowOpen = isColumnOpen || isOperatorOpen || isValuesOpen;
+
+              const operatorOptions = (() => {
+                switch (column?.type) {
+                  case "number":
+                    return [
+                      { value: "gt", label: ">" },
+                      { value: "gte", label: ">=" },
+                      { value: "lt", label: "<" },
+                      { value: "lte", label: "<=" },
+                      { value: "eq", label: "=" },
+                    ];
+                  case "date":
+                  case "date_time":
+                  case "time":
+                    return [
+                      { value: "gt", label: ">" },
+                      { value: "gte", label: ">=" },
+                      { value: "lt", label: "<" },
+                      { value: "lte", label: "<=" },
+                      { value: "eq", label: "=" },
+                    ];
+                  case "multiple_choice":
+                    return [
+                      { value: "is", label: "Is" },
+                      { value: "is_not", label: "Is not" },
+                    ];
+                  case "checkbox":
+                    return [
+                      { value: "has_one", label: "Has one of" },
+                      { value: "has_all", label: "Has all of" },
+                    ];
+                  default:
+                    return [
+                      { value: "contains", label: "Contains" },
+                      { value: "starts", label: "Starts with" },
+                      { value: "ends", label: "Ends with" },
+                      { value: "eq", label: "Equals" },
+                      { value: "neq", label: "Not equals" },
+                    ];
+                }
+              })();
+
+                  return (
+                    <View
+                      key={rule.id}
+                      style={[
+                        styles.filterRuleRow,
+                        isRowOpen ? styles.filterRuleRowOpen : styles.filterRuleRowClosed,
+                      ]}
+                    >
+                  <View style={[styles.filterField, styles.filterFieldColumn]}>
+                    <Pressable
+                      style={styles.filterSelect}
+                      onPress={() =>
+                        setOpenDropdown((prev) =>
+                          prev?.type === "column" && prev?.ruleId === rule.id
+                            ? null
+                            : { type: "column", ruleId: rule.id }
+                        )
+                      }
+                    >
+                      <Text style={styles.filterSelectText} numberOfLines={1}>
+                        {column?.label || "Select column"}
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
+                    </Pressable>
+                    {isColumnOpen && (
+                      <View style={styles.dropdown}>
+                        <ScrollView style={styles.dropdownScroll}>
+                          {filterableColumns.map((col) => (
+                            <Pressable
+                              key={col.id}
+                              style={styles.dropdownItem}
+                              onPress={() => {
+                                updateRule(rule.id, {
+                                  columnId: col.id,
+                                  operator: col.type === "number" ? "gt" : (col.type === "date" || col.type === "date_time" || col.type === "time") ? "gt" : col.type === "multiple_choice" ? "is" : col.type === "checkbox" ? "has_one" : "contains",
+                                  value: "",
+                                  values: [],
+                                });
+                                setOpenDropdown(null);
+                              }}
+                            >
+                              <Text style={styles.dropdownItemText} numberOfLines={1}>
+                                {col.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  {!!rule.columnId && (
+                    <View style={[styles.filterField, styles.filterFieldOperator]}>
+                      <Pressable
+                        style={[styles.filterSelect, styles.filterSelectOperator]}
+                        onPress={() =>
+                          setOpenDropdown((prev) =>
+                            prev?.type === "operator" && prev?.ruleId === rule.id
+                              ? null
+                              : { type: "operator", ruleId: rule.id }
+                          )
+                        }
+                      >
+                        <Text style={styles.filterSelectText} numberOfLines={1}>
+                          {operatorOptions.find((op) => op.value === rule.operator)?.label || "Operator"}
+                        </Text>
+                        <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
+                      </Pressable>
+                      {isOperatorOpen && (
+                        <View style={styles.dropdown}>
+                          <ScrollView style={styles.dropdownScroll}>
+                            {operatorOptions.map((op) => (
+                              <Pressable
+                                key={op.value}
+                                style={styles.dropdownItem}
+                                onPress={() => {
+                                  updateRule(rule.id, { operator: op.value });
+                                  setOpenDropdown(null);
+                                }}
+                              >
+                                <Text style={styles.dropdownItemText}>{op.label}</Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {!!rule.columnId && (column?.type === "multiple_choice" || column?.type === "checkbox") && (
+                    <View style={[styles.filterField, styles.filterFieldValues]}>
+                      <Pressable
+                        style={styles.filterSelect}
+                        onPress={() =>
+                          setOpenDropdown((prev) =>
+                            prev?.type === "values" && prev?.ruleId === rule.id
+                              ? null
+                              : { type: "values", ruleId: rule.id }
+                          )
+                        }
+                      >
+                        <Text style={styles.filterSelectText} numberOfLines={1}>
+                          {rule.values?.length ? `${rule.values.length} selected` : "Select"}
+                        </Text>
+                        <Ionicons name={isValuesOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.text.secondary} />
+                      </Pressable>
+                      {isValuesOpen && (
+                        <View style={styles.dropdown}>
+                          <ScrollView style={styles.dropdownScroll}>
+                            {(column?.options || []).map((option) => {
+                              const optionValue = typeof option === "string" ? option : option.value;
+                              const optionLabel = typeof option === "string" ? option : option.label;
+                              const isSelected = rule.values?.includes(optionValue);
+                              return (
+                                <Pressable
+                                  key={optionValue}
+                                  style={styles.dropdownItem}
+                                  onPress={() => {
+                                    const currentValues = rule.values || [];
+                                    const newValues = isSelected
+                                      ? currentValues.filter((v) => v !== optionValue)
+                                      : [...currentValues, optionValue];
+                                    updateRule(rule.id, { values: newValues });
+                                  }}
+                                >
+                                  <Ionicons
+                                    name={isSelected ? "checkbox" : "square-outline"}
+                                    size={18}
+                                    color={isSelected ? colors.primary.orange : colors.text.secondary}
+                                  />
+                                  <Text style={styles.dropdownItemText} numberOfLines={1}>{optionLabel}</Text>
+                                </Pressable>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {!!rule.columnId && (column?.type === "text" || column?.type === "number") && (
+                    <TextInput
+                      style={[styles.filterInput, styles.filterInputField]}
+                      placeholder={column?.type === "number" ? "Value" : "Text"}
+                      value={rule.value}
+                      onChangeText={(text) => updateRule(rule.id, { value: text })}
+                      keyboardType={column?.type === "number" ? "numeric" : "default"}
+                      ref={(ref) => {
+                        inputRefs.current[rule.id] = ref;
+                      }}
+                    />
+                  )}
+
+                  {!!rule.columnId && column?.type === "date" && (
+                    <TextInput
+                      style={[styles.filterInput, styles.filterInputField]}
+                      placeholder="YYYY-MM-DD"
+                      value={rule.value}
+                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date") })}
+                      ref={(ref) => {
+                        inputRefs.current[rule.id] = ref;
+                      }}
+                    />
+                  )}
+
+                  {!!rule.columnId && column?.type === "date_time" && (
+                    <TextInput
+                      style={[styles.filterInput, styles.filterInputField]}
+                      placeholder="YYYY-MM-DD HH:mm"
+                      value={rule.value}
+                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date_time") })}
+                      ref={(ref) => {
+                        inputRefs.current[rule.id] = ref;
+                      }}
+                    />
+                  )}
+
+                  {!!rule.columnId && column?.type === "time" && (
+                    <TextInput
+                      style={[styles.filterInput, styles.filterInputField]}
+                      placeholder="HH:mm"
+                      value={rule.value}
+                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "time") })}
+                      ref={(ref) => {
+                        inputRefs.current[rule.id] = ref;
+                      }}
+                    />
+                  )}
+
+                  <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
+                    <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
+                  </Pressable>
+                </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+          <View style={styles.filterActionsRow}>
+            <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
+              <Ionicons name="add" size={16} color="white" />
+              <Text style={styles.addFilterText}>Add filter</Text>
+            </Pressable>
+            <Pressable
+              style={styles.applyFilterButton}
+              onPress={() => {
+                setAppliedFilterRules(filterRules);
+                setFiltersOpen(false);
+              }}
+            >
+              <Text style={styles.applyFilterText}>Apply filter</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -497,382 +920,104 @@ export default function FilteredFormSubmissionsPage({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.appliedFiltersRow}
           >
-            {appliedFilterRules.map((rule) => (
+            {appliedFilterRules.length === 0 ? (
+              <View style={styles.noFiltersChip}>
+                <Text style={styles.noFiltersText}>No filters</Text>
+              </View>
+            ) : (
+              appliedFilterRules.map((rule) => (
+                <Pressable
+                  key={rule.id}
+                  style={styles.appliedFilterChip}
+                  onPress={() => {
+                    const column = filterableColumns.find((col) => col.id === rule.columnId);
+                    const isTextInput =
+                      column?.type === "text" ||
+                      column?.type === "number" ||
+                      column?.type === "date" ||
+                      column?.type === "date_time" ||
+                      column?.type === "time";
+                    setFiltersOpen(true);
+                    setOpenDropdown(isTextInput ? null : { type: "values", ruleId: rule.id });
+                    setPendingFocusRuleId(isTextInput ? rule.id : null);
+                  }}
+                >
+                  <Text style={styles.appliedFilterText} numberOfLines={1}>
+                    {buildAppliedFilterLabel(rule)}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+          <View style={styles.filterRightControls}>
+            <View style={styles.columnSelectorWrap}>
               <Pressable
-                key={rule.id}
-                style={styles.appliedFilterChip}
+                style={styles.columnSelectorButton}
                 onPress={() => {
-                  const column = filterableColumns.find((col) => col.id === rule.columnId);
-                  const isTextInput =
-                    column?.type === "text" ||
-                    column?.type === "number" ||
-                    column?.type === "date" ||
-                    column?.type === "date_time" ||
-                    column?.type === "time";
-                  setFiltersOpen(true);
-                  setOpenDropdown(isTextInput ? null : { type: "values", ruleId: rule.id });
-                  setPendingFocusRuleId(isTextInput ? rule.id : null);
+                  setColumnSelectorOpen((v) => !v);
+                  setOpenDropdown(null);
                 }}
               >
-                <Text style={styles.appliedFilterText} numberOfLines={1}>
-                  {buildAppliedFilterLabel(rule)}
-                </Text>
+                <MaterialCommunityIcons name="view-column-outline" size={20} color={colors.text.primary} />
+                <Text style={styles.columnSelectorText}>Columns</Text>
+                {allColumnsVisible ? (
+                  <View style={styles.columnSelectorBadge}>
+                    <Text style={styles.columnSelectorBadgeText}>All</Text>
+                  </View>
+                ) : (
+                  <View style={styles.columnSelectorBadge}>
+                    <Text style={styles.columnSelectorBadgeText}>{visibleColumnCount}</Text>
+                  </View>
+                )}
+                <Ionicons
+                  name={columnSelectorOpen ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={colors.text.secondary}
+                />
               </Pressable>
-            ))}
-          </ScrollView>
-          <View style={styles.columnSelectorWrap}>
-            <Pressable
-              style={styles.columnSelectorButton}
-              onPress={() => {
-                setColumnSelectorOpen((v) => !v);
-                setOpenDropdown(null);
-              }}
-            >
-              <MaterialCommunityIcons name="view-column-outline" size={20} color={colors.text.primary} />
-              <Text style={styles.columnSelectorText}>Columns</Text>
-              {allColumnsVisible ? (
-                <View style={styles.columnSelectorBadge}>
-                  <Text style={styles.columnSelectorBadgeText}>All</Text>
-                </View>
-              ) : (
-                <View style={styles.columnSelectorBadge}>
-                  <Text style={styles.columnSelectorBadgeText}>{visibleColumnCount}</Text>
+              {columnSelectorOpen && (
+                <View style={styles.columnSelectorDropdown}>
+                  <ScrollView style={styles.columnSelectorScroll}>
+                    {availableTableColumns.map((column) => {
+                      const selected = isColumnVisible(column.id);
+                      return (
+                        <Pressable
+                          key={column.id}
+                          style={styles.columnSelectorItem}
+                          onPress={() => toggleColumn(column.id)}
+                        >
+                          <Ionicons
+                            name={selected ? "checkbox" : "square-outline"}
+                            size={18}
+                            color={selected ? colors.primary.orange : colors.text.secondary}
+                          />
+                          <Text style={styles.columnSelectorItemText} numberOfLines={1}>
+                            {column.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <View style={styles.columnSelectorFooter}>
+                    <Pressable
+                      style={styles.columnSelectorFooterButton}
+                      onPress={() => setVisibleColumnIds(availableTableColumns.map((col) => col.id))}
+                    >
+                      <Text style={styles.columnSelectorFooterButtonText}>Select all</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.columnSelectorFooterButton}
+                      onPress={() => setVisibleColumnIds([])}
+                    >
+                      <Text style={styles.columnSelectorFooterButtonText}>Select none</Text>
+                    </Pressable>
+                  </View>
                 </View>
               )}
-              <Ionicons
-                name={columnSelectorOpen ? "chevron-up" : "chevron-down"}
-                size={14}
-                color={colors.text.secondary}
-              />
-            </Pressable>
-            {columnSelectorOpen && (
-              <View style={styles.columnSelectorDropdown}>
-                <ScrollView style={styles.columnSelectorScroll}>
-                  {availableTableColumns.map((column) => {
-                    const selected = isColumnVisible(column.id);
-                    return (
-                      <Pressable
-                        key={column.id}
-                        style={styles.columnSelectorItem}
-                        onPress={() => toggleColumn(column.id)}
-                      >
-                        <Ionicons
-                          name={selected ? "checkbox" : "square-outline"}
-                          size={18}
-                          color={selected ? colors.primary.orange : colors.text.secondary}
-                        />
-                        <Text style={styles.columnSelectorItemText} numberOfLines={1}>
-                          {column.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-                <View style={styles.columnSelectorFooter}>
-                  <Pressable
-                    style={styles.columnSelectorFooterButton}
-                    onPress={() => setVisibleColumnIds(availableTableColumns.map((col) => col.id))}
-                  >
-                    <Text style={styles.columnSelectorFooterButtonText}>Select all</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.columnSelectorFooterButton}
-                    onPress={() => setVisibleColumnIds([])}
-                  >
-                    <Text style={styles.columnSelectorFooterButtonText}>Select none</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
+            </View>
           </View>
         </View>
       </View>
-
-      {filtersOpen && (
-        <View style={styles.filterDrawerOverlay}>
-          <Pressable
-            style={styles.drawerBackdrop}
-            onPress={() => {
-              setFiltersOpen(false);
-              setOpenDropdown(null);
-            }}
-          />
-          <View style={styles.filterDrawer}>
-            <View style={styles.drawerHeader}>
-              <Text style={styles.drawerTitle}>Filters</Text>
-              <Pressable onPress={() => setFiltersOpen(false)}>
-                <Ionicons name="close" size={18} color={colors.text.secondary} />
-              </Pressable>
-            </View>
-            <ScrollView style={styles.drawerBody} contentContainerStyle={{ paddingBottom: spacing.md }}>
-              {filterRules.length === 0 ? (
-                <Text style={styles.filterEmptyText}>No filters applied. Add one to narrow results.</Text>
-              ) : (
-                <View style={styles.filterRulesContainer}>
-                  {filterRules.map((rule, index) => {
-                const column = filterableColumns.find((col) => col.id === rule.columnId);
-                const isColumnOpen = openDropdown?.type === "column" && openDropdown?.ruleId === rule.id;
-                const isOperatorOpen = openDropdown?.type === "operator" && openDropdown?.ruleId === rule.id;
-                const isValuesOpen = openDropdown?.type === "values" && openDropdown?.ruleId === rule.id;
-                const isRowOpen = isColumnOpen || isOperatorOpen || isValuesOpen;
-
-                const operatorOptions = (() => {
-                  switch (column?.type) {
-                    case "number":
-                      return [
-                        { value: "gt", label: ">" },
-                        { value: "gte", label: ">=" },
-                        { value: "lt", label: "<" },
-                        { value: "lte", label: "<=" },
-                        { value: "eq", label: "=" },
-                      ];
-                    case "date":
-                    case "date_time":
-                    case "time":
-                      return [
-                        { value: "gt", label: ">" },
-                        { value: "gte", label: ">=" },
-                        { value: "lt", label: "<" },
-                        { value: "lte", label: "<=" },
-                        { value: "eq", label: "=" },
-                      ];
-                    case "multiple_choice":
-                      return [
-                        { value: "is", label: "Is" },
-                        { value: "is_not", label: "Is not" },
-                      ];
-                    case "checkbox":
-                      return [
-                        { value: "has_one", label: "Has one of" },
-                        { value: "has_all", label: "Has all of" },
-                      ];
-                    default:
-                      return [
-                        { value: "contains", label: "Contains" },
-                        { value: "starts", label: "Starts with" },
-                        { value: "ends", label: "Ends with" },
-                        { value: "eq", label: "Equals" },
-                        { value: "neq", label: "Not equals" },
-                      ];
-                  }
-                })();
-
-                    return (
-                      <View
-                        key={rule.id}
-                        style={[
-                          styles.filterRuleRow,
-                          isRowOpen ? styles.filterRuleRowOpen : styles.filterRuleRowClosed,
-                        ]}
-                      >
-                    <View style={[styles.filterField, styles.filterFieldColumn]}>
-                      <Pressable
-                        style={styles.filterSelect}
-                        onPress={() =>
-                          setOpenDropdown((prev) =>
-                            prev?.type === "column" && prev?.ruleId === rule.id
-                              ? null
-                              : { type: "column", ruleId: rule.id }
-                          )
-                        }
-                      >
-                        <Text style={styles.filterSelectText} numberOfLines={1}>
-                          {column?.label || "Select column"}
-                        </Text>
-                        <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
-                      </Pressable>
-                      {isColumnOpen && (
-                        <View style={styles.dropdown}>
-                          <ScrollView style={styles.dropdownScroll}>
-                            {filterableColumns.map((col) => (
-                              <Pressable
-                                key={col.id}
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                  updateRule(rule.id, {
-                                    columnId: col.id,
-                                    operator: col.type === "number" ? "gt" : (col.type === "date" || col.type === "date_time" || col.type === "time") ? "gt" : col.type === "multiple_choice" ? "is" : col.type === "checkbox" ? "has_one" : "contains",
-                                    value: "",
-                                    values: [],
-                                  });
-                                  setOpenDropdown(null);
-                                }}
-                              >
-                                <Text style={styles.dropdownItemText} numberOfLines={1}>
-                                  {col.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-
-                    {!!rule.columnId && (
-                      <View style={[styles.filterField, styles.filterFieldOperator]}>
-                        <Pressable
-                          style={[styles.filterSelect, styles.filterSelectOperator]}
-                          onPress={() =>
-                            setOpenDropdown((prev) =>
-                              prev?.type === "operator" && prev?.ruleId === rule.id
-                                ? null
-                                : { type: "operator", ruleId: rule.id }
-                            )
-                          }
-                        >
-                          <Text style={styles.filterSelectText} numberOfLines={1}>
-                            {operatorOptions.find((op) => op.value === rule.operator)?.label || "Operator"}
-                          </Text>
-                          <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
-                        </Pressable>
-                        {isOperatorOpen && (
-                          <View style={styles.dropdown}>
-                            <ScrollView style={styles.dropdownScroll}>
-                              {operatorOptions.map((op) => (
-                                <Pressable
-                                  key={op.value}
-                                  style={styles.dropdownItem}
-                                  onPress={() => {
-                                    updateRule(rule.id, { operator: op.value });
-                                    setOpenDropdown(null);
-                                  }}
-                                >
-                                  <Text style={styles.dropdownItemText}>{op.label}</Text>
-                                </Pressable>
-                              ))}
-                            </ScrollView>
-                          </View>
-                        )}
-                      </View>
-                    )}
-
-                    {!!rule.columnId && (column?.type === "multiple_choice" || column?.type === "checkbox") && (
-                      <View style={[styles.filterField, styles.filterFieldValues]}>
-                        <Pressable
-                          style={styles.filterSelect}
-                          onPress={() =>
-                            setOpenDropdown((prev) =>
-                              prev?.type === "values" && prev?.ruleId === rule.id
-                                ? null
-                                : { type: "values", ruleId: rule.id }
-                            )
-                          }
-                        >
-                          <Text style={styles.filterSelectText} numberOfLines={1}>
-                            {rule.values?.length ? `${rule.values.length} selected` : "Select"}
-                          </Text>
-                          <Ionicons name={isValuesOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.text.secondary} />
-                        </Pressable>
-                        {isValuesOpen && (
-                          <View style={styles.dropdown}>
-                            <ScrollView style={styles.dropdownScroll}>
-                              {(column?.options || []).map((option) => {
-                                const optionValue = typeof option === "string" ? option : option.value;
-                                const optionLabel = typeof option === "string" ? option : option.label;
-                                const isSelected = rule.values?.includes(optionValue);
-                                return (
-                                  <Pressable
-                                    key={optionValue}
-                                    style={styles.dropdownItem}
-                                    onPress={() => {
-                                      const currentValues = rule.values || [];
-                                      const newValues = isSelected
-                                        ? currentValues.filter((v) => v !== optionValue)
-                                        : [...currentValues, optionValue];
-                                      updateRule(rule.id, { values: newValues });
-                                    }}
-                                  >
-                                    <Ionicons
-                                      name={isSelected ? "checkbox" : "square-outline"}
-                                      size={18}
-                                      color={isSelected ? colors.primary.orange : colors.text.secondary}
-                                    />
-                                    <Text style={styles.dropdownItemText} numberOfLines={1}>{optionLabel}</Text>
-                                  </Pressable>
-                                );
-                              })}
-                            </ScrollView>
-                          </View>
-                        )}
-                      </View>
-                    )}
-
-                    {!!rule.columnId && (column?.type === "text" || column?.type === "number") && (
-                      <TextInput
-                        style={[styles.filterInput, styles.filterInputField]}
-                        placeholder={column?.type === "number" ? "Value" : "Text"}
-                        value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: text })}
-                        keyboardType={column?.type === "number" ? "numeric" : "default"}
-                        ref={(ref) => {
-                          inputRefs.current[rule.id] = ref;
-                        }}
-                      />
-                    )}
-
-                    {!!rule.columnId && column?.type === "date" && (
-                      <TextInput
-                        style={[styles.filterInput, styles.filterInputField]}
-                        placeholder="YYYY-MM-DD"
-                        value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date") })}
-                        ref={(ref) => {
-                          inputRefs.current[rule.id] = ref;
-                        }}
-                      />
-                    )}
-
-                    {!!rule.columnId && column?.type === "date_time" && (
-                      <TextInput
-                        style={[styles.filterInput, styles.filterInputField]}
-                        placeholder="YYYY-MM-DD HH:mm"
-                        value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date_time") })}
-                        ref={(ref) => {
-                          inputRefs.current[rule.id] = ref;
-                        }}
-                      />
-                    )}
-
-                    {!!rule.columnId && column?.type === "time" && (
-                      <TextInput
-                        style={[styles.filterInput, styles.filterInputField]}
-                        placeholder="HH:mm"
-                        value={rule.value}
-                        onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "time") })}
-                        ref={(ref) => {
-                          inputRefs.current[rule.id] = ref;
-                        }}
-                      />
-                    )}
-
-                    <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
-                      <Ionicons name="trash-outline" size={16} color={colors.semantic.error} />
-                    </Pressable>
-                  </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-            <View style={styles.filterActionsRow}>
-              <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
-                <Ionicons name="add" size={16} color="white" />
-                <Text style={styles.addFilterText}>Add filter</Text>
-              </Pressable>
-              <Pressable
-                style={styles.applyFilterButton}
-                onPress={() => {
-                  setAppliedFilterRules(filterRules);
-                  setFiltersOpen(false);
-                }}
-              >
-                <Text style={styles.applyFilterText}>Apply filter</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
 
       <View style={styles.tableCard}>
         <ScrollView
@@ -1019,14 +1164,14 @@ export default function FilteredFormSubmissionsPage({
           <View style={styles.tableActionsColumn}>
             <View style={[styles.tableHeaderRow, styles.actionsHeaderRow]}>
               <View style={[styles.tableCell, styles.colActionsSticky]}>
-                <Text style={styles.tableHeaderText} numberOfLines={1}>Actions</Text>
+                <Text style={styles.tableHeaderText} numberOfLines={1}>Edit</Text>
               </View>
             </View>
             {filteredSubmissions.map((submission) => (
               <View key={submission.id} style={[styles.tableDataRow, styles.actionsRow]}>
                 <View style={[styles.tableCell, styles.colActionsSticky]}>
-                  <Pressable style={styles.actionButton}>
-                    <Ionicons name="eye-outline" size={16} color={colors.primary.orange} />
+                  <Pressable style={styles.actionButton} onPress={() => openEditSubmissionModal(submission)}>
+                    <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary.orange} />
                   </Pressable>
                 </View>
               </View>
@@ -1049,6 +1194,142 @@ export default function FilteredFormSubmissionsPage({
     </View>
   );
 
+  const renderSubmissionModal = () => (
+    <Modal
+      visible={submissionModalOpen}
+      transparent
+      animationType="fade"
+      onRequestClose={closeSubmissionModal}
+    >
+      <View style={styles.submissionModalBackdrop}>
+        <View style={styles.submissionModalCard}>
+          <View style={styles.submissionModalHeader}>
+            <View>
+              <Text style={styles.submissionModalTitle}>
+                {submissionModalMode === "create" ? "Create Submission" : "Edit Submission"}
+              </Text>
+              {submissionModalMode === "edit" && (
+                <Text style={styles.submissionModalSubtitle}>
+                  {editingSubmission?.id?.substring(0, 8)}...
+                </Text>
+              )}
+            </View>
+            <Pressable onPress={closeSubmissionModal}>
+              <Ionicons name="close" size={20} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.submissionModalBody} contentContainerStyle={{ paddingBottom: spacing.lg }}>
+            {displayFields.map((field) => {
+              const rawOptions = field.options || [];
+              const options = rawOptions.map((opt) => (typeof opt === "string" ? { label: opt, value: opt } : opt));
+              const currentValue = submissionDraft[field.id];
+
+              if (field.type === FORM_FIELD_TYPES.CHECKBOX) {
+                return (
+                  <View key={field.id} style={styles.submissionFieldWrap}>
+                    <Text style={styles.submissionFieldLabel}>
+                      {field.question}{field.required ? " *" : ""}
+                    </Text>
+                    <View style={styles.submissionCheckboxGroup}>
+                      {options.map((opt) => {
+                        const selected = Array.isArray(currentValue) && currentValue.includes(opt.value);
+                        return (
+                          <Pressable
+                            key={opt.value}
+                            style={styles.submissionCheckboxRow}
+                            onPress={() => toggleSubmissionCheckbox(field.id, opt.value)}
+                          >
+                            <Ionicons
+                              name={selected ? "checkbox" : "square-outline"}
+                              size={18}
+                              color={selected ? colors.primary.orange : colors.text.secondary}
+                            />
+                            <Text style={styles.submissionCheckboxText}>{opt.label}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }
+
+              if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
+                return (
+                  <View key={field.id} style={styles.submissionFieldWrap}>
+                    <Text style={styles.submissionFieldLabel}>
+                      {field.question}{field.required ? " *" : ""}
+                    </Text>
+                    <View style={styles.submissionChoiceGroup}>
+                      {options.map((opt) => {
+                        const selected = currentValue === opt.value;
+                        return (
+                          <Pressable
+                            key={opt.value}
+                            style={[styles.submissionChoiceChip, selected && styles.submissionChoiceChipActive]}
+                            onPress={() => updateSubmissionField(field.id, opt.value)}
+                          >
+                            <Text style={[styles.submissionChoiceText, selected && styles.submissionChoiceTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }
+
+              return (
+                <View key={field.id} style={styles.submissionFieldWrap}>
+                  <Text style={styles.submissionFieldLabel}>
+                    {field.question}{field.required ? " *" : ""}
+                  </Text>
+                  <TextInput
+                    style={[styles.submissionInput, field.type === FORM_FIELD_TYPES.LONG_ANSWER && styles.submissionInputMultiline]}
+                    multiline={field.type === FORM_FIELD_TYPES.LONG_ANSWER}
+                    numberOfLines={field.type === FORM_FIELD_TYPES.LONG_ANSWER ? 4 : 1}
+                    value={currentValue === null || currentValue === undefined ? "" : String(currentValue)}
+                    onChangeText={(value) => updateSubmissionField(field.id, value)}
+                    placeholder={field.placeholder || field.question}
+                    keyboardType={field.type === FORM_FIELD_TYPES.NUMBER ? "numeric" : "default"}
+                  />
+                </View>
+              );
+            })}
+
+            {submissionError && (
+              <View style={styles.submissionErrorBox}>
+                <Ionicons name="alert-circle" size={16} color={colors.semantic.error} />
+                <Text style={styles.submissionErrorText}>{submissionError}</Text>
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.submissionModalFooter}>
+            <Pressable style={styles.submissionCancelButton} onPress={closeSubmissionModal}>
+              <Text style={styles.submissionCancelText}>Cancel</Text>
+            </Pressable>
+            {submissionModalMode === "edit" && (
+              <Pressable style={styles.submissionDeleteButton} onPress={removeSubmission} disabled={submissionSaving}>
+                <Text style={styles.submissionDeleteText}>Delete</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.submissionSaveButton} onPress={saveSubmission} disabled={submissionSaving}>
+              {submissionSaving ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.submissionSaveText}>
+                  {submissionModalMode === "create" ? "Create Submission" : "Save Changes"}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       {/* Back Button & View Toggle */}
@@ -1062,35 +1343,12 @@ export default function FilteredFormSubmissionsPage({
 
       {/* Title */}
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.headerInner}>
+          <View style={{ flex: 1 }}>
           <Text style={styles.pageTitle}>{formIcon} {formTitle}</Text>
           <Text style={styles.subtitle}>{submissions.length} submissions</Text>
+          </View>
         </View>
-      </View>
-
-      {/* Stats Summary */}
-      <View style={styles.statsRow}>
-        <StatCard 
-          icon="document-text" 
-          label="Total Submissions" 
-          value={submissions.length} 
-          bg={colors.primary.orangeSubtle} 
-          color={colors.primary.orange} 
-        />
-        <StatCard 
-          icon="person" 
-          label="Unique Submitters" 
-          value={new Set(submissions.map(s => s.submitted_by)).size} 
-          bg={colors.semantic.infoLight} 
-          color={colors.semantic.info} 
-        />
-        <StatCard 
-          icon="calendar" 
-          label="Last Submission" 
-          value={submissions.length > 0 ? formatDate(submissions.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0].submitted_at) : "N/A"} 
-          bg={colors.semantic.successLight} 
-          color={colors.semantic.success} 
-        />
       </View>
 
       {/* Content based on view type */}
@@ -1099,20 +1357,8 @@ export default function FilteredFormSubmissionsPage({
         {viewType === "graph" && renderPlaceholder("Graph")}
         {viewType === "donut" && renderPlaceholder("Donut Chart")}
       </View>
-    </View>
-  );
-}
-
-function StatCard({ icon, label, value, bg, color }) {
-  return (
-    <View style={styles.statCard}>
-      <View style={[styles.statIcon, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
-      <View>
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
-      </View>
+      {viewType === "table" && renderFilterDrawer(styles.filterDrawerOverlayPage)}
+      {renderSubmissionModal()}
     </View>
   );
 }
@@ -1120,15 +1366,18 @@ function StatCard({ icon, label, value, bg, color }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: "relative",
     backgroundColor: "#FBFBFB",
     padding: 20,
     paddingTop: 5,
+    ...shadows.small,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#FBFBFB",
+    ...shadows.small,
   },
   loadingText: {
     marginTop: spacing.md,
@@ -1145,6 +1394,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 20,
+    gap: 12,
+  },
+  headerInner: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
   },
   backButton: {
@@ -1171,7 +1427,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "white",
     borderRadius: 8,
-    padding: 4,
     ...shadows.small,
   },
   toggleButton: {
@@ -1193,37 +1448,6 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: colors.primary.orange,
     fontWeight: "600",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    ...shadows.small,
-  },
-  statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#161519",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.text.secondary,
   },
   contentContainer: {
     flex: 1,
@@ -1261,6 +1485,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0F0F0",
     overflow: "hidden",
+    ...shadows.small,
   },
   tableScroll: {
     flex: 1,
@@ -1270,6 +1495,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderLeftWidth: 1,
     borderLeftColor: "#E0E0E0",
+    ...shadows.small,
   },
   actionsHeaderRow: {
     justifyContent: "center",
@@ -1335,15 +1561,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionButton: {
-    padding: 6,
+    padding: 4,
     borderRadius: 4,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "transparent",
+  },
+  createSubmissionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary.orange,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.primary.orange,
+  },
+  createSubmissionButtonText: {
+    fontSize: 13,
+    color: "white",
+    fontWeight: "600",
   },
   placeholderContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 100,
+    backgroundColor: "white",
+    borderRadius: 10,
+    ...shadows.small,
   },
   placeholderTitle: {
     fontSize: 20,
@@ -1377,6 +1622,12 @@ const styles = StyleSheet.create({
     zIndex: 140,
     overflow: "visible",
   },
+  filterRightControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+  },
   filterControls: {
     flexDirection: "row",
     alignItems: "center",
@@ -1404,6 +1655,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.light,
     backgroundColor: "white",
+    ...shadows.small,
   },
   columnSelectorText: {
     fontSize: 13,
@@ -1487,10 +1739,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    padding: 8,
     zIndex: 200,
     elevation: 20,
     flexDirection: "row",
     justifyContent: "flex-end",
+  },
+  filterDrawerOverlayPage: {
+    top: -8,
+    zIndex: 600,
+    elevation: 40,
   },
   drawerBackdrop: {
     position: "absolute",
@@ -1498,7 +1756,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(15, 23, 42, 0.22)",
   },
   filterDrawer: {
     width: 480,
@@ -1539,6 +1797,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: colors.primary.orange,
+    ...shadows.small,
   },
   filterToggleText: {
     fontSize: 13,
@@ -1571,6 +1830,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
     maxWidth: 220,
+    ...shadows.small,
+  },
+  noFiltersChip: {
+    backgroundColor: "#F4F5F6",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#E4E7EB",
+  },
+  noFiltersText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: "500",
   },
   appliedFilterText: {
     fontSize: 12,
@@ -1654,6 +1927,169 @@ const styles = StyleSheet.create({
   },
   filterRuleRowClosed: {
     zIndex: 1,
+  },
+  submissionModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.42)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.lg,
+  },
+  submissionModalCard: {
+    width: "100%",
+    maxWidth: 820,
+    maxHeight: "88%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    ...shadows.large,
+  },
+  submissionModalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  submissionModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text.primary,
+  },
+  submissionModalSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.text.secondary,
+  },
+  submissionModalBody: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  submissionFieldWrap: {
+    marginBottom: spacing.md,
+  },
+  submissionFieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text.primary,
+    marginBottom: 6,
+  },
+  submissionInput: {
+    borderWidth: 1,
+    borderColor: colors.border.dark,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: colors.text.primary,
+    backgroundColor: "white",
+  },
+  submissionInputMultiline: {
+    minHeight: 96,
+    textAlignVertical: "top",
+  },
+  submissionCheckboxGroup: {
+    gap: 8,
+  },
+  submissionCheckboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  submissionCheckboxText: {
+    fontSize: 13,
+    color: colors.text.primary,
+  },
+  submissionChoiceGroup: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  submissionChoiceChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: "white",
+  },
+  submissionChoiceChipActive: {
+    borderColor: colors.primary.orange,
+    backgroundColor: colors.primary.orangeSubtle,
+  },
+  submissionChoiceText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: "600",
+  },
+  submissionChoiceTextActive: {
+    color: colors.primary.orange,
+  },
+  submissionErrorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 8,
+    padding: 10,
+    backgroundColor: colors.semantic.errorLight,
+    marginTop: 4,
+  },
+  submissionErrorText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.semantic.error,
+    fontWeight: "500",
+  },
+  submissionModalFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  submissionCancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: "white",
+  },
+  submissionCancelText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    fontWeight: "600",
+  },
+  submissionDeleteButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.semantic.error,
+    backgroundColor: colors.semantic.errorLight,
+  },
+  submissionDeleteText: {
+    fontSize: 13,
+    color: colors.semantic.error,
+    fontWeight: "700",
+  },
+  submissionSaveButton: {
+    minWidth: 148,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: colors.primary.orange,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submissionSaveText: {
+    fontSize: 13,
+    color: "white",
+    fontWeight: "700",
   },
   filterSelect: {
     flexDirection: "row",

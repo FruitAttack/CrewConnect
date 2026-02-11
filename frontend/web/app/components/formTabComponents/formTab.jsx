@@ -13,7 +13,7 @@ const TABS = [
 export default function FormTabBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { activeTab, setActiveTab, setCreateOpen } = useFormTab();
+  const { activeTab, setActiveTab, setCreateOpen, createLabel, createHandler } = useFormTab();
 
   // Ensure context has the Forms tab as the initial active tab
   useEffect(() => {
@@ -35,6 +35,10 @@ export default function FormTabBar() {
   }
 
   function onPressCreate() {
+    if (typeof createHandler === "function") {
+      createHandler();
+      return;
+    }
     setCreateOpen(true);
   }
 
@@ -74,7 +78,7 @@ export default function FormTabBar() {
           style={({ hovered }) => [styles.createButton, hovered && styles.createButtonHovered]}
         >
           <Ionicons name="add" size={18} color={colors.neutral.white} />
-          <Text style={styles.createButtonText}>New Form</Text>
+          <Text style={styles.createButtonText}>{createLabel || "New Form"}</Text>
         </Pressable>
       </View>
     </View>

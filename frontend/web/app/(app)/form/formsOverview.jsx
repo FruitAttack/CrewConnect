@@ -259,7 +259,7 @@ function FormCard({ form, onEdit }) {
 }
 
 const styles = StyleSheet.create({
-	container: { flex: 1, backgroundColor: '#F8FAFC' },
+	container: { flex: 1, backgroundColor: '#F8FAFC', ...shadows.small },
 	scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxxxl },
 
 	loadingContainer: {
@@ -268,6 +268,7 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 		backgroundColor: '#F8FAFC',
 		padding: spacing.xxxxl,
+		...shadows.small,
 	},
 	loadingText: {
 		marginTop: spacing.md,
@@ -359,7 +360,15 @@ const styles = StyleSheet.create({
 	},
 	emptySubtitle: { fontSize: typography.fontSize.md, color: colors.text.tertiary, marginTop: spacing.xs },
 
-	categorySection: { marginBottom: spacing.xl },
+	categorySection: {
+		marginBottom: spacing.xl,
+		backgroundColor: colors.neutral.white,
+		borderRadius: borderRadius.lg,
+		padding: spacing.md,
+		borderWidth: 1,
+		borderColor: colors.border.light,
+		...shadows.small,
+	},
 	categoryTitle: {
 		fontSize: typography.fontSize.sm,
 		fontWeight: typography.fontWeight.semibold,
