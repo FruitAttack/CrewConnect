@@ -115,9 +115,15 @@ export async function getFormSubmissions(token, formId = null, filters = {}) {
 }
 
 export async function submitForm(token, formId, payload) {
+  const dataPayload = payload?.data ?? payload;
   return apiCall(token, 'form-submissions', 'POST', {
+    formId: formId,
     form_id: formId,
-    data: payload,
+    data: dataPayload,
+    associatedProjectId: payload?.associatedProjectId,
+    associatedEquipmentId: payload?.associatedEquipmentId,
+    associatedUserId: payload?.associatedUserId,
+    associatedCostCodeId: payload?.associatedCostCodeId,
   });
 }
 

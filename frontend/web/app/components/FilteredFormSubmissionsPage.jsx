@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { getForm, getFormSubmissions } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
 import { colors, spacing, typography, shadows } from "../../constants/theme";
@@ -32,6 +32,7 @@ export default function FilteredFormSubmissionsPage({
   const [appliedFilterRules, setAppliedFilterRules] = useState([]);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
   const [pendingFocusRuleId, setPendingFocusRuleId] = useState(null);
   const inputRefs = useRef({});
 
@@ -174,7 +175,7 @@ export default function FilteredFormSubmissionsPage({
     () => (form?.fields ? (typeof form.fields === 'string' ? JSON.parse(form.fields) : form.fields) : []),
     [form?.fields]
   );
-  const displayFields = parsedFields || [];
+  const displayFields = useMemo(() => parsedFields || [], [parsedFields]);
   
   // Check which associations are enabled in the form
   const showProject = form?.project_enabled || false;
@@ -182,6 +183,43 @@ export default function FilteredFormSubmissionsPage({
   const showUser = form?.user_enabled || false;
   const showCustomer = form?.customer_enabled || false;
   const showCostCode = form?.cost_code_enabled || false;
+
+  const availableTableColumns = useMemo(() => {
+    const columns = [
+      { id: "submitted_by", label: "Submitted By" },
+      { id: "submitted_at", label: "Date" },
+    ];
+
+    if (showProject) columns.push({ id: "project", label: form?.project_question || "Project" });
+    if (showEquipment) columns.push({ id: "equipment", label: form?.equipment_question || "Equipment" });
+    if (showUser) columns.push({ id: "user", label: form?.user_question || "User" });
+    if (showCustomer) columns.push({ id: "customer", label: form?.customer_question || "Customer" });
+    if (showCostCode) columns.push({ id: "cost_code", label: form?.cost_code_question || "Cost Code" });
+
+    displayFields.forEach((field) => {
+      columns.push({
+        id: `field:${field.id}`,
+        label: field.question,
+      });
+    });
+
+    return columns;
+  }, [showProject, showEquipment, showUser, showCustomer, showCostCode, displayFields, form]);
+
+  const [visibleColumnIds, setVisibleColumnIds] = useState([]);
+
+  useEffect(() => {
+    setVisibleColumnIds((prev) => {
+      const currentIds = availableTableColumns.map((col) => col.id);
+      if (prev.length === 0) return currentIds;
+      const kept = prev.filter((id) => currentIds.includes(id));
+      const added = currentIds.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [availableTableColumns]);
+
+  const visibleColumnSet = useMemo(() => new Set(visibleColumnIds), [visibleColumnIds]);
+  const isColumnVisible = useCallback((columnId) => visibleColumnSet.has(columnId), [visibleColumnSet]);
 
   const filterableColumns = useMemo(() => {
     const columns = [
@@ -411,29 +449,51 @@ export default function FilteredFormSubmissionsPage({
   );
 
   const renderTableView = () => {
+    const visibleColumnCount = visibleColumnIds.length;
+    const totalColumnCount = availableTableColumns.length;
+    const allColumnsVisible = totalColumnCount > 0 && visibleColumnCount === totalColumnCount;
+
+    const toggleColumn = (columnId) => {
+      setVisibleColumnIds((prev) => {
+        if (prev.includes(columnId)) {
+          return prev.filter((id) => id !== columnId);
+        }
+        return [...prev, columnId];
+      });
+    };
+
     return (
     <View style={{ flex: 1, position: "relative" }}>
       {openDropdown && (
         <Pressable
           style={styles.dropdownBackdropFull}
-          onPress={() => setOpenDropdown(null)}
+          onPress={() => {
+            setOpenDropdown(null);
+          }}
         />
       )}
-      <View style={styles.filterBar}>
-        <View style={styles.filterControls}>
-          <Pressable style={styles.filterToggle} onPress={() => setFiltersOpen((v) => !v)}>
-            <Ionicons name="filter" size={16} color="white" />
-            <Text style={styles.filterToggleText}>Filters</Text>
-            {appliedFilterRules.length > 0 && (
-              <View style={styles.filterCountBadge}>
-                <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
-        {appliedFilterRules.length > 0 && (
+      <View style={styles.controlsCard}>
+        <View style={styles.filterBar}>
+          <View style={styles.filterControls}>
+            <Pressable
+              style={styles.filterToggle}
+              onPress={() => {
+                setFiltersOpen((v) => !v);
+                setColumnSelectorOpen(false);
+              }}
+            >
+              <Ionicons name="filter" size={16} color="white" />
+              <Text style={styles.filterToggleText}>Filters</Text>
+              {appliedFilterRules.length > 0 && (
+                <View style={styles.filterCountBadge}>
+                  <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
           <ScrollView
             horizontal
+            style={styles.appliedFiltersInline}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.appliedFiltersRow}
           >
@@ -460,7 +520,72 @@ export default function FilteredFormSubmissionsPage({
               </Pressable>
             ))}
           </ScrollView>
-        )}
+          <View style={styles.columnSelectorWrap}>
+            <Pressable
+              style={styles.columnSelectorButton}
+              onPress={() => {
+                setColumnSelectorOpen((v) => !v);
+                setOpenDropdown(null);
+              }}
+            >
+              <MaterialCommunityIcons name="view-column-outline" size={20} color={colors.text.primary} />
+              <Text style={styles.columnSelectorText}>Columns</Text>
+              {allColumnsVisible ? (
+                <View style={styles.columnSelectorBadge}>
+                  <Text style={styles.columnSelectorBadgeText}>All</Text>
+                </View>
+              ) : (
+                <View style={styles.columnSelectorBadge}>
+                  <Text style={styles.columnSelectorBadgeText}>{visibleColumnCount}</Text>
+                </View>
+              )}
+              <Ionicons
+                name={columnSelectorOpen ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={colors.text.secondary}
+              />
+            </Pressable>
+            {columnSelectorOpen && (
+              <View style={styles.columnSelectorDropdown}>
+                <ScrollView style={styles.columnSelectorScroll}>
+                  {availableTableColumns.map((column) => {
+                    const selected = isColumnVisible(column.id);
+                    return (
+                      <Pressable
+                        key={column.id}
+                        style={styles.columnSelectorItem}
+                        onPress={() => toggleColumn(column.id)}
+                      >
+                        <Ionicons
+                          name={selected ? "checkbox" : "square-outline"}
+                          size={18}
+                          color={selected ? colors.primary.orange : colors.text.secondary}
+                        />
+                        <Text style={styles.columnSelectorItemText} numberOfLines={1}>
+                          {column.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+                <View style={styles.columnSelectorFooter}>
+                  <Pressable
+                    style={styles.columnSelectorFooterButton}
+                    onPress={() => setVisibleColumnIds(availableTableColumns.map((col) => col.id))}
+                  >
+                    <Text style={styles.columnSelectorFooterButtonText}>Select all</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.columnSelectorFooterButton}
+                    onPress={() => setVisibleColumnIds([])}
+                  >
+                    <Text style={styles.columnSelectorFooterButtonText}>Select none</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
       </View>
 
       {filtersOpen && (
@@ -749,12 +874,13 @@ export default function FilteredFormSubmissionsPage({
         </View>
       )}
 
-      <ScrollView
-        style={{ flex: 1, zIndex: 1 }}
-        contentContainerStyle={{ flexGrow: 1, minHeight: "100%" }}
-        showsVerticalScrollIndicator={true}
-      >
-        <View style={styles.tableWithActions}>
+      <View style={styles.tableCard}>
+        <ScrollView
+          style={{ flex: 1, zIndex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, minHeight: "100%" }}
+          showsVerticalScrollIndicator={true}
+        >
+          <View style={styles.tableWithActions}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={true}
@@ -767,48 +893,52 @@ export default function FilteredFormSubmissionsPage({
                 <View style={[styles.tableCell, styles.colSubmissionId]}>
                   <Text style={styles.tableHeaderText} numberOfLines={1}>ID</Text>
                 </View>
-                <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                  <Text style={styles.tableHeaderText} numberOfLines={1}>Submitted By</Text>
-                </View>
-                <View style={[styles.tableCell, styles.colDate]}>
-                  <Text style={styles.tableHeaderText} numberOfLines={1}>Date</Text>
-                </View>
-                {showProject && (
+                {isColumnVisible("submitted_by") && (
+                  <View style={[styles.tableCell, styles.colSubmittedBy]}>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>Submitted By</Text>
+                  </View>
+                )}
+                {isColumnVisible("submitted_at") && (
+                  <View style={[styles.tableCell, styles.colDate]}>
+                    <Text style={styles.tableHeaderText} numberOfLines={1}>Date</Text>
+                  </View>
+                )}
+                {showProject && isColumnVisible("project") && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {form?.project_question || "Project"}
                     </Text>
                   </View>
                 )}
-                {showEquipment && (
+                {showEquipment && isColumnVisible("equipment") && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {form?.equipment_question || "Equipment"}
                     </Text>
                   </View>
                 )}
-                {showUser && (
+                {showUser && isColumnVisible("user") && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {form?.user_question || "User"}
                     </Text>
                   </View>
                 )}
-                {showCustomer && (
+                {showCustomer && isColumnVisible("customer") && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {form?.customer_question || "Customer"}
                     </Text>
                   </View>
                 )}
-                {showCostCode && (
+                {showCostCode && isColumnVisible("cost_code") && (
                   <View style={[styles.tableCell, styles.colAssociation]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {form?.cost_code_question || "Cost Code"}
                     </Text>
                   </View>
                 )}
-                {displayFields.map((field) => (
+                {displayFields.filter((field) => isColumnVisible(`field:${field.id}`)).map((field) => (
                   <View key={field.id} style={[styles.tableCell, styles.colField]}>
                     <Text style={styles.tableHeaderText} numberOfLines={1}>
                       {field.question}
@@ -825,52 +955,56 @@ export default function FilteredFormSubmissionsPage({
                       {submission.id?.substring(0, 8)}...
                     </Text>
                   </View>
-                  <View style={[styles.tableCell, styles.colSubmittedBy]}>
-                    <Text style={styles.cellText} numberOfLines={1}>
-                      {submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown"}
-                    </Text>
-                  </View>
-                  <View style={[styles.tableCell, styles.colDate]}>
-                    <Text style={styles.cellTextSmall} numberOfLines={2}>
-                      {formatDate(submission.submitted_at)}
-                    </Text>
-                  </View>
-                  {showProject && (
+                  {isColumnVisible("submitted_by") && (
+                    <View style={[styles.tableCell, styles.colSubmittedBy]}>
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown"}
+                      </Text>
+                    </View>
+                  )}
+                  {isColumnVisible("submitted_at") && (
+                    <View style={[styles.tableCell, styles.colDate]}>
+                      <Text style={styles.cellTextSmall} numberOfLines={2}>
+                        {formatDate(submission.submitted_at)}
+                      </Text>
+                    </View>
+                  )}
+                  {showProject && isColumnVisible("project") && (
                     <View style={[styles.tableCell, styles.colAssociation]}>
                       <Text style={styles.cellText} numberOfLines={1}>
                         {submission.project?.name || submission.associated_project_name || "-"}
                       </Text>
                     </View>
                   )}
-                  {showEquipment && (
+                  {showEquipment && isColumnVisible("equipment") && (
                     <View style={[styles.tableCell, styles.colAssociation]}>
                       <Text style={styles.cellText} numberOfLines={1}>
                         {submission.equipment?.label || submission.associated_equipment_label || "-"}
                       </Text>
                     </View>
                   )}
-                  {showUser && (
+                  {showUser && isColumnVisible("user") && (
                     <View style={[styles.tableCell, styles.colAssociation]}>
                       <Text style={styles.cellText} numberOfLines={1}>
                         {submission.user?.full_name || submission.associated_user_name || "-"}
                       </Text>
                     </View>
                   )}
-                  {showCustomer && (
+                  {showCustomer && isColumnVisible("customer") && (
                     <View style={[styles.tableCell, styles.colAssociation]}>
                       <Text style={styles.cellText} numberOfLines={1}>
                         {submission.customer?.name || submission.associated_customer_name || "-"}
                       </Text>
                     </View>
                   )}
-                  {showCostCode && (
+                  {showCostCode && isColumnVisible("cost_code") && (
                     <View style={[styles.tableCell, styles.colAssociation]}>
                       <Text style={styles.cellText} numberOfLines={1}>
                         {submission.cost_code?.name || submission.associated_cost_code_name || "-"}
                       </Text>
                     </View>
                   )}
-                  {displayFields.map((field) => (
+                  {displayFields.filter((field) => isColumnVisible(`field:${field.id}`)).map((field) => (
                     <View key={field.id} style={[styles.tableCell, styles.colField]}>
                       <Text style={styles.cellText} numberOfLines={2}>
                         {formatFieldValue(field, submission.data?.[field.id])}
@@ -898,8 +1032,9 @@ export default function FilteredFormSubmissionsPage({
               </View>
             ))}
           </View>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
   </View>
   );
   };
@@ -1092,9 +1227,30 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+    backgroundColor: "transparent",
+    padding: 0,
+    gap: 12,
+  },
+  controlsCard: {
     backgroundColor: "white",
     borderRadius: 10,
-    padding: 16,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ECECEC",
+    position: "relative",
+    zIndex: 120,
+    overflow: "visible",
+    ...shadows.small,
+  },
+  tableCard: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 0,
+    borderWidth: 1,
+    borderColor: "#ECECEC",
+    overflow: "hidden",
     ...shadows.small,
   },
   tableWithActions: {
@@ -1217,13 +1373,113 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
-    zIndex: 80,
+    gap: 10,
+    zIndex: 140,
+    overflow: "visible",
   },
   filterControls: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
+  },
+  appliedFiltersInline: {
+    flex: 1,
+  },
+  columnSelectorWrap: {
+    position: "relative",
+    minWidth: 170,
+    alignItems: "flex-end",
+    flexShrink: 0,
+    zIndex: 180,
+    overflow: "visible",
+  },
+  columnSelectorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: "white",
+  },
+  columnSelectorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text.primary,
+  },
+  columnSelectorBadge: {
+    backgroundColor: colors.primary.orange,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.primary.orange,
+  },
+  columnSelectorBadgeText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  columnSelectorDropdown: {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    marginTop: 4,
+    width: 280,
+    maxHeight: 260,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+    backgroundColor: "white",
+    zIndex: 300,
+    elevation: 8,
+    ...shadows.small,
+  },
+  columnSelectorScroll: {
+    maxHeight: 260,
+  },
+  columnSelectorItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  columnSelectorItemText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.text.primary,
+  },
+  columnSelectorFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#EAEAEA",
+    backgroundColor: "white",
+  },
+  columnSelectorFooterButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: "#FAFAFA",
+  },
+  columnSelectorFooterButtonText: {
+    fontSize: 12,
+    color: colors.text.primary,
+    fontWeight: "600",
   },
   filterDrawerOverlay: {
     position: "absolute",
@@ -1249,11 +1505,15 @@ const styles = StyleSheet.create({
     maxWidth: "85%",
     backgroundColor: "white",
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: "#D7D9DE",
     borderRadius: 12,
     padding: 16,
     height: "100%",
-    ...shadows.small,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 12,
   },
   drawerHeader: {
     flexDirection: "row",
@@ -1300,7 +1560,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingLeft: 8,
+    paddingHorizontal: 8,
+    minHeight: 40,
   },
   appliedFilterChip: {
     backgroundColor: "#F0F0F0",

@@ -59,7 +59,7 @@ export default function FormDetailsScreen() {
     try {
       setSubmitting(true);
       console.log("Submitting form:", formSubmission);
-      const response = await submitForm(token, formId, formSubmission.data);
+      const response = await submitForm(token, formId, formSubmission);
       console.log("Submit response:", response);
       
       if (response.success) {

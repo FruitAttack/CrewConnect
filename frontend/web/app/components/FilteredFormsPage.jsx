@@ -632,6 +632,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 80,
+    backgroundColor: "white",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#EFEFEF",
+    ...shadows.small,
   },
   emptyTitle: {
     fontSize: 16,
@@ -652,6 +657,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    ...shadows.small,
   },
   errorText: {
     flex: 1,

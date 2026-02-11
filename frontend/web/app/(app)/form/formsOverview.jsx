@@ -302,6 +302,7 @@ const styles = StyleSheet.create({
 		borderColor: colors.border.light,
 		minWidth: 180,
 		flex: 1,
+		...shadows.small,
 	},
 	statIcon: {
 		width: 42,
@@ -328,6 +329,7 @@ const styles = StyleSheet.create({
 		padding: spacing.md,
 		borderRadius: borderRadius.lg,
 		marginBottom: spacing.lg,
+		...shadows.small,
 	},
 	errorText: { flex: 1, color: colors.semantic.error, fontSize: typography.fontSize.sm },
 	retryButton: {
@@ -347,6 +349,7 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: colors.border.light,
 		marginBottom: spacing.lg,
+		...shadows.small,
 	},
 	emptyTitle: {
 		fontSize: typography.fontSize.lg,
