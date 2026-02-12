@@ -292,6 +292,15 @@ export default function Dashboard() {
                     if (action.label === 'New Project') {
                       router.push('/(app)/projects?create=true');
                     }
+                    else if (action.label === 'Add Employee') {
+                      router.push('/(app)/workforce/employees?addNew=true');
+                    }
+                    else if (action.label === 'View Reports') {
+                      router.push('/(app)/reports');
+                    }
+                    else if (action.label === 'Timecards') {
+                      router.push('/(app)/time/timecards')
+                    }
                   }}
                 >
                   <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>

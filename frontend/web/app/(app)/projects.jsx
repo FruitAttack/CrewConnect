@@ -14,6 +14,7 @@ export default function Projects() {
   const { session } = useSession();
   const isLargeScreen = width >= 1024;
   const { setSelectedProject, setSelectedProjectID } = useProject();
+  
   const { create } = useLocalSearchParams();
   
   const [projects, setProjects] = useState([]);
@@ -299,7 +300,9 @@ export default function Projects() {
       {/* Create Project Modal */}
       <CreateProjectModal
         visible={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false)
+        }}
         token={token}
         companyId={companyId}
         onCreated={(project) => {
