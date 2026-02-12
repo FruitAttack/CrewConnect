@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../utils/ctx';
 import { useRouter } from 'expo-router';
-import { reportsApi, projectsApi, usersApi } from '../../services/api';
+import { getProjects, getDashboard, getAllUsers, getUserProfile } from '../../utils/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 
 export default function Dashboard() {
@@ -26,7 +26,28 @@ export default function Dashboard() {
   const [projectSummary, setProjectSummary] = useState([]);
 
   const token = session?.access_token;
-  const companyId = session?.user?.user_metadata?.default_company_id;
+  const sessionCompanyId = session?.user?.user_metadata?.default_company_id;
+
+  const [companyId, setCompanyId] = useState(sessionCompanyId || null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveCompany() {
+      if (!token || companyId) return;
+
+      const res = await getUserProfile(token);
+      const cid = res?.data?.user?.default_company_id;
+
+      if (mounted && res?.success && cid) {
+        setCompanyId(cid);
+      }
+    }
+
+    resolveCompany();
+    return () => { mounted = false; };
+  }, [token, companyId]);
+
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
 
@@ -37,29 +58,34 @@ export default function Dashboard() {
 
   const fetchDashboardData = useCallback(async () => {
     if (!token || !companyId) {
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
+
     try {
       const [projectsRes, usersRes, dashboardRes] = await Promise.allSettled([
-        projectsApi.getAll(token, companyId),
-        usersApi.getAll(token, companyId),
-        reportsApi.getDashboard(token, companyId),
+        getProjects(token, companyId),
+        getAllUsers(token, { company_id: companyId }),
+        getDashboard(token, companyId),
       ]);
 
-      if (projectsRes.status === 'fulfilled' && projectsRes.value?.projects) {
-        const projects = projectsRes.value.projects;
+      if (projectsRes.status === 'fulfilled' && projectsRes.value?.success) {
+        const projects = projectsRes.value?.data?.projects || [];
+        const active = projects.filter(p => p.active);
+        const inactive = projects.filter(p => !p.active);
+
         setStats(prev => ({
           ...prev,
-          activeProjects: projects.filter(p => p.active).length,
-          completedProjects: projects.filter(p => !p.active).length,
+          activeProjects: active.length,
+          completedProjects: inactive.length,
         }));
-        setProjectSummary(projects.filter(p => p.active).slice(0, 5));
+
+        setProjectSummary(active);
       }
 
-      if (usersRes.status === 'fulfilled' && usersRes.value?.users) {
-        const users = usersRes.value.users;
+      if (usersRes.status === 'fulfilled' && usersRes.value?.success) {
+        const users = usersRes.value?.data?.users || usersRes.value?.data || [];
         setStats(prev => ({
           ...prev,
           totalEmployees: users.length,
@@ -67,8 +93,8 @@ export default function Dashboard() {
         }));
       }
 
-      if (dashboardRes.status === 'fulfilled' && dashboardRes.value?.dashboard) {
-        const dash = dashboardRes.value.dashboard;
+      if (dashboardRes.status === 'fulfilled' && dashboardRes.value?.success) {
+        const dash = dashboardRes.value?.data?.dashboard || dashboardRes.value?.data || {};
         setStats(prev => ({
           ...prev,
           hoursThisWeek: dash.hours_this_week || 0,
@@ -76,16 +102,20 @@ export default function Dashboard() {
           clockedInCount: dash.clocked_in_count || 0,
         }));
       }
-    } catch (error) {
+    } 
+    catch (error) {
       console.error('Dashboard fetch error:', error);
-    } finally {
+    }
+    finally {
       setLoading(false);
     }
   }, [token, companyId]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (companyId) {
+      fetchDashboardData();
+    }
+  }, [companyId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -97,6 +127,10 @@ export default function Dashboard() {
     if (typeof hours !== 'number') return '0h';
     return Math.round(hours * 10) / 10 + 'h';
   };
+
+  const handleProjectPress = useCallback((project) => {
+    router.push(`/(app)/project/projectsOverview?projectId=${encodeURIComponent(project.id)}`);
+  }, [router]);
 
   const statCards = [
     { 
@@ -139,6 +173,16 @@ export default function Dashboard() {
     { icon: 'document-text-outline', label: 'View Reports', color: colors.semantic.success },
     { icon: 'calendar-outline', label: 'Timecards', color: '#8B5CF6' },
   ];
+
+  // loading animation until we have dashboard data
+  if (loading) {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary.orange} />
+      <Text style={styles.loadingText}>Loading dashboard...</Text>
+    </View>
+  );
+}
 
   return (
     <ScrollView
@@ -199,37 +243,53 @@ export default function Dashboard() {
               <Text style={styles.cardBadgeText}>{stats.activeProjects}</Text>
             </View>
           </View>
-          <View style={styles.cardContent}>
-            {projectSummary.length > 0 ? (
-              <View style={styles.projectList}>
-                {projectSummary.map((project) => (
-                  <Pressable 
-                    key={project.id} 
-                    style={({ hovered }) => [styles.projectItem, hovered && styles.projectItemHovered]}
-                  >
-                    <View style={styles.projectInfo}>
-                      <View style={styles.projectDot} />
-                      <View style={styles.projectText}>
-                        <Text style={styles.projectName} numberOfLines={1}>{project.name}</Text>
-                        {project.customers?.name && (
-                          <Text style={styles.projectCustomer} numberOfLines={1}>{project.customers.name}</Text>
-                        )}
+            <View style={styles.cardContent}>
+              {projectSummary.length > 0 ? (
+                <ScrollView
+                  style={styles.projectListScroll}
+                  contentContainerStyle={styles.projectList}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                >
+                  {projectSummary.map((project) => (
+                    <Pressable
+                      key={project.id}
+                      onPress={() => handleProjectPress(project)}
+                      style={({ hovered }) => [
+                        styles.projectItem,
+                        hovered && styles.projectItemHovered,
+                      ]}
+                    >
+                      <View style={styles.projectInfo}>
+                        <View style={styles.projectDot} />
+                        <View style={styles.projectText}>
+                          <Text style={styles.projectName} numberOfLines={1}>
+                            {project.name}
+                          </Text>
+                          {project.customers?.name && (
+                            <Text style={styles.projectCustomer} numberOfLines={1}>
+                              {project.customers.name}
+                            </Text>
+                          )}
+                        </View>
                       </View>
+
+                      <View style={{ marginRight: 8 }}>
+                      <Ionicons name="chevron-forward" size={16} color={colors.text.tertiary} />
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.text.tertiary} />
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons name="folder-outline" size={32} color={colors.text.tertiary} />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyState}>
+                  <View style={styles.emptyIcon}>
+                    <Ionicons name="folder-outline" size={32} color={colors.text.tertiary} />
+                  </View>
+                  <Text style={styles.emptyText}>No active projects</Text>
+                  <Text style={styles.emptySubtext}>Create a project to get started</Text>
                 </View>
-                <Text style={styles.emptyText}>No active projects</Text>
-                <Text style={styles.emptySubtext}>Create a project to get started</Text>
-              </View>
-            )}
-          </View>
+              )}
+            </View>
         </View>
 
         {/* Labor Overview Card */}
@@ -527,6 +587,9 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs, 
     color: colors.text.tertiary 
   },
+  projectListScroll: {
+  maxHeight: 280,
+},
 
   // Empty State
   emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
@@ -667,4 +730,17 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm, 
     color: colors.text.tertiary 
   },
+
+  // Load animation
+  loadingContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#F8FAFC',
+},
+loadingText: {
+  marginTop: spacing.md,
+  fontSize: typography.fontSize.md,
+  color: colors.text.secondary,
+},
 });
