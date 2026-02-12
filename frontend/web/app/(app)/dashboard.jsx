@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../utils/ctx';
 import { useRouter } from 'expo-router';
-import { getProjects, getDashboard, getAllUsers, getUserProfile } from '../../utils/api';
+import { getProjects, getDashboard, getAllUsers, getUserProfile, getTimeEntries, getActiveRoster } from '../../utils/api';
+import { calculateHoursInRange } from '../../utils/timeUtils';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 
 export default function Dashboard() {
@@ -13,6 +14,88 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   const router = useRouter();
+
+  const [weekdayHours, setWeekdayHours] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  function formatYYYYMMDDLocal(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function getWeekRange() {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+
+    const start = new Date(now);
+    start.setDate(now.getDate() - dayOfWeek);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return {
+      startDate: start,
+      endDate: end,
+      startStr: formatYYYYMMDDLocal(start),
+      endStr: formatYYYYMMDDLocal(end),
+    };
+  }
+
+  function getMonthRange() {
+    const now = new Date();
+
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    return {
+      startDate: start,
+      endDate: end,
+      startStr: formatYYYYMMDDLocal(start),
+      endStr: formatYYYYMMDDLocal(end),
+    };
+  }
+
+  function extractList(resValue) {
+    const data = resValue?.data;
+    if (Array.isArray(data)) return data;
+    return data?.time_entries || data?.entries || data?.timeEntries || [];
+  }
+
+  function computeHoursByWeekday(entries, rangeStart, rangeEnd) {
+    const totals = [0, 0, 0, 0, 0, 0, 0];
+
+    const cursor = new Date(rangeStart);
+    cursor.setHours(0, 0, 0, 0);
+
+    const end = new Date(rangeEnd);
+    end.setHours(23, 59, 59, 999);
+
+    while (cursor <= end) {
+      const dayStart = new Date(cursor);
+      const dayEnd = new Date(cursor);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayHours = calculateHoursInRange(entries, dayStart, dayEnd);
+
+      // getDay(): 0=Sun..6=Sat
+      // we want Mon..Sun index: Mon=0..Sun=6
+      const jsDay = dayStart.getDay();
+      const monFirstIndex = (jsDay + 6) % 7;
+
+      totals[monFirstIndex] += dayHours;
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return totals;
+  }
   
   const [stats, setStats] = useState({
     activeProjects: 0,
@@ -56,18 +139,35 @@ export default function Dashboard() {
                    session?.user?.email?.split('@')[0] || 
                    'there';
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!token || !companyId) {
-      return;
-    }
+  const fetchDashboardData = useCallback(async ({ showLoading = false } = {}) => {
+    if (!token || !companyId) return;
 
-    setLoading(true);
+    if (showLoading) setLoading(true);
 
     try {
-      const [projectsRes, usersRes, dashboardRes] = await Promise.allSettled([
+      const week = getWeekRange();
+      const month = getMonthRange();
+
+      const [
+        projectsRes,
+        usersRes,
+        rosterRes,
+        weekEntriesRes,
+        monthEntriesRes,
+      ] = await Promise.allSettled([
         getProjects(token, companyId),
         getAllUsers(token, { company_id: companyId }),
-        getDashboard(token, companyId),
+        getActiveRoster(token, companyId),
+        getTimeEntries(token, companyId, {
+          start_date: week.startStr,
+          end_date: week.endStr,
+          all_users: 'true',
+        }),
+        getTimeEntries(token, companyId, {
+          start_date: month.startStr,
+          end_date: month.endStr,
+          all_users: 'true',
+        }),
       ]);
 
       if (projectsRes.status === 'fulfilled' && projectsRes.value?.success) {
@@ -93,33 +193,49 @@ export default function Dashboard() {
         }));
       }
 
-      if (dashboardRes.status === 'fulfilled' && dashboardRes.value?.success) {
-        const dash = dashboardRes.value?.data?.dashboard || dashboardRes.value?.data || {};
+      if (rosterRes.status === 'fulfilled' && rosterRes.value?.success) {
+        const roster = rosterRes.value?.data?.roster || [];
+        const clockedInCount = roster.filter(r => r.is_clocked_in).length;
+
         setStats(prev => ({
           ...prev,
-          hoursThisWeek: dash.hours_this_week || 0,
-          hoursThisMonth: dash.hours_this_month || 0,
-          clockedInCount: dash.clocked_in_count || 0,
+          clockedInCount,
         }));
       }
-    } 
-    catch (error) {
+
+      const weekEntries =
+        weekEntriesRes.status === 'fulfilled' ? extractList(weekEntriesRes.value) : [];
+      const monthEntries =
+        monthEntriesRes.status === 'fulfilled' ? extractList(monthEntriesRes.value) : [];
+
+      const hoursThisWeek = calculateHoursInRange(weekEntries, week.startDate, week.endDate);
+      const hoursThisMonth = calculateHoursInRange(monthEntries, month.startDate, month.endDate);
+
+      setStats(prev => ({
+        ...prev,
+        hoursThisWeek,
+        hoursThisMonth,
+      }));
+
+      const byWeekday = computeHoursByWeekday(monthEntries, month.startDate, month.endDate);
+      setWeekdayHours(byWeekday);
+
+    } catch (error) {
       console.error('Dashboard fetch error:', error);
-    }
-    finally {
-      setLoading(false);
+    } finally {
+      if (showLoading) setLoading(false);
     }
   }, [token, companyId]);
 
   useEffect(() => {
     if (companyId) {
-      fetchDashboardData();
+      fetchDashboardData({ showLoading: true });
     }
-  }, [companyId]);
+  }, [companyId, fetchDashboardData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDashboardData();
+    await fetchDashboardData({ showLoading: false }); 
     setRefreshing(false);
   }, [fetchDashboardData]);
 
@@ -173,6 +289,8 @@ export default function Dashboard() {
     { icon: 'document-text-outline', label: 'View Reports', color: colors.semantic.success },
     { icon: 'calendar-outline', label: 'Timecards', color: '#8B5CF6' },
   ];
+
+  const maxWeekday = Math.max(...weekdayHours, 0);
 
   // loading animation until we have dashboard data
   if (loading) {
@@ -314,21 +432,27 @@ export default function Dashboard() {
             </View>
             <View style={styles.chartContainer}>
               <View style={styles.barChart}>
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                  <View key={i} style={styles.barColumn}>
-                    <View 
-                      style={[
-                        styles.bar, 
-                        { 
-                          height: `${Math.random() * 60 + 20}%`, 
-                          backgroundColor: i < 5 ? colors.primary.orange : colors.neutral.lightGray,
-                          opacity: i < 5 ? 1 : 0.5,
-                        }
-                      ]} 
-                    />
-                    <Text style={styles.barLabel}>{day}</Text>
-                  </View>
-                ))}
+                {WEEKDAY_LABELS.map((day, i) => {
+                  const h = weekdayHours[i] || 0;
+                  const pct = maxWeekday > 0 ? (h / maxWeekday) * 100 : 0;
+
+                  return (
+                    <View key={i} style={styles.barColumn}>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: `${pct}%`,
+                            minHeight: h > 0 ? 4 : 0,
+                            backgroundColor: i < 5 ? colors.primary.orange : colors.neutral.lightGray,
+                            opacity: i < 5 ? 1 : 0.5,
+                          },
+                        ]}
+                      />
+                      <Text style={styles.barLabel}>{day}</Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           </View>
