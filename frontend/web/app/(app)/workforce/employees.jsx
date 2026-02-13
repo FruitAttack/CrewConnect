@@ -108,6 +108,7 @@ export default function EmployeesPage() {
   const { session } = useSession();
   const token = session?.access_token;
   const params = useLocalSearchParams();
+  const addNew = params?.addNew;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -344,6 +345,12 @@ export default function EmployeesPage() {
     setModalMode('add');
     setModalVisible(true);
   };
+
+  useEffect( () => {
+    if(addNew == 'true') {
+      openAddModal();
+    }
+  }, [addNew]);
 
   const closeModal = () => { setModalVisible(false); setSelectedEmployee(null); setError(null); };
 

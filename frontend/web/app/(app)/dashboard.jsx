@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../utils/ctx';
-import { reportsApi, projectsApi, usersApi } from '../../services/api';
+import { useRouter } from 'expo-router';
+import { getProjects, getDashboard, getAllUsers, getUserProfile, getTimeEntries, getActiveRoster } from '../../utils/api';
+import { calculateHoursInRange } from '../../utils/timeUtils';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 
 export default function Dashboard() {
@@ -10,6 +12,90 @@ export default function Dashboard() {
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const router = useRouter();
+
+  const [weekdayHours, setWeekdayHours] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  function formatYYYYMMDDLocal(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function getWeekRange() {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+
+    const start = new Date(now);
+    start.setDate(now.getDate() - dayOfWeek);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return {
+      startDate: start,
+      endDate: end,
+      startStr: formatYYYYMMDDLocal(start),
+      endStr: formatYYYYMMDDLocal(end),
+    };
+  }
+
+  function getMonthRange() {
+    const now = new Date();
+
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    return {
+      startDate: start,
+      endDate: end,
+      startStr: formatYYYYMMDDLocal(start),
+      endStr: formatYYYYMMDDLocal(end),
+    };
+  }
+
+  function extractList(resValue) {
+    const data = resValue?.data;
+    if (Array.isArray(data)) return data;
+    return data?.time_entries || data?.entries || data?.timeEntries || [];
+  }
+
+  function computeHoursByWeekday(entries, rangeStart, rangeEnd) {
+    const totals = [0, 0, 0, 0, 0, 0, 0];
+
+    const cursor = new Date(rangeStart);
+    cursor.setHours(0, 0, 0, 0);
+
+    const end = new Date(rangeEnd);
+    end.setHours(23, 59, 59, 999);
+
+    while (cursor <= end) {
+      const dayStart = new Date(cursor);
+      const dayEnd = new Date(cursor);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayHours = calculateHoursInRange(entries, dayStart, dayEnd);
+
+      // getDay(): 0=Sun..6=Sat
+      // we want Mon..Sun index: Mon=0..Sun=6
+      const jsDay = dayStart.getDay();
+      const monFirstIndex = (jsDay + 6) % 7;
+
+      totals[monFirstIndex] += dayHours;
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return totals;
+  }
   
   const [stats, setStats] = useState({
     activeProjects: 0,
@@ -23,7 +109,28 @@ export default function Dashboard() {
   const [projectSummary, setProjectSummary] = useState([]);
 
   const token = session?.access_token;
-  const companyId = session?.user?.user_metadata?.default_company_id;
+  const sessionCompanyId = session?.user?.user_metadata?.default_company_id;
+
+  const [companyId, setCompanyId] = useState(sessionCompanyId || null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveCompany() {
+      if (!token || companyId) return;
+
+      const res = await getUserProfile(token);
+      const cid = res?.data?.user?.default_company_id;
+
+      if (mounted && res?.success && cid) {
+        setCompanyId(cid);
+      }
+    }
+
+    resolveCompany();
+    return () => { mounted = false; };
+  }, [token, companyId]);
+
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
 
@@ -32,31 +139,53 @@ export default function Dashboard() {
                    session?.user?.email?.split('@')[0] || 
                    'there';
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!token || !companyId) {
-      setLoading(false);
-      return;
-    }
+  const fetchDashboardData = useCallback(async ({ showLoading = false } = {}) => {
+    if (!token || !companyId) return;
+
+    if (showLoading) setLoading(true);
 
     try {
-      const [projectsRes, usersRes, dashboardRes] = await Promise.allSettled([
-        projectsApi.getAll(token, companyId),
-        usersApi.getAll(token, companyId),
-        reportsApi.getDashboard(token, companyId),
+      const week = getWeekRange();
+      const month = getMonthRange();
+
+      const [
+        projectsRes,
+        usersRes,
+        rosterRes,
+        weekEntriesRes,
+        monthEntriesRes,
+      ] = await Promise.allSettled([
+        getProjects(token, companyId),
+        getAllUsers(token, { company_id: companyId }),
+        getActiveRoster(token, companyId),
+        getTimeEntries(token, companyId, {
+          start_date: week.startStr,
+          end_date: week.endStr,
+          all_users: 'true',
+        }),
+        getTimeEntries(token, companyId, {
+          start_date: month.startStr,
+          end_date: month.endStr,
+          all_users: 'true',
+        }),
       ]);
 
-      if (projectsRes.status === 'fulfilled' && projectsRes.value?.projects) {
-        const projects = projectsRes.value.projects;
+      if (projectsRes.status === 'fulfilled' && projectsRes.value?.success) {
+        const projects = projectsRes.value?.data?.projects || [];
+        const active = projects.filter(p => p.active);
+        const inactive = projects.filter(p => !p.active);
+
         setStats(prev => ({
           ...prev,
-          activeProjects: projects.filter(p => p.active).length,
-          completedProjects: projects.filter(p => !p.active).length,
+          activeProjects: active.length,
+          completedProjects: inactive.length,
         }));
-        setProjectSummary(projects.filter(p => p.active).slice(0, 5));
+
+        setProjectSummary(active);
       }
 
-      if (usersRes.status === 'fulfilled' && usersRes.value?.users) {
-        const users = usersRes.value.users;
+      if (usersRes.status === 'fulfilled' && usersRes.value?.success) {
+        const users = usersRes.value?.data?.users || usersRes.value?.data || [];
         setStats(prev => ({
           ...prev,
           totalEmployees: users.length,
@@ -64,29 +193,49 @@ export default function Dashboard() {
         }));
       }
 
-      if (dashboardRes.status === 'fulfilled' && dashboardRes.value?.dashboard) {
-        const dash = dashboardRes.value.dashboard;
+      if (rosterRes.status === 'fulfilled' && rosterRes.value?.success) {
+        const roster = rosterRes.value?.data?.roster || [];
+        const clockedInCount = roster.filter(r => r.is_clocked_in).length;
+
         setStats(prev => ({
           ...prev,
-          hoursThisWeek: dash.hours_this_week || 0,
-          hoursThisMonth: dash.hours_this_month || 0,
-          clockedInCount: dash.clocked_in_count || 0,
+          clockedInCount,
         }));
       }
+
+      const weekEntries =
+        weekEntriesRes.status === 'fulfilled' ? extractList(weekEntriesRes.value) : [];
+      const monthEntries =
+        monthEntriesRes.status === 'fulfilled' ? extractList(monthEntriesRes.value) : [];
+
+      const hoursThisWeek = calculateHoursInRange(weekEntries, week.startDate, week.endDate);
+      const hoursThisMonth = calculateHoursInRange(monthEntries, month.startDate, month.endDate);
+
+      setStats(prev => ({
+        ...prev,
+        hoursThisWeek,
+        hoursThisMonth,
+      }));
+
+      const byWeekday = computeHoursByWeekday(monthEntries, month.startDate, month.endDate);
+      setWeekdayHours(byWeekday);
+
     } catch (error) {
       console.error('Dashboard fetch error:', error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [token, companyId]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (companyId) {
+      fetchDashboardData({ showLoading: true });
+    }
+  }, [companyId, fetchDashboardData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDashboardData();
+    await fetchDashboardData({ showLoading: false }); 
     setRefreshing(false);
   }, [fetchDashboardData]);
 
@@ -94,6 +243,10 @@ export default function Dashboard() {
     if (typeof hours !== 'number') return '0h';
     return Math.round(hours * 10) / 10 + 'h';
   };
+
+  const handleProjectPress = useCallback((project) => {
+    router.push(`/(app)/project/projectsOverview?projectId=${encodeURIComponent(project.id)}`);
+  }, [router]);
 
   const statCards = [
     { 
@@ -136,6 +289,18 @@ export default function Dashboard() {
     { icon: 'document-text-outline', label: 'View Reports', color: colors.semantic.success },
     { icon: 'calendar-outline', label: 'Timecards', color: '#8B5CF6' },
   ];
+
+  const maxWeekday = Math.max(...weekdayHours, 0);
+
+  // loading animation until we have dashboard data
+  if (loading) {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary.orange} />
+      <Text style={styles.loadingText}>Loading dashboard...</Text>
+    </View>
+  );
+}
 
   return (
     <ScrollView
@@ -196,37 +361,53 @@ export default function Dashboard() {
               <Text style={styles.cardBadgeText}>{stats.activeProjects}</Text>
             </View>
           </View>
-          <View style={styles.cardContent}>
-            {projectSummary.length > 0 ? (
-              <View style={styles.projectList}>
-                {projectSummary.map((project) => (
-                  <Pressable 
-                    key={project.id} 
-                    style={({ hovered }) => [styles.projectItem, hovered && styles.projectItemHovered]}
-                  >
-                    <View style={styles.projectInfo}>
-                      <View style={styles.projectDot} />
-                      <View style={styles.projectText}>
-                        <Text style={styles.projectName} numberOfLines={1}>{project.name}</Text>
-                        {project.customers?.name && (
-                          <Text style={styles.projectCustomer} numberOfLines={1}>{project.customers.name}</Text>
-                        )}
+            <View style={styles.cardContent}>
+              {projectSummary.length > 0 ? (
+                <ScrollView
+                  style={styles.projectListScroll}
+                  contentContainerStyle={styles.projectList}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                >
+                  {projectSummary.map((project) => (
+                    <Pressable
+                      key={project.id}
+                      onPress={() => handleProjectPress(project)}
+                      style={({ hovered }) => [
+                        styles.projectItem,
+                        hovered && styles.projectItemHovered,
+                      ]}
+                    >
+                      <View style={styles.projectInfo}>
+                        <View style={styles.projectDot} />
+                        <View style={styles.projectText}>
+                          <Text style={styles.projectName} numberOfLines={1}>
+                            {project.name}
+                          </Text>
+                          {project.customers?.name && (
+                            <Text style={styles.projectCustomer} numberOfLines={1}>
+                              {project.customers.name}
+                            </Text>
+                          )}
+                        </View>
                       </View>
+
+                      <View style={{ marginRight: 8 }}>
+                      <Ionicons name="chevron-forward" size={16} color={colors.text.tertiary} />
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.text.tertiary} />
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons name="folder-outline" size={32} color={colors.text.tertiary} />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyState}>
+                  <View style={styles.emptyIcon}>
+                    <Ionicons name="folder-outline" size={32} color={colors.text.tertiary} />
+                  </View>
+                  <Text style={styles.emptyText}>No active projects</Text>
+                  <Text style={styles.emptySubtext}>Create a project to get started</Text>
                 </View>
-                <Text style={styles.emptyText}>No active projects</Text>
-                <Text style={styles.emptySubtext}>Create a project to get started</Text>
-              </View>
-            )}
-          </View>
+              )}
+            </View>
         </View>
 
         {/* Labor Overview Card */}
@@ -251,21 +432,27 @@ export default function Dashboard() {
             </View>
             <View style={styles.chartContainer}>
               <View style={styles.barChart}>
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                  <View key={i} style={styles.barColumn}>
-                    <View 
-                      style={[
-                        styles.bar, 
-                        { 
-                          height: `${Math.random() * 60 + 20}%`, 
-                          backgroundColor: i < 5 ? colors.primary.orange : colors.neutral.lightGray,
-                          opacity: i < 5 ? 1 : 0.5,
-                        }
-                      ]} 
-                    />
-                    <Text style={styles.barLabel}>{day}</Text>
-                  </View>
-                ))}
+                {WEEKDAY_LABELS.map((day, i) => {
+                  const h = weekdayHours[i] || 0;
+                  const pct = maxWeekday > 0 ? (h / maxWeekday) * 100 : 0;
+
+                  return (
+                    <View key={i} style={styles.barColumn}>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: `${pct}%`,
+                            minHeight: h > 0 ? 4 : 0,
+                            backgroundColor: i < 5 ? colors.primary.orange : colors.neutral.lightGray,
+                            opacity: i < 5 ? 1 : 0.5,
+                          },
+                        ]}
+                      />
+                      <Text style={styles.barLabel}>{day}</Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           </View>
@@ -285,6 +472,20 @@ export default function Dashboard() {
                 <Pressable 
                   key={index} 
                   style={({ hovered }) => [styles.actionItem, hovered && styles.actionItemHovered]}
+                  onPress={() => {
+                    if (action.label === 'New Project') {
+                      router.push('/(app)/projects?create=true');
+                    }
+                    else if (action.label === 'Add Employee') {
+                      router.push('/(app)/workforce/employees?addNew=true');
+                    }
+                    else if (action.label === 'View Reports') {
+                      router.push('/(app)/reports');
+                    }
+                    else if (action.label === 'Timecards') {
+                      router.push('/(app)/time/timecards')
+                    }
+                  }}
                 >
                   <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
                     <Ionicons name={action.icon} size={22} color={action.color} />
@@ -510,6 +711,9 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs, 
     color: colors.text.tertiary 
   },
+  projectListScroll: {
+  maxHeight: 280,
+},
 
   // Empty State
   emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
@@ -650,4 +854,17 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm, 
     color: colors.text.tertiary 
   },
+
+  // Load animation
+  loadingContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#F8FAFC',
+},
+loadingText: {
+  marginTop: spacing.md,
+  fontSize: typography.fontSize.md,
+  color: colors.text.secondary,
+},
 });
