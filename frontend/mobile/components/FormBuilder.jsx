@@ -565,11 +565,14 @@ export default function FormBuilder({ form, onSubmit }) {
                     setActiveAssociation(null);
                   }}
                   value={projectId}
-                  items={projectItems}
+                  items={filteredProjectItems}
                   setOpen={setProjectOpen}
                   setValue={setProjectId}
                   setItems={setProjectItems}
                   placeholder="Select Project"
+                  searchable
+                  searchPlaceholder="Type to filter projects"
+                  onChangeSearchText={setProjectQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
@@ -614,7 +617,7 @@ export default function FormBuilder({ form, onSubmit }) {
                     setActiveAssociation(null);
                   }}
                   value={costCodeId}
-                  items={costCodeItems}
+                  items={filteredCostCodeItems}
                   setOpen={setCostCodeOpen}
                   setValue={setCostCodeId}
                   setItems={setCostCodeItems}
@@ -626,6 +629,9 @@ export default function FormBuilder({ form, onSubmit }) {
                       : "Select Cost Code"
                   }
                   disabled={form?.project_enabled && !projectId}
+                  searchable
+                  searchPlaceholder="Type to filter cost codes"
+                  onChangeSearchText={setCostCodeQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
@@ -669,11 +675,14 @@ export default function FormBuilder({ form, onSubmit }) {
                     setActiveAssociation(null);
                   }}
                   value={userId}
-                  items={userItems}
+                  items={filteredUserItems}
                   setOpen={setUserOpen}
                   setValue={setUserId}
                   setItems={setUserItems}
                   placeholder="Select User"
+                  searchable
+                  searchPlaceholder="Type to filter users"
+                  onChangeSearchText={setUserQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
@@ -717,11 +726,14 @@ export default function FormBuilder({ form, onSubmit }) {
                     setActiveAssociation(null);
                   }}
                   value={equipmentId}
-                  items={equipmentItems}
+                  items={filteredEquipmentItems}
                   setOpen={setEquipmentOpen}
                   setValue={setEquipmentId}
                   setItems={setEquipmentItems}
                   placeholder="Select Equipment"
+                  searchable
+                  searchPlaceholder="Type to filter equipment"
+                  onChangeSearchText={setEquipmentQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
@@ -800,9 +812,9 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   associationLabel: {
-    marginTop: 14,
     fontWeight: "600",
     fontSize: 16,
+    marginBottom: 12,
   },
   title: {
     fontSize: 22,

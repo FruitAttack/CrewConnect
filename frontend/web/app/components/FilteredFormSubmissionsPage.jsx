@@ -1248,13 +1248,13 @@ export default function FilteredFormSubmissionsPage({
 
           <View style={styles.tableActionsColumn}>
             <View style={[styles.tableHeaderRow, styles.actionsHeaderRow]}>
-              <View style={[styles.tableCell, styles.colActionsSticky]}>
+              <View style={[styles.tableCell, styles.colActionsSticky, styles.tableCellActions]}>
                 <Text style={styles.tableHeaderText} numberOfLines={1}>Edit</Text>
               </View>
             </View>
             {filteredSubmissions.map((submission) => (
               <View key={submission.id} style={[styles.tableDataRow, styles.actionsRow]}>
-                <View style={[styles.tableCell, styles.colActionsSticky]}>
+                <View style={[styles.tableCell, styles.colActionsSticky, styles.tableCellActions]}>
                   <Pressable style={styles.actionButton} onPress={() => openEditSubmissionModal(submission)}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary.orange} />
                   </Pressable>
@@ -1515,16 +1515,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  tableCellActions: {
+    padding: 0,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     backgroundColor: "#F5F5F5",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
+    height: 48,
+    overflow: "hidden",
   },
   tableDataRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
+    height: 48,
+    overflow: "hidden",
   },
   tableCell: {
     padding: 12,
@@ -1571,7 +1578,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionButton: {
-    padding: 4,
+    height: 24,
+    width: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
     borderRadius: 4,
     backgroundColor: "transparent",
   },

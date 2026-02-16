@@ -976,6 +976,7 @@ const styles = StyleSheet.create({
   associationLabel: {
     fontWeight: "600",
     fontSize: 16,
+    marginBottom: 12,
   },
   title: {
     fontSize: 22,
