@@ -180,6 +180,77 @@ export default function FilteredFormSubmissionsPage({
     return time ? `${date} ${time}` : date;
   };
 
+  const formatDigitsDisplay = (digits) => {
+    const normalized = String(digits || "").replace(/\D/g, "");
+    if (!normalized) return "";
+    return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  const formatCountDisplay = (value) => {
+    const numeric = Number(value || 0);
+    if (!Number.isFinite(numeric)) return "0";
+    return Math.trunc(numeric).toLocaleString("en-US");
+  };
+
+  const getDateValidationError = (value, mode) => {
+    const text = String(value || "");
+    if (!text) return "";
+
+    if (mode === "date" && text.length < 10) return "";
+    if (mode === "date_time" && text.length < 16) return "";
+    if (mode === "time" && text.length < 5) return "";
+
+    if (mode === "date") {
+      const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return "Invalid date";
+      const [_, y, m, d] = match;
+      const year = Number(y);
+      const month = Number(m);
+      const day = Number(d);
+      const date = new Date(year, month - 1, day);
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() + 1 !== month ||
+        date.getDate() !== day
+      ) {
+        return "Invalid date";
+      }
+      return "";
+    }
+
+    if (mode === "date_time") {
+      const match = text.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+      if (!match) return "Invalid date/time";
+      const [_, y, m, d, hh, mm] = match;
+      const year = Number(y);
+      const month = Number(m);
+      const day = Number(d);
+      const hour = Number(hh);
+      const minute = Number(mm);
+      if (hour > 23 || minute > 59) return "Invalid time";
+      const date = new Date(year, month - 1, day, hour, minute);
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() + 1 !== month ||
+        date.getDate() !== day
+      ) {
+        return "Invalid date";
+      }
+      return "";
+    }
+
+    if (mode === "time") {
+      const match = text.match(/^(\d{2}):(\d{2})$/);
+      if (!match) return "Invalid time";
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+      if (hour > 23 || minute > 59) return "Invalid time";
+      return "";
+    }
+
+    return "";
+  };
+
 
   const buildAppliedFilterLabel = (rule) => {
     const column = filterableColumns.find((col) => col.id === rule.columnId);
@@ -199,7 +270,14 @@ export default function FilteredFormSubmissionsPage({
 
     if (column.type === "number" || column.type === "date" || column.type === "date_time" || column.type === "time") {
       const op = { gt: ">", gte: ">=", lt: "<", lte: "<=", eq: "=" }[rule.operator] || "";
-      const val = rule.value ? String(rule.value) : "any";
+      const val =
+        column.type === "number"
+          ? rule.value
+            ? formatNumberDisplay(rule.value)
+            : "any"
+          : rule.value
+            ? String(rule.value)
+            : "any";
       return `${column.label} ${op} ${val}`.trim();
     }
 
@@ -276,6 +354,37 @@ export default function FilteredFormSubmissionsPage({
   const isColumnVisible = useCallback((columnId) => visibleColumnSet.has(columnId), [visibleColumnSet]);
 
   const filterableColumns = useMemo(() => {
+    const buildAssociationOptions = (labels) => {
+      const seen = new Set();
+      return (labels || [])
+        .map((label) => String(label || "").trim())
+        .filter((label) => label !== "")
+        .filter((label) => {
+          if (seen.has(label)) return false;
+          seen.add(label);
+          return true;
+        })
+        .map((label) => ({ value: label, label }));
+    };
+
+    const associationOptions = {
+      project: buildAssociationOptions(
+        submissions.map((s) => s.project?.name || s.associated_project_name),
+      ),
+      equipment: buildAssociationOptions(
+        submissions.map((s) => s.equipment?.label || s.associated_equipment_label),
+      ),
+      user: buildAssociationOptions(
+        submissions.map((s) => s.user?.full_name || s.associated_user_name),
+      ),
+      customer: buildAssociationOptions(
+        submissions.map((s) => s.customer?.name || s.associated_customer_name),
+      ),
+      cost_code: buildAssociationOptions(
+        submissions.map((s) => s.cost_code?.name || s.associated_cost_code_name),
+      ),
+    };
+
     const columns = [
       {
         id: "submission_id",
@@ -301,7 +410,8 @@ export default function FilteredFormSubmissionsPage({
       columns.push({
         id: "project",
         label: form?.project_question || "Project",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.project,
         getValue: (s) => s.project?.name || s.associated_project_name,
       });
     }
@@ -309,7 +419,8 @@ export default function FilteredFormSubmissionsPage({
       columns.push({
         id: "equipment",
         label: form?.equipment_question || "Equipment",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.equipment,
         getValue: (s) => s.equipment?.label || s.associated_equipment_label,
       });
     }
@@ -317,7 +428,8 @@ export default function FilteredFormSubmissionsPage({
       columns.push({
         id: "user",
         label: form?.user_question || "User",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.user,
         getValue: (s) => s.user?.full_name || s.associated_user_name,
       });
     }
@@ -325,7 +437,8 @@ export default function FilteredFormSubmissionsPage({
       columns.push({
         id: "customer",
         label: form?.customer_question || "Customer",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.customer,
         getValue: (s) => s.customer?.name || s.associated_customer_name,
       });
     }
@@ -333,7 +446,8 @@ export default function FilteredFormSubmissionsPage({
       columns.push({
         id: "cost_code",
         label: form?.cost_code_question || "Cost Code",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.cost_code,
         getValue: (s) => s.cost_code?.name || s.associated_cost_code_name,
       });
     }
@@ -359,7 +473,7 @@ export default function FilteredFormSubmissionsPage({
     });
 
     return columns;
-  }, [parsedFields, showProject, showEquipment, showUser, showCustomer, showCostCode, form]);
+  }, [parsedFields, showProject, showEquipment, showUser, showCustomer, showCostCode, form, submissions]);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((submission) => {
@@ -424,7 +538,44 @@ export default function FilteredFormSubmissionsPage({
     });
   }, [submissions, appliedFilterRules, filterableColumns]);
 
+  const isRuleComplete = useCallback(
+    (rule) => {
+      if (!rule?.columnId) return false;
+      const column = filterableColumns.find((col) => col.id === rule.columnId);
+      if (!column) return false;
+      if (column.type === "multiple_choice" || column.type === "checkbox") {
+        return Array.isArray(rule.values) && rule.values.length > 0;
+      }
+      return String(rule.value ?? "").trim() !== "";
+    },
+    [filterableColumns],
+  );
+
+  const hasIncompleteFilter = useMemo(
+    () => filterRules.some((rule) => !isRuleComplete(rule)),
+    [filterRules, isRuleComplete],
+  );
+
+  const hasFilterErrors = useMemo(() => {
+    return filterRules.some((rule) => {
+      if (!rule?.columnId) return false;
+      const column = filterableColumns.find((col) => col.id === rule.columnId);
+      if (!column) return false;
+      if (column.type === "date") {
+        return !!getDateValidationError(rule.value, "date");
+      }
+      if (column.type === "date_time") {
+        return !!getDateValidationError(rule.value, "date_time");
+      }
+      if (column.type === "time") {
+        return !!getDateValidationError(rule.value, "time");
+      }
+      return false;
+    });
+  }, [filterRules, filterableColumns]);
+
   const addFilterRule = () => {
+    if (hasIncompleteFilter) return;
     setFilterRules((prev) => [
       ...prev,
       {
@@ -823,13 +974,30 @@ export default function FilteredFormSubmissionsPage({
                     </View>
                   )}
 
-                  {!!rule.columnId && (column?.type === "text" || column?.type === "number") && (
+                  {!!rule.columnId && column?.type === "number" && (
                     <TextInput
                       style={[styles.filterInput, styles.filterInputField]}
-                      placeholder={column?.type === "number" ? "Value" : "Text"}
+                      placeholder="Value"
+                      value={formatDigitsDisplay(rule.value)}
+                      onChangeText={(text) =>
+                        updateRule(rule.id, {
+                          value: String(text || "").replace(/\D/g, ""),
+                        })
+                      }
+                      keyboardType="numeric"
+                      ref={(ref) => {
+                        inputRefs.current[rule.id] = ref;
+                      }}
+                    />
+                  )}
+
+                  {!!rule.columnId && column?.type === "text" && (
+                    <TextInput
+                      style={[styles.filterInput, styles.filterInputField]}
+                      placeholder="Text"
                       value={rule.value}
                       onChangeText={(text) => updateRule(rule.id, { value: text })}
-                      keyboardType={column?.type === "number" ? "numeric" : "default"}
+                      keyboardType="default"
                       ref={(ref) => {
                         inputRefs.current[rule.id] = ref;
                       }}
@@ -837,39 +1005,90 @@ export default function FilteredFormSubmissionsPage({
                   )}
 
                   {!!rule.columnId && column?.type === "date" && (
-                    <TextInput
-                      style={[styles.filterInput, styles.filterInputField]}
-                      placeholder="YYYY-MM-DD"
-                      value={rule.value}
-                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date") })}
-                      ref={(ref) => {
-                        inputRefs.current[rule.id] = ref;
-                      }}
-                    />
+                    <View style={styles.filterInputWrap}>
+                      {(() => {
+                        const error = getDateValidationError(rule.value, "date");
+                        return (
+                          <>
+                            <TextInput
+                              style={[
+                                styles.filterInput,
+                                styles.filterInputField,
+                                error && styles.filterInputError,
+                              ]}
+                              placeholder="YYYY-MM-DD"
+                              value={rule.value}
+                              onChangeText={(text) =>
+                                updateRule(rule.id, {
+                                  value: formatDateInput(text, "date"),
+                                })
+                              }
+                              ref={(ref) => {
+                                inputRefs.current[rule.id] = ref;
+                              }}
+                            />
+                          </>
+                        );
+                      })()}
+                    </View>
                   )}
 
                   {!!rule.columnId && column?.type === "date_time" && (
-                    <TextInput
-                      style={[styles.filterInput, styles.filterInputField]}
-                      placeholder="YYYY-MM-DD HH:mm"
-                      value={rule.value}
-                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "date_time") })}
-                      ref={(ref) => {
-                        inputRefs.current[rule.id] = ref;
-                      }}
-                    />
+                    <View style={styles.filterInputWrap}>
+                      {(() => {
+                        const error = getDateValidationError(rule.value, "date_time");
+                        return (
+                          <>
+                            <TextInput
+                              style={[
+                                styles.filterInput,
+                                styles.filterInputField,
+                                error && styles.filterInputError,
+                              ]}
+                              placeholder="YYYY-MM-DD HH:mm"
+                              value={rule.value}
+                              onChangeText={(text) =>
+                                updateRule(rule.id, {
+                                  value: formatDateInput(text, "date_time"),
+                                })
+                              }
+                              ref={(ref) => {
+                                inputRefs.current[rule.id] = ref;
+                              }}
+                            />
+                          </>
+                        );
+                      })()}
+                    </View>
                   )}
 
                   {!!rule.columnId && column?.type === "time" && (
-                    <TextInput
-                      style={[styles.filterInput, styles.filterInputField]}
-                      placeholder="HH:mm"
-                      value={rule.value}
-                      onChangeText={(text) => updateRule(rule.id, { value: formatDateInput(text, "time") })}
-                      ref={(ref) => {
-                        inputRefs.current[rule.id] = ref;
-                      }}
-                    />
+                    <View style={styles.filterInputWrap}>
+                      {(() => {
+                        const error = getDateValidationError(rule.value, "time");
+                        return (
+                          <>
+                            <TextInput
+                              style={[
+                                styles.filterInput,
+                                styles.filterInputField,
+                                error && styles.filterInputError,
+                              ]}
+                              placeholder="HH:mm"
+                              value={rule.value}
+                              onChangeText={(text) =>
+                                updateRule(rule.id, {
+                                  value: formatDateInput(text, "time"),
+                                })
+                              }
+                              ref={(ref) => {
+                                inputRefs.current[rule.id] = ref;
+                              }}
+                            />
+                          </>
+                        );
+                      })()}
+                    </View>
                   )}
 
                   <Pressable style={styles.removeFilterButton} onPress={() => removeRule(rule.id)}>
@@ -882,12 +1101,23 @@ export default function FilteredFormSubmissionsPage({
             )}
           </ScrollView>
           <View style={styles.filterActionsRow}>
-            <Pressable style={styles.addFilterButton} onPress={addFilterRule}>
+              <Pressable
+                style={[
+                  styles.addFilterButton,
+                  hasIncompleteFilter && styles.addFilterButtonDisabled,
+                ]}
+                onPress={addFilterRule}
+                disabled={hasIncompleteFilter}
+              >
               <Ionicons name="add" size={16} color="white" />
               <Text style={styles.addFilterText}>Add filter</Text>
             </Pressable>
             <Pressable
-              style={styles.applyFilterButton}
+              style={[
+                styles.applyFilterButton,
+                hasFilterErrors && styles.applyFilterButtonDisabled,
+              ]}
+              disabled={hasFilterErrors}
               onPress={() => {
                 setAppliedFilterRules(filterRules);
                 setFiltersOpen(false);
@@ -994,7 +1224,9 @@ export default function FilteredFormSubmissionsPage({
               <Text style={styles.filterToggleText}>Filters</Text>
               {appliedFilterRules.length > 0 && (
                 <View style={styles.filterCountBadge}>
-                  <Text style={styles.filterCountText}>{appliedFilterRules.length}</Text>
+                  <Text style={styles.filterCountText}>
+                    {formatCountDisplay(appliedFilterRules.length)}
+                  </Text>
                 </View>
               )}
             </Pressable>
@@ -1051,7 +1283,9 @@ export default function FilteredFormSubmissionsPage({
                   </View>
                 ) : (
                   <View style={styles.columnSelectorBadge}>
-                    <Text style={styles.columnSelectorBadgeText}>{visibleColumnCount}</Text>
+                    <Text style={styles.columnSelectorBadgeText}>
+                      {formatCountDisplay(visibleColumnCount)}
+                    </Text>
                   </View>
                 )}
                 <Ionicons
@@ -1295,7 +1529,7 @@ export default function FilteredFormSubmissionsPage({
               </Text>
               {submissionModalMode === "edit" && (
                 <Text style={styles.submissionModalSubtitle}>
-                  {editingSubmission?.id?.substring(0, 8)}...
+                  {editingSubmission?.id}
                 </Text>
               )}
             </View>
@@ -1897,6 +2131,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#161519",
   },
+  applyFilterButtonDisabled: {
+    opacity: 0.45,
+  },
   applyFilterText: {
     fontSize: 12,
     fontWeight: "600",
@@ -2223,10 +2460,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     width: "100%",
   },
+  filterInputWrap: {
+    flexBasis: "32%",
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 120,
+  },
   filterInputField: {
     flexBasis: "32%",
     flexGrow: 0,
     flexShrink: 1,
+  },
+  filterInputError: {
+    borderColor: colors.semantic.error,
   },
   dropdownButton: {
     flexDirection: "row",
