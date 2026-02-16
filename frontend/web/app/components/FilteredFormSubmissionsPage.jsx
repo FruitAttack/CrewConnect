@@ -368,6 +368,11 @@ export default function FilteredFormSubmissionsPage({
     };
 
     const associationOptions = {
+      submitted_by: buildAssociationOptions(
+        submissions.map(
+          (s) => s.submitter?.full_name || s.submitted_by_name || s.submitted_by,
+        ),
+      ),
       project: buildAssociationOptions(
         submissions.map((s) => s.project?.name || s.associated_project_name),
       ),
@@ -395,7 +400,8 @@ export default function FilteredFormSubmissionsPage({
       {
         id: "submitted_by",
         label: "Submitted By",
-        type: "text",
+        type: "multiple_choice",
+        options: associationOptions.submitted_by,
         getValue: (s) => s.submitter?.full_name || s.submitted_by_name || s.submitted_by,
       },
       {
@@ -763,10 +769,16 @@ export default function FilteredFormSubmissionsPage({
   };
 
   const closeFilterDrawer = useCallback(() => {
+    setFilterRules(
+      appliedFilterRules.map((rule) => ({
+        ...rule,
+        values: Array.isArray(rule.values) ? [...rule.values] : [],
+      })),
+    );
     setFiltersOpen(false);
     setOpenDropdown(null);
     setColumnSelectorOpen(false);
-  }, []);
+  }, [appliedFilterRules]);
 
   const renderFilterDrawer = (overlayStyle = null) => {
     if (!filtersOpen) return null;
@@ -797,21 +809,21 @@ export default function FilteredFormSubmissionsPage({
                 switch (column?.type) {
                   case "number":
                     return [
-                      { value: "gt", label: ">" },
-                      { value: "gte", label: ">=" },
-                      { value: "lt", label: "<" },
-                      { value: "lte", label: "<=" },
-                      { value: "eq", label: "=" },
+                      { value: "gt", label: "Greater than" },
+                      { value: "gte", label: "At least" },
+                      { value: "lt", label: "Less than" },
+                      { value: "lte", label: "At most" },
+                      { value: "eq", label: "Equal to" },
                     ];
                   case "date":
                   case "date_time":
                   case "time":
                     return [
-                      { value: "gt", label: ">" },
-                      { value: "gte", label: ">=" },
-                      { value: "lt", label: "<" },
-                      { value: "lte", label: "<=" },
-                      { value: "eq", label: "=" },
+                      { value: "gt", label: "After" },
+                      { value: "gte", label: "On or after" },
+                      { value: "lt", label: "Before" },
+                      { value: "lte", label: "On or before" },
+                      { value: "eq", label: "On" },
                     ];
                   case "multiple_choice":
                     return [
@@ -2382,7 +2394,7 @@ const styles = StyleSheet.create({
     flexBasis: "20%",
     flexGrow: 0,
     flexShrink: 0,
-    minWidth: 70,
+    minWidth: 110,
     maxWidth: 140,
   },
   filterFieldValues: {
