@@ -159,14 +159,20 @@ export default function LaborOverview() {
       setLoading(true);
       setError(null);
 
+      const startDate = selectedProject?.created_at ? selectedProject.created_at.split("T")[0] : null;
+
+      const endDate = new Date().toISOString().split("T")[0];
+
+      const filters = {
+        project_id: projectId,
+        end_date: endDate,
+        all_users: "true",
+        ...(startDate ? { start_date: startDate } : {}),
+      };
+
       const [ccRes, teRes] = await Promise.all([
         getAllProjectCostCodes(token, projectId),
-        getTimeEntries(token, companyId, {
-          project_id: projectId,
-          start_date: selectedProject?.created_at?.split("T")[0],
-          end_date: new Date().toISOString().split("T")[0],
-          all_users: "true",
-        }),
+        getTimeEntries(token, companyId, filters),
       ]);
 
       if (!ccRes.success) {

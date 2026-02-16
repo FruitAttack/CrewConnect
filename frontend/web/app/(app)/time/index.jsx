@@ -499,17 +499,17 @@ const s = StyleSheet.create({
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   loadingText: { fontSize: 13, color: colors.text.tertiary },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12, zIndex: 1001 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   
-  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
-  viewBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
-  viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
-  viewText: { fontSize: 12, fontWeight: '500', color: colors.text.tertiary },
+  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 8, padding: 4 },
+  viewBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  viewBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  viewText: { fontSize: 13, fontWeight: '500', color: colors.text.tertiary },
   viewTextActive: { color: colors.text.primary },
   
-  datePickerWrap: { position: 'relative', zIndex: 100 },
+  datePickerWrap: { position: 'relative', zIndex: 1001 },
   dateNav: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   navBtn: { padding: 6, borderRadius: 4 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.neutral.offWhite },

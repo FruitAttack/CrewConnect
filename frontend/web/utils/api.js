@@ -454,6 +454,34 @@ export async function removeAssignment(token, assignmentId) {
 }
 
 // ============================================
+// CREWS
+// ============================================
+export async function getCrews(token, companyId) {
+  return apiCall(`crews?company_id=${companyId}`, token)
+}
+
+export async function getCrew(token, crewId) {
+  return apiCall(`crews/${crewId}`, token)
+}
+
+export async function createCrew(token, data) {
+  return apiCall('crews', token, 'POST', data)
+}
+
+export async function updateCrew(token, crewId, data) {
+  return apiCall(`crews/${crewId}`, token, 'PUT', data)
+}
+
+export async function deleteCrew(token, crewId, hardDelete = false) {
+  const params = hardDelete ? '?hard_delete=true' : ''
+  return apiCall(`crews/${crewId}${params}`, token, 'DELETE')
+}
+
+export async function activateCrew(token, crewId) {
+  return apiCall(`crews/${crewId}/activate`, token, 'PATCH')
+}
+
+// ============================================
 // DAILY PRODUCTION
 // ============================================
 export async function getDailyProduction(token, companyId, filters = {}) {

@@ -15,6 +15,7 @@ import {
   getProjectCostCodes,
   getEquipment,
   getUserProfile,
+  getCrews,
 } from "../../../utils/api";
 
 // Mobile color scheme
@@ -318,6 +319,7 @@ export default function Live() {
   const token = session?.access_token;
   const params = useLocalSearchParams();
   const [companyId, setCompanyId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -325,6 +327,7 @@ export default function Live() {
   const [query, setQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [roster, setRoster] = useState([]);
+  const [myCrewMemberIds, setMyCrewMemberIds] = useState(new Set());
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -347,6 +350,7 @@ export default function Live() {
     return 'all';
   };
   const [statusFilter, setStatusFilter] = useState(getInitialFilter());
+  const [crewFilter, setCrewFilter] = useState('all'); // 'all' | 'my_crew'
 
   // Form data
   const [projects, setProjects] = useState([]);
@@ -365,12 +369,41 @@ export default function Live() {
     setLoading(true);
     try {
       const meRes = await getUserProfile(token);
-      const cid = meRes?.data?.user?.default_company_id;
+      const user = meRes?.data?.user;
+      const cid = user?.default_company_id;
       setCompanyId(cid);
+      setCurrentUser(user);
 
       if (cid) {
-        const res = await getActiveRoster(token, cid);
-        setRoster(res?.data?.roster || []);
+        const [rosterRes, crewsRes] = await Promise.all([
+          getActiveRoster(token, cid),
+          getCrews(token, cid),
+        ]);
+        setRoster(rosterRes?.data?.roster || []);
+
+        // Build set of user IDs in crews led by or containing the current user
+        const crews = crewsRes?.data?.crews || [];
+        const memberIds = new Set();
+        crews.forEach(crew => {
+          const isMyCrewAsForeman = crew.foreman_id === user?.id;
+          const isMyCrewAsMember = (crew.crew_members || []).some(m => (m.user?.id || m.user_id) === user?.id);
+          if (isMyCrewAsForeman || isMyCrewAsMember) {
+            // Add all members of this crew
+            (crew.crew_members || []).forEach(m => {
+              const uid = m.user?.id || m.user_id;
+              if (uid) memberIds.add(uid);
+            });
+            // Add the foreman too
+            if (crew.foreman_id) memberIds.add(crew.foreman_id);
+          }
+        });
+        setMyCrewMemberIds(memberIds);
+
+        // Auto-default foremen/supervisors to "My Crew" if they have one
+        const role = user?.role_key;
+        if (memberIds.size > 0 && (role === 'foreman' || role === 'supervisor')) {
+          setCrewFilter('my_crew');
+        }
       }
     } finally {
       setLoading(false);
@@ -420,6 +453,11 @@ export default function Live() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let result = roster;
+
+    // Filter by crew
+    if (crewFilter === 'my_crew' && myCrewMemberIds.size > 0) {
+      result = result.filter(r => myCrewMemberIds.has(r.user?.id));
+    }
     
     // Filter by search query
     if (q) {
@@ -469,7 +507,7 @@ export default function Live() {
     });
 
     return result;
-  }, [roster, query, statusFilter, sortField, sortDirection]);
+  }, [roster, query, statusFilter, crewFilter, myCrewMemberIds, sortField, sortDirection]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -672,6 +710,19 @@ export default function Live() {
               <Text style={[s.viewText, statusFilter === 'out' && s.viewTextActive]}>Clocked Out</Text>
             </Pressable>
           </View>
+
+          {/* Crew Filter Toggle */}
+          {myCrewMemberIds.size > 0 && (
+            <View style={s.viewToggle}>
+              <Pressable style={[s.viewBtn, crewFilter === 'all' && s.viewBtnActive]} onPress={() => setCrewFilter('all')}>
+                <Text style={[s.viewText, crewFilter === 'all' && s.viewTextActive]}>All</Text>
+              </Pressable>
+              <Pressable style={[s.viewBtn, crewFilter === 'my_crew' && s.viewBtnActive]} onPress={() => setCrewFilter('my_crew')}>
+                <Ionicons name="people" size={12} color={crewFilter === 'my_crew' ? colors.primary.orange : colors.text.tertiary} />
+                <Text style={[s.viewText, crewFilter === 'my_crew' && s.viewTextActive]}>My Crew</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         <View style={s.toolbarRight}>
@@ -1029,12 +1080,12 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 13, color: colors.text.primary, outlineStyle: 'none' },
 
   // Toggle buttons
-  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
-  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
-  viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
-  viewText: { fontSize: 12, fontWeight: '500', color: colors.text.tertiary },
+  viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 8, padding: 4 },
+  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  viewBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  viewText: { fontSize: 13, fontWeight: '500', color: colors.text.tertiary },
   viewTextActive: { color: colors.text.primary },
-  viewBtnCount: { fontSize: 11, fontWeight: '600', color: colors.text.tertiary, minWidth: 16, textAlign: 'center' },
+  viewBtnCount: { fontSize: 12, fontWeight: '600', color: colors.text.tertiary, minWidth: 18, textAlign: 'center' },
   viewBtnCountActive: { color: colors.primary.orange },
 
   // Legacy status stats (keeping for reference, can remove)

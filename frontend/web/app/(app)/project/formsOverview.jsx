@@ -8,11 +8,11 @@ import { useProject } from "../../components/projectComponents/projectContext";
  * Shows all form submissions associated with a specific project
  */
 export default function ProjectFormsOverview() {
-  const { selectedProject, selectedProjectID } = useProject();
+  const { selectedProject, selectedProjectId } = useProject();
   const { projectId: paramProjectId } = useLocalSearchParams();
   
   // Use context project first, fallback to params
-  const projectId = selectedProject?.id || selectedProjectID || paramProjectId;
+  const projectId = selectedProject?.id || selectedProjectId || paramProjectId;
   const projectName = selectedProject?.name || "Project";
 
   return (

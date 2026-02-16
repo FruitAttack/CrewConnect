@@ -9,12 +9,15 @@ import costCodesRoutes from './routes/costCodesRoutes.js';
 import customersRoutes from './routes/customersRoutes.js';
 import equipmentRoutes from './routes/equipmentRoutes.js';
 import employeeAssignmentsRoutes from './routes/employeeAssignmentsRoutes.js';
+import crewsRoutes from './routes/crewsRoutes.js';
 import timeEntriesRoutes from './routes/timeEntriesRoutes.js';
 import timecardApprovalsRoutes from "./routes/timecardApprovalsRoutes.js";
+import timeOffRoutes from "./routes/timeOffRoutes.js";
 import reportsRoutes from './routes/reportsRoutes.js';
 import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
+import mapRoutes from './routes/mapRoutes.js';
 
 const app = express();
 
@@ -31,12 +34,15 @@ app.use("/api/projects", projectsRoutes);
 app.use("/api/cost-codes", costCodesRoutes);
 app.use("/api/equipment", equipmentRoutes);
 app.use("/api/employee-assignments", employeeAssignmentsRoutes);
+app.use("/api/crews", crewsRoutes);
 app.use("/api/time-entries", timeEntriesRoutes);
 app.use("/api/timecard-approvals", timecardApprovalsRoutes);
+app.use("/api/time-off", timeOffRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/daily-production", dailyProductionRoutes);
 app.use("/api/forms", formsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
+app.use("/api/map", mapRoutes);
 
 // Health check
 app.get("/", (req, res) => {

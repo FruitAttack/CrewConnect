@@ -6,6 +6,7 @@ import { colors, shadows } from '../../../constants/theme';
 const tabs = [
   { key: 'index', label: 'Overview', icon: 'people-outline', path: '/workforce' },
   { key: 'employees', label: 'Employees', icon: 'person-outline', path: '/workforce/employees' },
+  { key: 'crews', label: 'Crews', icon: 'people-circle-outline', path: '/workforce/crews' },
   { key: 'costCodes', label: 'Cost Codes', icon: 'pricetag-outline', path: '/workforce/costCodes' },
 ];
 
@@ -16,6 +17,7 @@ export default function WorkforceLayout() {
   const getActiveTab = () => {
     if (pathname === '/workforce' || pathname === '/workforce/') return 'index';
     if (pathname.includes('/employees')) return 'employees';
+    if (pathname.includes('/crews')) return 'crews';
     if (pathname.includes('/costCodes')) return 'costCodes';
     return 'index';
   };
