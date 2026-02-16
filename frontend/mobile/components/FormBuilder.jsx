@@ -29,6 +29,7 @@ import { apiCall } from "../utils/api";
  */
 export default function FormBuilder({ form, onSubmit }) {
   const [formData, setFormData] = React.useState({});
+  const [formErrors, setFormErrors] = React.useState({});
   const { session } = useSession();
   const token = session?.access_token;
 
@@ -62,6 +63,9 @@ export default function FormBuilder({ form, onSubmit }) {
       ...prev,
       [fieldId]: value,
     }));
+    if (formErrors?.[fieldId]) {
+      setFormErrors((prev) => ({ ...prev, [fieldId]: undefined }));
+    }
   };
 
   const closeAllPickers = () => {
@@ -368,11 +372,39 @@ export default function FormBuilder({ form, onSubmit }) {
     if (form?.project_enabled) {
       setCostCodeId(null);
       setCostCodeQuery("");
-      handleFieldChange("cost_code_id", null);
     }
   }, [form?.project_enabled, projectId]);
 
   const handleSubmit = () => {
+    const isFieldVisible = (field) => {
+      if (!field?.conditional) return true;
+      const { dependsOn, value } = field.conditional;
+      return formData?.[dependsOn] === value;
+    };
+
+    const nextErrors = {};
+    (form?.fields || []).forEach((field) => {
+      if (!field?.required) return;
+      if (!isFieldVisible(field)) return;
+      const value = formData?.[field.id];
+      const isMissing =
+        field.type === FORM_FIELD_TYPES.CHECKBOX
+          ? !Array.isArray(value) || value.length === 0
+          : value === null || value === undefined || String(value).trim() === "";
+      if (isMissing) {
+        nextErrors[field.id] = `"${field.question}" is required.`;
+      }
+    });
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFormErrors(nextErrors);
+      return;
+    }
+
+    if (Object.keys(formErrors).length > 0) {
+      setFormErrors({});
+    }
+
     const submission = {
       formId: form.id,
       formTitle: form.title,
@@ -408,33 +440,35 @@ export default function FormBuilder({ form, onSubmit }) {
       editable: true,
     };
 
+    const errorText = formErrors?.[field.id];
+    let fieldContent = null;
+
     switch (field.type) {
       case FORM_FIELD_TYPES.SHORT_ANSWER:
-        return (
+        fieldContent = (
           <ShortAnswerQuestion
-            key={field.id}
             {...commonProps}
             value={value || ""}
             onChangeText={(text) => handleFieldChange(field.id, text)}
             placeholder={field.placeholder}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.NUMBER:
-        return (
+        fieldContent = (
           <NumberQuestion
-            key={field.id}
             {...commonProps}
             value={value || ""}
             onChangeText={(text) => handleFieldChange(field.id, text)}
             placeholder={field.placeholder}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.LONG_ANSWER:
-        return (
+        fieldContent = (
           <LongAnswerQuestion
-            key={field.id}
             {...commonProps}
             value={value || ""}
             onChangeText={(text) => handleFieldChange(field.id, text)}
@@ -442,22 +476,22 @@ export default function FormBuilder({ form, onSubmit }) {
             minLines={field.minLines || 4}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.MULTIPLE_CHOICE:
-        return (
+        fieldContent = (
           <MultipleChoiceQuestion
-            key={field.id}
             {...commonProps}
             value={value || null}
             onValueChange={(val) => handleFieldChange(field.id, val)}
             options={field.options}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.CHECKBOX:
-        return (
+        fieldContent = (
           <CheckboxQuestion
-            key={field.id}
             {...commonProps}
             value={value || []}
             onValueChange={(val) => {
@@ -475,51 +509,61 @@ export default function FormBuilder({ form, onSubmit }) {
             maxSelections={field.maxSelections}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.DATE:
-        return (
+        fieldContent = (
           <DateQuestion
-            key={field.id}
             {...commonProps}
             value={value || null}
             onValueChange={(date) => handleFieldChange(field.id, date)}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.DATE_TIME:
-        return (
+        fieldContent = (
           <DateTimeQuestion
-            key={field.id}
             {...commonProps}
             value={value || null}
             onValueChange={(dateTime) => handleFieldChange(field.id, dateTime)}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.TIME:
-        return (
+        fieldContent = (
           <TimeQuestion
-            key={field.id}
             {...commonProps}
             value={value || null}
             onValueChange={(time) => handleFieldChange(field.id, time)}
           />
         );
+        break;
 
       case FORM_FIELD_TYPES.PHOTO:
-        return (
+        fieldContent = (
           <PhotoUploadQuestion
-            key={field.id}
             {...commonProps}
             value={value || []}
             onValueChange={(photos) => handleFieldChange(field.id, photos)}
             maxPhotos={field.maxPhotos || 5}
           />
         );
+        break;
 
       default:
         return null;
     }
+
+    if (!fieldContent) return null;
+
+    return (
+      <View key={field.id} style={styles.fieldWrap}>
+        {fieldContent}
+        {!!errorText && <Text style={styles.fieldErrorText}>{errorText}</Text>}
+      </View>
+    );
   };
 
   return (
@@ -570,13 +614,16 @@ export default function FormBuilder({ form, onSubmit }) {
                   setValue={setProjectId}
                   setItems={setProjectItems}
                   placeholder="Select Project"
+                  listMode="SCROLLVIEW"
                   searchable
                   searchPlaceholder="Type to filter projects"
                   onChangeSearchText={setProjectQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
-                    handleFieldChange("project_id", value || null);
+                    if (!value) {
+                      setProjectId(null);
+                    }
                   }}
                 />
               </View>
@@ -628,6 +675,7 @@ export default function FormBuilder({ form, onSubmit }) {
                         : "Select a project first"
                       : "Select Cost Code"
                   }
+                      listMode="SCROLLVIEW"
                   disabled={form?.project_enabled && !projectId}
                   searchable
                   searchPlaceholder="Type to filter cost codes"
@@ -635,7 +683,9 @@ export default function FormBuilder({ form, onSubmit }) {
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
-                    handleFieldChange("cost_code_id", value || null);
+                    if (!value) {
+                      setCostCodeId(null);
+                    }
                   }}
                 />
               </View>
@@ -680,13 +730,16 @@ export default function FormBuilder({ form, onSubmit }) {
                   setValue={setUserId}
                   setItems={setUserItems}
                   placeholder="Select User"
+                  listMode="SCROLLVIEW"
                   searchable
                   searchPlaceholder="Type to filter users"
                   onChangeSearchText={setUserQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
-                    handleFieldChange("user_id", value || null);
+                    if (!value) {
+                      setUserId(null);
+                    }
                   }}
                 />
               </View>
@@ -731,13 +784,16 @@ export default function FormBuilder({ form, onSubmit }) {
                   setValue={setEquipmentId}
                   setItems={setEquipmentItems}
                   placeholder="Select Equipment"
+                  listMode="SCROLLVIEW"
                   searchable
                   searchPlaceholder="Type to filter equipment"
                   onChangeSearchText={setEquipmentQuery}
                   style={styles.dropdown}
                   dropDownContainerStyle={styles.dropdownContainer}
                   onChangeValue={(value) => {
-                    handleFieldChange("equipment_id", value || null);
+                    if (!value) {
+                      setEquipmentId(null);
+                    }
                   }}
                 />
               </View>
@@ -833,6 +889,17 @@ const styles = StyleSheet.create({
   buttonContainer: {
     gap: 12,
     marginTop: 12,
+  },
+  fieldWrap: {
+    marginBottom: 4,
+  },
+  fieldErrorText: {
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 6,
+    fontSize: 12,
+    color: "#e74c3c",
+    fontWeight: "600",
   },
   submitButton: {
     backgroundColor: "#000",
