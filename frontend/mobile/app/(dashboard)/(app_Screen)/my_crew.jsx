@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 
 const MyCrew = () => {
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [timeOffModalVisible, setTimeOffModalVisible] = useState(false);
   const [selectedCrewMember, setSelectedCrewMember] = useState(null);
+  const [selectedTimeOffRequest, setSelectedTimeOffRequest] = useState(null);
   const [crewMembers, setCrewMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,7 +42,19 @@ const MyCrew = () => {
           { date: '2025-01-31', day_name: 'SATURDAY', hours: 2.0 },
           { date: '2025-02-01', day_name: 'SUNDAY', hours: 0 },
         ]
-      }
+      },
+      time_off_requests: [
+        {
+          id: 101,
+          start_date: '2025-02-24',
+          end_date: '2025-02-26',
+          type: 'Vacation',
+          status: 'pending',
+          days: 3,
+          reason: 'Family vacation to Hawaii',
+          submitted_date: '2025-02-10',
+        }
+      ]
     },
     {
       id: 2,
@@ -69,7 +83,19 @@ const MyCrew = () => {
           { date: '2025-01-31', day_name: 'SATURDAY', hours: 2.0 },
           { date: '2025-02-01', day_name: 'SUNDAY', hours: 0 },
         ]
-      }
+      },
+      time_off_requests: [
+        {
+          id: 102,
+          start_date: '2025-03-03',
+          end_date: '2025-03-03',
+          type: 'Sick Leave',
+          status: 'pending',
+          days: 1,
+          reason: 'Doctor appointment',
+          submitted_date: '2025-02-12',
+        }
+      ]
     },
     {
       id: 3,
@@ -98,7 +124,8 @@ const MyCrew = () => {
           { date: '2025-02-07', day_name: 'SATURDAY', hours: 0 },
           { date: '2025-02-08', day_name: 'SUNDAY', hours: 0 },
         ]
-      }
+      },
+      time_off_requests: []
     },
     {
       id: 4,
@@ -127,7 +154,20 @@ const MyCrew = () => {
           { date: '2025-01-31', day_name: 'SATURDAY', hours: 0 },
           { date: '2025-02-01', day_name: 'SUNDAY', hours: 0 },
         ]
-      }
+      },
+      time_off_requests: [
+        {
+          id: 103,
+          start_date: '2025-02-20',
+          end_date: '2025-02-21',
+          type: 'Personal',
+          status: 'approved',
+          days: 2,
+          reason: 'Moving to new apartment',
+          submitted_date: '2025-02-05',
+          reviewed_date: '2025-02-06',
+        }
+      ]
     },
     {
       id: 5,
@@ -156,7 +196,31 @@ const MyCrew = () => {
           { date: '2025-02-07', day_name: 'SATURDAY', hours: 4.0 },
           { date: '2025-02-08', day_name: 'SUNDAY', hours: 0 },
         ]
-      }
+      },
+      time_off_requests: [
+        {
+          id: 104,
+          start_date: '2025-03-10',
+          end_date: '2025-03-14',
+          type: 'Vacation',
+          status: 'pending',
+          days: 5,
+          reason: 'Spring break with kids',
+          submitted_date: '2025-02-08',
+        },
+        {
+          id: 105,
+          start_date: '2025-02-17',
+          end_date: '2025-02-17',
+          type: 'Vacation',
+          status: 'denied',
+          days: 1,
+          reason: 'Presidents Day plans',
+          submitted_date: '2025-02-01',
+          reviewed_date: '2025-02-02',
+          denial_reason: 'Peak work period - all hands needed',
+        }
+      ]
     },
   ];
 
@@ -236,6 +300,56 @@ const MyCrew = () => {
 
   const handleApprove = (member) => {
     console.log('Approving timecard for:', member.name);
+  };
+
+  const handleApproveTimeOff = (request) => {
+    console.log('Approving time off request:', request.id);
+    // Update the request status to approved
+    setTimeOffModalVisible(false);
+  };
+
+  const handleDenyTimeOff = (request, reason) => {
+    console.log('Denying time off request:', request.id, 'Reason:', reason);
+    // Update the request status to denied with reason
+    setTimeOffModalVisible(false);
+  };
+
+  const getTimeOffStatusColor = (status) => {
+    switch (status) {
+      case 'approved':
+        return '#50c878';
+      case 'denied':
+        return '#e74c3c';
+      case 'pending':
+        return '#f39c12';
+      default:
+        return '#999';
+    }
+  };
+
+  const getTimeOffTypeColor = (type) => {
+    switch (type) {
+      case 'Vacation':
+        return '#4a90e2';
+      case 'Sick Leave':
+        return '#e74c3c';
+      case 'Personal':
+        return '#9b59b6';
+      default:
+        return '#999';
+    }
+  };
+
+  const getPendingTimeOffCount = () => {
+    return crewMembers.reduce((count, member) => {
+      return count + (member.time_off_requests?.filter(r => r.status === 'pending').length || 0);
+    }, 0);
+  };
+
+  const handleViewTimeOffDetails = (member, request) => {
+    setSelectedCrewMember(member);
+    setSelectedTimeOffRequest(request);
+    setTimeOffModalVisible(true);
   };
 
   const getPendingCount = () => {
@@ -320,7 +434,7 @@ const MyCrew = () => {
             Time Off
           </Text>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{crewMembers.filter(m => m.timecard.status === 'pending').length}</Text>
+            <Text style={styles.badgeText}>{getPendingTimeOffCount()}</Text>
           </View>
         </Pressable>
       </View>
@@ -351,87 +465,177 @@ const MyCrew = () => {
             />
           }
         >
-          {/* Ready to Sign Section */}
-          {readyToSignTimecards.length > 0 && (
-            <View style={styles.readyToSignSection}>
-              <View style={styles.readyToSignHeader}>
-                <Ionicons name="document-text-outline" size={20} color="#ff7a00" />
-                <Text style={styles.readyToSignTitle}>Ready to Sign</Text>
-                <Text style={styles.readyToSignSubtitle}>Jan 1, 2025 - Jan 31, 2025</Text>
-              </View>
-              
-              {readyToSignTimecards.map((member) => (
+          {selectedTab === 'timecards' ? (
+            <>
+              {/* Ready to Sign Section */}
+              {readyToSignTimecards.length > 0 && (
+                <View style={styles.readyToSignSection}>
+                  <View style={styles.readyToSignHeader}>
+                    <Ionicons name="document-text-outline" size={20} color="#ff7a00" />
+                    <Text style={styles.readyToSignTitle}>Ready to Sign</Text>
+                    <Text style={styles.readyToSignSubtitle}>Jan 1, 2025 - Jan 31, 2025</Text>
+                  </View>
+                  
+                  {readyToSignTimecards.map((member) => (
+                    <Pressable 
+                      key={`ready-${member.id}`}
+                      style={styles.readyToSignCard}
+                      onPress={() => handleViewDetails(member)}
+                    >
+                      <View style={styles.readyToSignCardContent}>
+                        <View style={[styles.readyToSignAvatar, { backgroundColor: member.color }]}>
+                          <Text style={styles.readyToSignAvatarText}>{member.initials}</Text>
+                        </View>
+                        
+                        <View style={styles.readyToSignInfo}>
+                          <Text style={styles.readyToSignName}>{member.name}</Text>
+                          <View style={styles.readyToSignMeta}>
+                            <View style={[styles.readyToSignStatusBadge, { backgroundColor: `${getStatusColor(member.timecard.status)}20` }]}>
+                              <View style={[styles.statusDot, { backgroundColor: getStatusColor(member.timecard.status) }]} />
+                              <Text style={[styles.readyToSignStatusText, { color: getStatusColor(member.timecard.status) }]}>
+                                {getStatusLabel(member.timecard.status)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <View style={styles.readyToSignHours}>
+                          <Text style={styles.readyToSignHoursValue}>
+                            {getTotalHours(member.timecard).toFixed(0)}h
+                          </Text>
+                          <Ionicons name="chevron-forward" size={20} color="#999" />
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {/* Crew Members List */}
+              {filteredCrewMembers.map((member) => (
                 <Pressable 
-                  key={`ready-${member.id}`}
-                  style={styles.readyToSignCard}
+                  key={member.id} 
+                  style={styles.card}
                   onPress={() => handleViewDetails(member)}
                 >
-                  <View style={styles.readyToSignCardContent}>
-                    <View style={[styles.readyToSignAvatar, { backgroundColor: member.color }]}>
-                      <Text style={styles.readyToSignAvatarText}>{member.initials}</Text>
+                  {/* Left colored border indicator */}
+                  <View style={[styles.leftBorder, { backgroundColor: member.color }]} />
+                  
+                  <View style={styles.cardContent}>
+                    {/* Avatar with Initials */}
+                    <View style={[styles.avatar, { backgroundColor: member.color }]}>
+                      <Text style={styles.avatarText}>{member.initials}</Text>
                     </View>
                     
-                    <View style={styles.readyToSignInfo}>
-                      <Text style={styles.readyToSignName}>{member.name}</Text>
-                      <View style={styles.readyToSignMeta}>
-                        <View style={[styles.readyToSignStatusBadge, { backgroundColor: `${getStatusColor(member.timecard.status)}20` }]}>
-                          <View style={[styles.statusDot, { backgroundColor: getStatusColor(member.timecard.status) }]} />
-                          <Text style={[styles.readyToSignStatusText, { color: getStatusColor(member.timecard.status) }]}>
-                            {getStatusLabel(member.timecard.status)}
-                          </Text>
-                        </View>
+                    {/* Member Info */}
+                    <View style={styles.infoSection}>
+                      <Text style={styles.memberName}>{member.name}</Text>
+                      <View style={styles.dateRow}>
+                        <Ionicons name="calendar-outline" size={14} color="#999" />
+                        <Text style={styles.dateText}>
+                          {formatDateRange(member.current_period.start_date, member.current_period.end_date)}
+                        </Text>
                       </View>
                     </View>
 
-                    <View style={styles.readyToSignHours}>
-                      <Text style={styles.readyToSignHoursValue}>
-                        {getTotalHours(member.timecard).toFixed(0)}h
+                    {/* Hours Display */}
+                    <View style={styles.hoursContainer}>
+                      <Text style={styles.hoursValue}>
+                        {member.current_period.total_hours.toFixed(0)}h
                       </Text>
-                      <Ionicons name="chevron-forward" size={20} color="#999" />
+                      <Text style={styles.hoursLabel}>Total</Text>
                     </View>
                   </View>
                 </Pressable>
               ))}
-            </View>
-          )}
-
-          {/* Crew Members List */}
-          {filteredCrewMembers.map((member) => (
-            <Pressable 
-              key={member.id} 
-              style={styles.card}
-              onPress={() => handleViewDetails(member)}
-            >
-              {/* Left colored border indicator */}
-              <View style={[styles.leftBorder, { backgroundColor: member.color }]} />
-              
-              <View style={styles.cardContent}>
-                {/* Avatar with Initials */}
-                <View style={[styles.avatar, { backgroundColor: member.color }]}>
-                  <Text style={styles.avatarText}>{member.initials}</Text>
-                </View>
+            </>
+          ) : (
+            /* Time Off Requests View */
+            <>
+              {filteredCrewMembers.map((member) => {
+                const requests = member.time_off_requests || [];
+                if (requests.length === 0) return null;
                 
-                {/* Member Info */}
-                <View style={styles.infoSection}>
-                  <Text style={styles.memberName}>{member.name}</Text>
-                  <View style={styles.dateRow}>
-                    <Ionicons name="calendar-outline" size={14} color="#999" />
-                    <Text style={styles.dateText}>
-                      {formatDateRange(member.current_period.start_date, member.current_period.end_date)}
-                    </Text>
-                  </View>
-                </View>
+                return (
+                  <View key={`timeoff-${member.id}`} style={styles.timeOffEmployeeCard}>
+                    {/* Employee Header */}
+                    <View style={styles.timeOffEmployeeHeader}>
+                      <View style={[styles.timeOffHeaderAvatar, { backgroundColor: member.color }]}>
+                        <Text style={styles.timeOffHeaderAvatarText}>{member.initials}</Text>
+                      </View>
+                      <View style={styles.timeOffHeaderInfo}>
+                        <Text style={styles.timeOffHeaderName}>{member.name}</Text>
+                        <Text style={styles.timeOffHeaderCount}>
+                          {requests.length} {requests.length === 1 ? 'request' : 'requests'}
+                          {requests.filter(r => r.status === 'pending').length > 0 && 
+                            ` · ${requests.filter(r => r.status === 'pending').length} pending`
+                          }
+                        </Text>
+                      </View>
+                    </View>
 
-                {/* Hours Display */}
-                <View style={styles.hoursContainer}>
-                  <Text style={styles.hoursValue}>
-                    {member.current_period.total_hours.toFixed(0)}h
-                  </Text>
-                  <Text style={styles.hoursLabel}>Total</Text>
+                    {/* Time Off Requests */}
+                    {requests.map((request, index) => (
+                      <View key={request.id}>
+                        <Pressable 
+                          style={styles.timeOffRequestItem}
+                          onPress={() => handleViewTimeOffDetails(member, request)}
+                        >
+                          <View style={styles.timeOffRequestLeft}>
+                            {/* Type Badge */}
+                            <View style={[styles.timeOffTypeBadge, { backgroundColor: `${getTimeOffTypeColor(request.type)}15` }]}>
+                              <Text style={[styles.timeOffTypeText, { color: getTimeOffTypeColor(request.type) }]}>
+                                {request.type}
+                              </Text>
+                            </View>
+                            
+                            {/* Dates */}
+                            <View style={styles.timeOffDates}>
+                              <View style={styles.timeOffDateRow}>
+                                <Ionicons name="calendar-outline" size={14} color="#666" />
+                                <Text style={styles.timeOffDateText}>
+                                  {formatDateRange(request.start_date, request.end_date)}
+                                </Text>
+                              </View>
+                              <Text style={styles.timeOffDaysText}>{request.days} {request.days === 1 ? 'day' : 'days'}</Text>
+                            </View>
+
+                            {/* Reason */}
+                            {request.reason && (
+                              <Text style={styles.timeOffReason} numberOfLines={2}>{request.reason}</Text>
+                            )}
+                          </View>
+
+                          <View style={styles.timeOffRequestRight}>
+                            <View style={[styles.timeOffStatusBadge, { backgroundColor: `${getTimeOffStatusColor(request.status)}20` }]}>
+                              <View style={[styles.statusDot, { backgroundColor: getTimeOffStatusColor(request.status) }]} />
+                              <Text style={[styles.timeOffStatusText, { color: getTimeOffStatusColor(request.status) }]}>
+                                {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                              </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color="#999" style={{ marginTop: 8 }} />
+                          </View>
+                        </Pressable>
+                        
+                        {/* Divider between requests within same employee card */}
+                        {index < requests.length - 1 && (
+                          <View style={styles.timeOffDivider} />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+              
+              {filteredCrewMembers.every(m => !m.time_off_requests || m.time_off_requests.length === 0) && (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="calendar-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>No time off requests</Text>
+                  <Text style={styles.emptySubtext}>All caught up!</Text>
                 </View>
-              </View>
-            </Pressable>
-          ))}
+              )}
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -565,6 +769,165 @@ const MyCrew = () => {
                       >
                         <Ionicons name="checkmark-circle" size={20} color="#fff" />
                         <Text style={styles.actionButtonText}>Approve Timecard</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Time Off Details Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={timeOffModalVisible}
+        onRequestClose={() => setTimeOffModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="calendar" size={24} color="#ff7a00" />
+              <Text style={styles.modalTitle}>Time Off Request</Text>
+              <Pressable 
+                onPress={() => setTimeOffModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </Pressable>
+            </View>
+            
+            <View style={styles.modalDivider} />
+            
+            <ScrollView 
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              {selectedCrewMember && selectedTimeOffRequest && (
+                <>
+                  {/* Employee Header */}
+                  <View style={styles.modalEmployeeSection}>
+                    <View style={[styles.modalAvatar, { backgroundColor: selectedCrewMember.color }]}>
+                      <Text style={styles.modalAvatarText}>{selectedCrewMember.initials}</Text>
+                    </View>
+                    <Text style={styles.modalEmployeeName}>{selectedCrewMember.name}</Text>
+                    
+                    <View style={[styles.timeOffTypeBadge, { 
+                      backgroundColor: `${getTimeOffTypeColor(selectedTimeOffRequest.type)}20`,
+                      marginTop: 8,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                    }]}>
+                      <Text style={[styles.timeOffTypeText, { 
+                        color: getTimeOffTypeColor(selectedTimeOffRequest.type),
+                        fontSize: 14,
+                        fontWeight: '600',
+                      }]}>
+                        {selectedTimeOffRequest.type}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.modalStatusBadge, { 
+                      backgroundColor: `${getTimeOffStatusColor(selectedTimeOffRequest.status)}20`,
+                      marginTop: 8,
+                    }]}>
+                      <View style={[styles.statusDot, { backgroundColor: getTimeOffStatusColor(selectedTimeOffRequest.status) }]} />
+                      <Text style={[styles.modalStatusText, { color: getTimeOffStatusColor(selectedTimeOffRequest.status) }]}>
+                        {selectedTimeOffRequest.status.charAt(0).toUpperCase() + selectedTimeOffRequest.status.slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Request Details */}
+                  <View style={styles.timeOffDetailsSection}>
+                    <View style={styles.timeOffDetailRow}>
+                      <Ionicons name="calendar-outline" size={20} color="#666" />
+                      <View style={styles.timeOffDetailContent}>
+                        <Text style={styles.timeOffDetailLabel}>Date Range</Text>
+                        <Text style={styles.timeOffDetailValue}>
+                          {formatDateRange(selectedTimeOffRequest.start_date, selectedTimeOffRequest.end_date)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.timeOffDetailRow}>
+                      <Ionicons name="time-outline" size={20} color="#666" />
+                      <View style={styles.timeOffDetailContent}>
+                        <Text style={styles.timeOffDetailLabel}>Duration</Text>
+                        <Text style={styles.timeOffDetailValue}>
+                          {selectedTimeOffRequest.days} {selectedTimeOffRequest.days === 1 ? 'day' : 'days'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.timeOffDetailRow}>
+                      <Ionicons name="document-text-outline" size={20} color="#666" />
+                      <View style={styles.timeOffDetailContent}>
+                        <Text style={styles.timeOffDetailLabel}>Submitted</Text>
+                        <Text style={styles.timeOffDetailValue}>
+                          {formatDate(selectedTimeOffRequest.submitted_date)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {selectedTimeOffRequest.reviewed_date && (
+                      <View style={styles.timeOffDetailRow}>
+                        <Ionicons name="checkmark-circle-outline" size={20} color="#666" />
+                        <View style={styles.timeOffDetailContent}>
+                          <Text style={styles.timeOffDetailLabel}>Reviewed</Text>
+                          <Text style={styles.timeOffDetailValue}>
+                            {formatDate(selectedTimeOffRequest.reviewed_date)}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Reason */}
+                  {selectedTimeOffRequest.reason && (
+                    <View style={styles.timeOffReasonSection}>
+                      <Text style={styles.sectionTitle}>Reason</Text>
+                      <View style={styles.timeOffReasonBox}>
+                        <Text style={styles.timeOffReasonText}>{selectedTimeOffRequest.reason}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Denial Reason */}
+                  {selectedTimeOffRequest.status === 'denied' && selectedTimeOffRequest.denial_reason && (
+                    <View style={styles.timeOffReasonSection}>
+                      <Text style={styles.sectionTitle}>Denial Reason</Text>
+                      <View style={[styles.timeOffReasonBox, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                        <Text style={[styles.timeOffReasonText, { color: '#991b1b' }]}>
+                          {selectedTimeOffRequest.denial_reason}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Actions for Pending Requests */}
+                  {selectedTimeOffRequest.status === 'pending' && (
+                    <View style={styles.modalActions}>
+                      <Pressable 
+                        style={styles.approveButton}
+                        onPress={() => handleApproveTimeOff(selectedTimeOffRequest)}
+                      >
+                        <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Approve Request</Text>
+                      </Pressable>
+                      
+                      <Pressable 
+                        style={styles.denyButton}
+                        onPress={() => {
+                          // In a real app, would show a text input for denial reason
+                          handleDenyTimeOff(selectedTimeOffRequest, 'Scheduling conflict');
+                        }}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Deny Request</Text>
                       </Pressable>
                     </View>
                   )}
@@ -1100,5 +1463,255 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
+  },
+  // Time Off Styles
+  timeOffEmployeeCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  timeOffEmployeeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fafafa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  timeOffHeaderAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  timeOffHeaderAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  timeOffHeaderInfo: {
+    flex: 1,
+  },
+  timeOffHeaderName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  timeOffHeaderCount: {
+    fontSize: 13,
+    color: '#666',
+  },
+  timeOffRequestItem: {
+    flexDirection: 'row',
+    padding: 16,
+  },
+  timeOffRequestLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  timeOffRequestRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  timeOffContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  timeOffEmployeeSection: {
+    marginBottom: 20,
+  },
+  timeOffAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  timeOffAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  timeOffEmployeeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  timeOffBadge: {
+    backgroundColor: '#fff3e6',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  timeOffBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ff7a00',
+  },
+  timeOffCard: {
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+  },
+  timeOffCardLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  timeOffCardRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  timeOffEmployeeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  timeOffCardAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  timeOffCardAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  timeOffCardEmployeeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  timeOffTypeBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  timeOffTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timeOffDates: {
+    marginBottom: 8,
+  },
+  timeOffDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  timeOffDateText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  timeOffDaysText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 20,
+  },
+  timeOffReason: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  timeOffStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  timeOffStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timeOffDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 16,
+  },
+  timeOffDetailsSection: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  timeOffDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  timeOffDetailContent: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  timeOffDetailLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  timeOffDetailValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  timeOffReasonSection: {
+    marginBottom: 20,
+  },
+  timeOffReasonBox: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e0f2fe',
+  },
+  timeOffReasonText: {
+    fontSize: 14,
+    color: '#0c4a6e',
+    lineHeight: 20,
+  },
+  approveButton: {
+    flexDirection: 'row',
+    backgroundColor: '#50c878',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  denyButton: {
+    flexDirection: 'row',
+    backgroundColor: '#e74c3c',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
 });
