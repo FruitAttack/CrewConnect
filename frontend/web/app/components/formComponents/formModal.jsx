@@ -89,13 +89,14 @@ export default function FormModal({
 
   const fieldTypes = [
     { value: FORM_FIELD_TYPES.SHORT_ANSWER, label: "Short Answer", icon: "text-outline" },
+    { value: FORM_FIELD_TYPES.NUMBER, label: "Number", icon: "calculator-outline" },
     { value: FORM_FIELD_TYPES.LONG_ANSWER, label: "Long Answer", icon: "document-text-outline" },
     { value: FORM_FIELD_TYPES.MULTIPLE_CHOICE, label: "Multiple Choice", icon: "radio-button-on-outline" },
     { value: FORM_FIELD_TYPES.CHECKBOX, label: "Checkboxes", icon: "checkbox-outline" },
     { value: FORM_FIELD_TYPES.DATE, label: "Date", icon: "calendar-outline" },
     { value: FORM_FIELD_TYPES.DATE_TIME, label: "Date & Time", icon: "time-outline" },
     { value: FORM_FIELD_TYPES.TIME, label: "Time Only", icon: "alarm-outline" },
-    { value: FORM_FIELD_TYPES.PHOTO, label: "Photo Upload", icon: "camera-outline" },
+    // { value: FORM_FIELD_TYPES.PHOTO, label: "Photo Upload", icon: "camera-outline" }, // Disable photo upload for now since we don't have a good way to handle uploads in the form submission API yet
   ];
 
   const canProceed = () => {
@@ -130,20 +131,14 @@ export default function FormModal({
 
   const addOption = (fieldIndex) => {
     const field = form.fields[fieldIndex];
-    const newOption = field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE 
-      ? { value: `option_${Date.now()}`, label: "" }
-      : "";
+    const newOption = "";
     updateField(fieldIndex, { options: [...(field.options || []), newOption] });
   };
 
   const updateOption = (fieldIndex, optionIndex, value) => {
     const field = form.fields[fieldIndex];
     const newOptions = [...field.options];
-    if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
-      newOptions[optionIndex] = { ...newOptions[optionIndex], label: value };
-    } else {
-      newOptions[optionIndex] = value;
-    }
+    newOptions[optionIndex] = value;
     updateField(fieldIndex, { options: newOptions });
   };
 
@@ -191,7 +186,7 @@ export default function FormModal({
       if (mode === "create") setForm(emptyForm);
       setCurrentStep(1);
       onClose();
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to submit form");
     } finally {
       setSaving(false);
@@ -536,28 +531,30 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
 
             {typeOpen && (
               <View style={styles.dropdownMenu}>
-                {fieldTypes.map((type) => (
-                  <Pressable
-                    key={type.value}
-                    onPress={() => {
-                      onUpdate(index, { type: type.value });
-                      setTypeOpen(false);
-                    }}
-                    style={[
-                      styles.dropdownItem,
-                      field.type === type.value && styles.dropdownItemActive,
-                    ]}
-                  >
-                    <Ionicons name={type.icon} size={16} color={colors.text.secondary} />
-                    <Text style={styles.dropdownItemText}>{type.label}</Text>
-                  </Pressable>
-                ))}
+                <ScrollView style={{ maxHeight: 220 }}>
+                  {fieldTypes.map((type) => (
+                    <Pressable
+                      key={type.value}
+                      onPress={() => {
+                        onUpdate(index, { type: type.value });
+                        setTypeOpen(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        field.type === type.value && styles.dropdownItemActive,
+                      ]}
+                    >
+                      <Ionicons name={type.icon} size={16} color={colors.text.secondary} />
+                      <Text style={styles.dropdownItemText}>{type.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </View>
             )}
           </View>
 
           {/* Placeholder (for text fields) */}
-          {(field.type === FORM_FIELD_TYPES.SHORT_ANSWER || field.type === FORM_FIELD_TYPES.LONG_ANSWER) && (
+          {(field.type === FORM_FIELD_TYPES.SHORT_ANSWER || field.type === FORM_FIELD_TYPES.LONG_ANSWER || field.type === FORM_FIELD_TYPES.NUMBER) && (
             <View style={styles.fieldEditorRow}>
               <FormLabel icon="text-outline" text="Placeholder" />
               <TextInput
@@ -588,7 +585,7 @@ function FieldEditor({ field, index, allFields, fieldTypes, onUpdate, onDelete, 
                 <View key={optIndex} style={styles.optionRow}>
                   <TextInput
                     style={[styles.input, { flex: 1 }]}
-                    value={typeof option === 'string' ? option : option.label}
+                    value={option}
                     onChangeText={(text) => onUpdateOption(index, optIndex, text)}
                     placeholder={`Option ${optIndex + 1}`}
                     placeholderTextColor={colors.text.tertiary}

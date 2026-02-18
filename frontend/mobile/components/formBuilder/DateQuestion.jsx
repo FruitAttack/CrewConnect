@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,12 +13,19 @@ export default function DateQuestion({
   maximumDate = null,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [tempDate, setTempDate] = useState(value || new Date());
+
+  useEffect(() => {
+    if (!showPicker) {
+      setTempDate(value || new Date());
+    }
+  }, [value, showPicker]);
 
   const handleDateChange = (event, selectedDate) => {
+    if (!selectedDate) return;
+    setTempDate(selectedDate);
     if (Platform.OS === "android") {
       setShowPicker(false);
-    }
-    if (selectedDate) {
       onValueChange(selectedDate);
     }
   };
@@ -41,7 +48,11 @@ export default function DateQuestion({
 
       <Pressable
         style={[styles.dateButton, !editable && styles.dateButtonDisabled]}
-        onPress={() => editable && setShowPicker(true)}
+        onPress={() => {
+          if (!editable) return;
+          setTempDate(value || new Date());
+          setShowPicker(true);
+        }}
         disabled={!editable}
       >
         <Ionicons name="calendar" size={20} color="#2196F3" />
@@ -52,7 +63,7 @@ export default function DateQuestion({
 
       {showPicker && (
         <DateTimePicker
-          value={value || new Date()}
+          value={tempDate}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={handleDateChange}
@@ -63,7 +74,13 @@ export default function DateQuestion({
 
       {Platform.OS === "ios" && showPicker && (
         <View style={styles.iosPickerActions}>
-          <Pressable style={styles.iosButton} onPress={() => setShowPicker(false)}>
+          <Pressable
+            style={styles.iosButton}
+            onPress={() => {
+              onValueChange(tempDate);
+              setShowPicker(false);
+            }}
+          >
             <Text style={styles.iosButtonText}>Done</Text>
           </Pressable>
         </View>

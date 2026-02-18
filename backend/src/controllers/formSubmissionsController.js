@@ -6,14 +6,21 @@ import { supabase } from '../utils/supabase.js';
  */
 export async function getAllFormSubmissions(req, res) {
   try {
-    const { form_id, formId, userId, projectId, equipmentId, vehicleId, customerId, costCodeId, startDate, endDate } = req.query;
+    const { form_id, formId, userId, projectId, equipmentId, costCodeId, startDate, endDate } = req.query;
     
     // Accept both form_id and formId for compatibility
     const filterFormId = form_id || formId;
 
     let query = supabase
       .from('form_submissions')
-      .select('*')
+      .select(`
+        *,
+        submitter:submitted_by(id, full_name, email),
+        project:associated_project_id(id, name),
+        equipment:associated_equipment_id(id, label),
+        user:associated_user_id(id, full_name),
+        cost_code:associated_cost_code_id(id, name)
+      `)
       .order('submitted_at', { ascending: false });
 
     // Filter by form
@@ -32,12 +39,6 @@ export async function getAllFormSubmissions(req, res) {
     }
     if (equipmentId) {
       query = query.eq('associated_equipment_id', equipmentId);
-    }
-    if (vehicleId) {
-      query = query.eq('associated_vehicle_id', vehicleId);
-    }
-    if (customerId) {
-      query = query.eq('associated_customer_id', customerId);
     }
     if (costCodeId) {
       query = query.eq('associated_cost_code_id', costCodeId);
@@ -105,8 +106,6 @@ export async function getFormSubmission(req, res) {
  *   associatedProjectId,
  *   associatedEquipmentId,
  *   associatedUserId,
- *   associatedVehicleId,
- *   associatedCustomerId,
  *   associatedCostCodeId,
  *   company_id
  * }
@@ -119,8 +118,6 @@ export async function createFormSubmission(req, res) {
       associatedProjectId,
       associatedEquipmentId,
       associatedUserId,
-      associatedVehicleId,
-      associatedCustomerId,
       associatedCostCodeId,
       company_id
     } = req.body;
@@ -192,8 +189,6 @@ export async function createFormSubmission(req, res) {
         associated_project_id: associatedProjectId || null,
         associated_equipment_id: associatedEquipmentId || null,
         associated_user_id: associatedUserId || null,
-        associated_vehicle_id: associatedVehicleId || null,
-        associated_customer_id: associatedCustomerId || null,
         associated_cost_code_id: associatedCostCodeId || null,
       }])
       .select()

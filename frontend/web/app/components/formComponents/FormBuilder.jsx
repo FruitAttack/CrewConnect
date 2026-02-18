@@ -6,8 +6,8 @@ import {
   Text,
   Pressable,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
-import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ShortAnswerQuestion,
@@ -19,44 +19,86 @@ import {
   DateTimeQuestion,
   TimeQuestion,
   PhotoUploadQuestion,
-} from "./formBuilder/index.js";
-import { FORM_FIELD_TYPES } from "../utils/formSchema";
-import { useSession } from "../utils/ctx";
-import { apiCall } from "../utils/api";
+} from "../formBuilder/index.js";
+import { FORM_FIELD_TYPES } from "../../../utils/formSchema";
+import { useSession } from "../../../utils/ctx";
+import { apiCall } from "../../../utils/api";
 
 /**
- * Generic FormBuilder component that renders forms from JSON schema
+ * Web FormBuilder component that renders forms from JSON schema
  */
-export default function FormBuilder({ form, onSubmit }) {
-  const [formData, setFormData] = React.useState({});
+export default function FormBuilder({
+  form,
+  onSubmit,
+  submitLabel = "Submit Form",
+  showHeader = true,
+  initialData = {},
+  initialAssociations = {},
+}) {
+  const [formData, setFormData] = React.useState(initialData || {});
   const [formErrors, setFormErrors] = React.useState({});
   const { session } = useSession();
   const token = session?.access_token;
+  const parsedFields = React.useMemo(() => {
+    if (!form?.fields) return [];
+    try {
+      return typeof form.fields === "string"
+        ? JSON.parse(form.fields)
+        : form.fields;
+    } catch (_err) {
+      return [];
+    }
+  }, [form?.fields]);
 
   const [projectOpen, setProjectOpen] = React.useState(false);
-  const [projectId, setProjectId] = React.useState(null);
+  const [projectId, setProjectId] = React.useState(
+    initialAssociations.projectId || null,
+  );
   const [projectItems, setProjectItems] = React.useState([]);
-  const [loadingProjects, setLoadingProjects] = React.useState(false);
   const [projectQuery, setProjectQuery] = React.useState("");
+  const [loadingProjects, setLoadingProjects] = React.useState(false);
 
   const [equipmentOpen, setEquipmentOpen] = React.useState(false);
-  const [equipmentId, setEquipmentId] = React.useState(null);
+  const [equipmentId, setEquipmentId] = React.useState(
+    initialAssociations.equipmentId || null,
+  );
   const [equipmentItems, setEquipmentItems] = React.useState([]);
-  const [loadingEquipment, setLoadingEquipment] = React.useState(false);
   const [equipmentQuery, setEquipmentQuery] = React.useState("");
+  const [loadingEquipment, setLoadingEquipment] = React.useState(false);
 
   const [userOpen, setUserOpen] = React.useState(false);
-  const [userId, setUserId] = React.useState(null);
+  const [userId, setUserId] = React.useState(
+    initialAssociations.userId || null,
+  );
   const [userItems, setUserItems] = React.useState([]);
   const [loadingUsers, setLoadingUsers] = React.useState(false);
   const [userQuery, setUserQuery] = React.useState("");
 
   const [costCodeOpen, setCostCodeOpen] = React.useState(false);
-  const [costCodeId, setCostCodeId] = React.useState(null);
+  const [costCodeId, setCostCodeId] = React.useState(
+    initialAssociations.costCodeId || null,
+  );
   const [costCodeItems, setCostCodeItems] = React.useState([]);
-  const [loadingCostCodes, setLoadingCostCodes] = React.useState(false);
   const [costCodeQuery, setCostCodeQuery] = React.useState("");
+  const [loadingCostCodes, setLoadingCostCodes] = React.useState(false);
   const [activeAssociation, setActiveAssociation] = React.useState(null);
+
+  React.useEffect(() => {
+    setFormData(initialData || {});
+  }, [form?.id, initialData]);
+
+  React.useEffect(() => {
+    setProjectId(initialAssociations.projectId || null);
+    setEquipmentId(initialAssociations.equipmentId || null);
+    setUserId(initialAssociations.userId || null);
+    setCostCodeId(initialAssociations.costCodeId || null);
+  }, [
+    form?.id,
+    initialAssociations.projectId,
+    initialAssociations.equipmentId,
+    initialAssociations.userId,
+    initialAssociations.costCodeId,
+  ]);
 
   const handleFieldChange = (fieldId, value) => {
     setFormData((prev) => ({
@@ -95,11 +137,16 @@ export default function FormBuilder({ form, onSubmit }) {
   };
 
   const onCostCodeOpen = () => {
-    if (form?.project_enabled && !projectId) return;
     closeAllPickers();
     setActiveAssociation("costCode");
     setCostCodeOpen(true);
   };
+
+  const getAssociationStackIndex = (name) =>
+    activeAssociation === name ? 4000 : 1;
+
+  const getAssociationElevation = (name) =>
+    activeAssociation === name ? 20 : 2;
 
   const filteredProjectItems = React.useMemo(() => {
     if (!projectQuery.trim()) return projectItems;
@@ -116,6 +163,24 @@ export default function FormBuilder({ form, onSubmit }) {
     const match = (projectItems || []).find((item) => item.value === projectId);
     return match?.label || "";
   }, [projectId, projectItems]);
+
+  const filteredCostCodeItems = React.useMemo(() => {
+    if (!costCodeQuery.trim()) return costCodeItems;
+    const query = costCodeQuery.trim().toLowerCase();
+    return (costCodeItems || []).filter((item) =>
+      String(item.label || "")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [costCodeItems, costCodeQuery]);
+
+  const selectedCostCodeLabel = React.useMemo(() => {
+    if (!costCodeId) return "";
+    const match = (costCodeItems || []).find(
+      (item) => item.value === costCodeId,
+    );
+    return match?.label || "";
+  }, [costCodeId, costCodeItems]);
 
   const filteredEquipmentItems = React.useMemo(() => {
     if (!equipmentQuery.trim()) return equipmentItems;
@@ -151,31 +216,13 @@ export default function FormBuilder({ form, onSubmit }) {
     return match?.label || "";
   }, [userId, userItems]);
 
-  const filteredCostCodeItems = React.useMemo(() => {
-    if (!costCodeQuery.trim()) return costCodeItems;
-    const query = costCodeQuery.trim().toLowerCase();
-    return (costCodeItems || []).filter((item) =>
-      String(item.label || "")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [costCodeItems, costCodeQuery]);
-
-  const selectedCostCodeLabel = React.useMemo(() => {
-    if (!costCodeId) return "";
-    const match = (costCodeItems || []).find(
-      (item) => item.value === costCodeId,
-    );
-    return match?.label || "";
-  }, [costCodeId, costCodeItems]);
-
   React.useEffect(() => {
     if (!form?.project_enabled || !token) return;
     let isMounted = true;
     (async () => {
       setLoadingProjects(true);
       try {
-        const res = await apiCall(token, "projects", "GET");
+        const res = await apiCall("projects", token, "GET");
         if (res.success && res.data) {
           const projectsData = Array.isArray(res.data)
             ? res.data
@@ -204,7 +251,7 @@ export default function FormBuilder({ form, onSubmit }) {
     (async () => {
       setLoadingEquipment(true);
       try {
-        const res = await apiCall(token, "equipment", "GET");
+        const res = await apiCall("equipment", token, "GET");
         if (res.success && res.data) {
           const equipmentData = Array.isArray(res.data)
             ? res.data
@@ -242,7 +289,7 @@ export default function FormBuilder({ form, onSubmit }) {
         const queryParams = companyId
           ? `?company_id=${companyId}&active=true`
           : "?active=true";
-        const res = await apiCall(token, `users${queryParams}`, "GET");
+        const res = await apiCall(`users${queryParams}`, token, "GET");
         if (res.success && res.data?.users) {
           if (isMounted) {
             setUserItems(
@@ -263,30 +310,6 @@ export default function FormBuilder({ form, onSubmit }) {
   }, [form?.user_enabled, token, session?.user?.default_company_id]);
 
   React.useEffect(() => {
-    if (!projectId) {
-      setProjectQuery("");
-      return;
-    }
-    const match = (projectItems || []).find((item) => item.value === projectId);
-    if (match) {
-      setProjectQuery(match.label || "");
-    }
-  }, [projectId, projectItems]);
-
-  React.useEffect(() => {
-    if (!equipmentId) {
-      setEquipmentQuery("");
-      return;
-    }
-    const match = (equipmentItems || []).find(
-      (item) => item.value === equipmentId,
-    );
-    if (match) {
-      setEquipmentQuery(match.label || "");
-    }
-  }, [equipmentId, equipmentItems]);
-
-  React.useEffect(() => {
     if (!userId) {
       setUserQuery("");
       return;
@@ -296,19 +319,6 @@ export default function FormBuilder({ form, onSubmit }) {
       setUserQuery(match.label || "");
     }
   }, [userId, userItems]);
-
-  React.useEffect(() => {
-    if (!costCodeId) {
-      setCostCodeQuery("");
-      return;
-    }
-    const match = (costCodeItems || []).find(
-      (item) => item.value === costCodeId,
-    );
-    if (match) {
-      setCostCodeQuery(match.label || "");
-    }
-  }, [costCodeId, costCodeItems]);
 
   React.useEffect(() => {
     if (!form?.cost_code_enabled || !token) return;
@@ -325,7 +335,7 @@ export default function FormBuilder({ form, onSubmit }) {
         }
         let res = null;
         if (form?.project_enabled && projectId) {
-          res = await apiCall(token, `projects/${projectId}/cost-codes`, "GET");
+          res = await apiCall(`projects/${projectId}/cost-codes`, token, "GET");
           if (res.success && res.data) {
             const costCodesData = Array.isArray(res.data)
               ? res.data
@@ -342,7 +352,7 @@ export default function FormBuilder({ form, onSubmit }) {
             }
           }
         } else {
-          res = await apiCall(token, "cost-codes", "GET");
+          res = await apiCall("cost-codes", token, "GET");
           if (res.success && res.data) {
             const costCodesData = Array.isArray(res.data)
               ? res.data
@@ -371,7 +381,7 @@ export default function FormBuilder({ form, onSubmit }) {
   React.useEffect(() => {
     if (form?.project_enabled) {
       setCostCodeId(null);
-      setCostCodeQuery("");
+      handleFieldChange("cost_code_id", null);
     }
   }, [form?.project_enabled, projectId]);
 
@@ -383,7 +393,7 @@ export default function FormBuilder({ form, onSubmit }) {
     };
 
     const nextErrors = {};
-    (form?.fields || []).forEach((field) => {
+    (parsedFields || []).forEach((field) => {
       if (!field?.required) return;
       if (!isFieldVisible(field)) return;
       const value = formData?.[field.id];
@@ -405,10 +415,27 @@ export default function FormBuilder({ form, onSubmit }) {
       setFormErrors({});
     }
 
+    const sanitizedData = { ...formData };
+    delete sanitizedData.project_id;
+    delete sanitizedData.cost_code_id;
+    delete sanitizedData.equipment_id;
+    delete sanitizedData.user_id;
+    Object.keys(sanitizedData).forEach((key) => {
+      const value = sanitizedData[key];
+      if (value instanceof Date) {
+        sanitizedData[key] = value.toISOString();
+        return;
+      }
+      if (Array.isArray(value)) {
+        sanitizedData[key] = value.map((item) =>
+          item instanceof Date ? item.toISOString() : item,
+        );
+      }
+    });
     const submission = {
       formId: form.id,
       formTitle: form.title,
-      data: formData,
+      data: sanitizedData,
       submittedAt: new Date().toISOString(),
       associatedProjectId: projectId || null,
       associatedEquipmentId: equipmentId || null,
@@ -418,14 +445,7 @@ export default function FormBuilder({ form, onSubmit }) {
     onSubmit(submission);
   };
 
-  const getAssociationStackIndex = (name) =>
-    activeAssociation === name ? 1000 : 1;
-
-  const getAssociationElevation = (name) =>
-    activeAssociation === name ? 20 : 2;
-
   const renderField = (field) => {
-    // Check if field should be shown based on conditional logic
     if (field.conditional) {
       const { dependsOn, value } = field.conditional;
       if (formData[dependsOn] !== value) {
@@ -434,13 +454,12 @@ export default function FormBuilder({ form, onSubmit }) {
     }
 
     const value = formData[field.id];
+    const errorText = formErrors?.[field.id];
     const commonProps = {
       question: field.question,
       required: field.required || false,
       editable: true,
     };
-
-    const errorText = formErrors?.[field.id];
     let fieldContent = null;
 
     switch (field.type) {
@@ -572,10 +591,12 @@ export default function FormBuilder({ form, onSubmit }) {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>{form.title}</Text>
-          <Text style={styles.description}>{form.description}</Text>
-        </View>
+        {showHeader && (
+          <View style={styles.header}>
+            <Text style={styles.title}>{form.title}</Text>
+            <Text style={styles.description}>{form.description}</Text>
+          </View>
+        )}
 
         {form?.project_enabled && (
           <View
@@ -590,44 +611,76 @@ export default function FormBuilder({ form, onSubmit }) {
             <Text style={styles.associationLabel}>
               {form.project_question || "Select Project"}
             </Text>
-            {loadingProjects ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#000" />
-                <Text style={styles.loadingText}>Loading projects...</Text>
-              </View>
-            ) : (
-              <View style={{ zIndex: 5000 }}>
-                <DropDownPicker
-                  open={projectOpen}
-                  onOpen={() => {
-                    closeAllPickers();
-                    setActiveAssociation("project");
-                    setProjectOpen(true);
-                  }}
-                  onClose={() => {
-                    setProjectOpen(false);
-                    setActiveAssociation(null);
-                  }}
-                  value={projectId}
-                  items={filteredProjectItems}
-                  setOpen={setProjectOpen}
-                  setValue={setProjectId}
-                  setItems={setProjectItems}
-                  placeholder="Select Project"
-                  listMode="SCROLLVIEW"
-                  searchable
-                  searchPlaceholder="Type to filter projects"
-                  onChangeSearchText={setProjectQuery}
-                  style={styles.dropdown}
-                  dropDownContainerStyle={styles.dropdownContainer}
-                  onChangeValue={(value) => {
-                    if (!value) {
-                      setProjectId(null);
+            <View>
+              {loadingProjects ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading projects...</Text>
+                </View>
+              ) : (
+                <View style={styles.userSelectContainer}>
+                  <TextInput
+                    value={
+                      projectQuery !== "" ? projectQuery : selectedProjectLabel
                     }
-                  }}
-                />
-              </View>
-            )}
+                    onFocus={onProjectOpen}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        setProjectOpen(false);
+                        setActiveAssociation(null);
+                      }, 150)
+                    }
+                    onChangeText={(text) => {
+                      if (projectId) setProjectId(null);
+                      setProjectQuery(text);
+                      handleFieldChange("project_id", null);
+                      setProjectOpen(true);
+                    }}
+                    placeholder="Select Project"
+                    style={styles.userSelectInput}
+                  />
+                  {projectOpen && (
+                    <View
+                      style={[
+                        styles.userSelectDropdown,
+                        { elevation: getAssociationElevation("project") },
+                      ]}
+                    >
+                      {filteredProjectItems.length > 0 ? (
+                        <ScrollView style={styles.userSelectList}>
+                          {filteredProjectItems.map((item) => (
+                            <Pressable
+                              key={item.value}
+                              onPress={() => {
+                                setProjectId(item.value);
+                                setProjectQuery(item.label || "");
+                                handleFieldChange(
+                                  "project_id",
+                                  item.value || null,
+                                );
+                                setProjectOpen(false);
+                                setActiveAssociation(null);
+                              }}
+                              style={styles.userSelectItem}
+                            >
+                              <Text style={styles.userSelectItemText}>
+                                {item.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : (
+                        <View style={styles.userSelectEmpty}>
+                          <Text style={styles.userSelectEmptyText}>
+                            No projects found
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         )}
 
@@ -644,106 +697,85 @@ export default function FormBuilder({ form, onSubmit }) {
             <Text style={styles.associationLabel}>
               {form.cost_code_question || "Select Cost Code"}
             </Text>
-            {loadingCostCodes ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#000" />
-                <Text style={styles.loadingText}>Loading cost codes...</Text>
-              </View>
-            ) : (
-              <View style={{ zIndex: 4000 }}>
-                <DropDownPicker
-                  open={costCodeOpen}
-                  onOpen={() => {
-                    if (form?.project_enabled && !projectId) return;
-                    closeAllPickers();
-                    setActiveAssociation("costCode");
-                    setCostCodeOpen(true);
-                  }}
-                  onClose={() => {
-                    setCostCodeOpen(false);
-                    setActiveAssociation(null);
-                  }}
-                  value={costCodeId}
-                  items={filteredCostCodeItems}
-                  setOpen={setCostCodeOpen}
-                  setValue={setCostCodeId}
-                  setItems={setCostCodeItems}
-                  placeholder={
-                    form?.project_enabled
-                      ? projectId
-                        ? "Select Cost Code"
-                        : "Select a project first"
-                      : "Select Cost Code"
-                  }
-                      listMode="SCROLLVIEW"
-                  disabled={form?.project_enabled && !projectId}
-                  searchable
-                  searchPlaceholder="Type to filter cost codes"
-                  onChangeSearchText={setCostCodeQuery}
-                  style={styles.dropdown}
-                  dropDownContainerStyle={styles.dropdownContainer}
-                  onChangeValue={(value) => {
-                    if (!value) {
-                      setCostCodeId(null);
+            <View>
+              {loadingCostCodes ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading cost codes...</Text>
+                </View>
+              ) : (
+                <View style={styles.userSelectContainer}>
+                  <TextInput
+                    value={
+                      costCodeQuery !== ""
+                        ? costCodeQuery
+                        : selectedCostCodeLabel
                     }
-                  }}
-                />
-              </View>
-            )}
-          </View>
-        )}
-
-        {form?.user_enabled && (
-          <View
-            style={[
-              styles.containerQuestion,
-              {
-                zIndex: getAssociationStackIndex("user"),
-                elevation: getAssociationElevation("user"),
-              },
-            ]}
-          >
-            <Text style={styles.associationLabel}>
-              {form.user_question || "Select User"}
-            </Text>
-            {loadingUsers ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#000" />
-                <Text style={styles.loadingText}>Loading users...</Text>
-              </View>
-            ) : (
-              <View style={{ zIndex: 3000 }}>
-                <DropDownPicker
-                  open={userOpen}
-                  onOpen={() => {
-                    closeAllPickers();
-                    setActiveAssociation("user");
-                    setUserOpen(true);
-                  }}
-                  onClose={() => {
-                    setUserOpen(false);
-                    setActiveAssociation(null);
-                  }}
-                  value={userId}
-                  items={filteredUserItems}
-                  setOpen={setUserOpen}
-                  setValue={setUserId}
-                  setItems={setUserItems}
-                  placeholder="Select User"
-                  listMode="SCROLLVIEW"
-                  searchable
-                  searchPlaceholder="Type to filter users"
-                  onChangeSearchText={setUserQuery}
-                  style={styles.dropdown}
-                  dropDownContainerStyle={styles.dropdownContainer}
-                  onChangeValue={(value) => {
-                    if (!value) {
-                      setUserId(null);
+                    onFocus={onCostCodeOpen}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        setCostCodeOpen(false);
+                        setActiveAssociation(null);
+                      }, 150)
                     }
-                  }}
-                />
-              </View>
-            )}
+                    onChangeText={(text) => {
+                      if (costCodeId) setCostCodeId(null);
+                      setCostCodeQuery(text);
+                      handleFieldChange("cost_code_id", null);
+                      setCostCodeOpen(true);
+                    }}
+                    placeholder={
+                      form?.project_enabled
+                        ? projectId
+                          ? "Select Cost Code"
+                          : "Select a project first"
+                        : "Select Cost Code"
+                    }
+                    editable={!(form?.project_enabled && !projectId)}
+                    style={styles.userSelectInput}
+                  />
+                  {costCodeOpen && (
+                    <View
+                      style={[
+                        styles.userSelectDropdown,
+                        { elevation: getAssociationElevation("costCode") },
+                      ]}
+                    >
+                      {filteredCostCodeItems.length > 0 ? (
+                        <ScrollView style={styles.userSelectList}>
+                          {filteredCostCodeItems.map((item) => (
+                            <Pressable
+                              key={item.value}
+                              onPress={() => {
+                                setCostCodeId(item.value);
+                                setCostCodeQuery(item.label || "");
+                                handleFieldChange(
+                                  "cost_code_id",
+                                  item.value || null,
+                                );
+                                setCostCodeOpen(false);
+                                setActiveAssociation(null);
+                              }}
+                              style={styles.userSelectItem}
+                            >
+                              <Text style={styles.userSelectItemText}>
+                                {item.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : (
+                        <View style={styles.userSelectEmpty}>
+                          <Text style={styles.userSelectEmptyText}>
+                            No cost codes found
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         )}
 
@@ -760,55 +792,171 @@ export default function FormBuilder({ form, onSubmit }) {
             <Text style={styles.associationLabel}>
               {form.equipment_question || "Select Equipment"}
             </Text>
-            {loadingEquipment ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#000" />
-                <Text style={styles.loadingText}>Loading equipment...</Text>
-              </View>
-            ) : (
-              <View style={{ zIndex: 2000 }}>
-                <DropDownPicker
-                  open={equipmentOpen}
-                  onOpen={() => {
-                    closeAllPickers();
-                    setActiveAssociation("equipment");
-                    setEquipmentOpen(true);
-                  }}
-                  onClose={() => {
-                    setEquipmentOpen(false);
-                    setActiveAssociation(null);
-                  }}
-                  value={equipmentId}
-                  items={filteredEquipmentItems}
-                  setOpen={setEquipmentOpen}
-                  setValue={setEquipmentId}
-                  setItems={setEquipmentItems}
-                  placeholder="Select Equipment"
-                  listMode="SCROLLVIEW"
-                  searchable
-                  searchPlaceholder="Type to filter equipment"
-                  onChangeSearchText={setEquipmentQuery}
-                  style={styles.dropdown}
-                  dropDownContainerStyle={styles.dropdownContainer}
-                  onChangeValue={(value) => {
-                    if (!value) {
-                      setEquipmentId(null);
+            <View>
+              {loadingEquipment ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading equipment...</Text>
+                </View>
+              ) : (
+                <View style={styles.userSelectContainer}>
+                  <TextInput
+                    value={
+                      equipmentQuery !== ""
+                        ? equipmentQuery
+                        : selectedEquipmentLabel
                     }
-                  }}
-                />
-              </View>
-            )}
+                    onFocus={onEquipmentOpen}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        setEquipmentOpen(false);
+                        setActiveAssociation(null);
+                      }, 150)
+                    }
+                    onChangeText={(text) => {
+                      if (equipmentId) setEquipmentId(null);
+                      setEquipmentQuery(text);
+                      handleFieldChange("equipment_id", null);
+                      setEquipmentOpen(true);
+                    }}
+                    placeholder="Select Equipment"
+                    style={styles.userSelectInput}
+                  />
+                  {equipmentOpen && (
+                    <View
+                      style={[
+                        styles.userSelectDropdown,
+                        { elevation: getAssociationElevation("equipment") },
+                      ]}
+                    >
+                      {filteredEquipmentItems.length > 0 ? (
+                        <ScrollView style={styles.userSelectList}>
+                          {filteredEquipmentItems.map((item) => (
+                            <Pressable
+                              key={item.value}
+                              onPress={() => {
+                                setEquipmentId(item.value);
+                                setEquipmentQuery(item.label || "");
+                                handleFieldChange(
+                                  "equipment_id",
+                                  item.value || null,
+                                );
+                                setEquipmentOpen(false);
+                                setActiveAssociation(null);
+                              }}
+                              style={styles.userSelectItem}
+                            >
+                              <Text style={styles.userSelectItemText}>
+                                {item.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : (
+                        <View style={styles.userSelectEmpty}>
+                          <Text style={styles.userSelectEmptyText}>
+                            No equipment found
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         )}
 
-        <View style={styles.formFieldsSection}>
-          {form.fields.map((field) => renderField(field))}
-
-          <View style={styles.buttonContainer}>
-            <Pressable style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>Submit Form</Text>
-            </Pressable>
+        {form?.user_enabled && (
+          <View
+            style={[
+              styles.containerQuestion,
+              {
+                zIndex: getAssociationStackIndex("user"),
+                elevation: getAssociationElevation("user"),
+              },
+            ]}
+          >
+            <Text style={styles.associationLabel}>
+              {form.user_question || "Select User"}
+            </Text>
+            <View>
+              {loadingUsers ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Loading users...</Text>
+                </View>
+              ) : (
+                <View style={styles.userSelectContainer}>
+                  <TextInput
+                    value={userQuery !== "" ? userQuery : selectedUserLabel}
+                    onFocus={onUserOpen}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        setUserOpen(false);
+                        setActiveAssociation(null);
+                      }, 150)
+                    }
+                    onChangeText={(text) => {
+                      if (userId) setUserId(null);
+                      setUserQuery(text);
+                      handleFieldChange("user_id", null);
+                      setUserOpen(true);
+                    }}
+                    placeholder="Select User"
+                    style={styles.userSelectInput}
+                  />
+                  {userOpen && (
+                    <View
+                      style={[
+                        styles.userSelectDropdown,
+                        { elevation: getAssociationElevation("user") },
+                      ]}
+                    >
+                      {filteredUserItems.length > 0 ? (
+                        <ScrollView style={styles.userSelectList}>
+                          {filteredUserItems.map((item) => (
+                            <Pressable
+                              key={item.value}
+                              onPress={() => {
+                                setUserId(item.value);
+                                setUserQuery(item.label || "");
+                                handleFieldChange(
+                                  "user_id",
+                                  item.value || null,
+                                );
+                                setUserOpen(false);
+                                setActiveAssociation(null);
+                              }}
+                              style={styles.userSelectItem}
+                            >
+                              <Text style={styles.userSelectItemText}>
+                                {item.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : (
+                        <View style={styles.userSelectEmpty}>
+                          <Text style={styles.userSelectEmptyText}>
+                            No users found
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
+        )}
+
+        {parsedFields.map((field) => renderField(field))}
+
+        <View style={styles.buttonContainer}>
+          <Pressable style={styles.submitButton} onPress={handleSubmit}>
+            <Text style={styles.submitButtonText}>{submitLabel}</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -818,10 +966,11 @@ export default function FormBuilder({ form, onSubmit }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "white",
   },
   container: {
     flex: 1,
+    backgroundColor: "white",
   },
   containerQuestion: {
     marginBottom: 20,
@@ -841,6 +990,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 40,
+    flexGrow: 1,
   },
   header: {
     marginBottom: 24,
@@ -882,10 +1032,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
-  formFieldsSection: {
-    position: "relative",
-    zIndex: 0,
-  },
   buttonContainer: {
     gap: 12,
     marginTop: 12,
@@ -912,9 +1058,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  userSelectInputDisabled: {
-    backgroundColor: "#f0f0f0",
-    color: "#888",
+  dropdown: {
+    borderColor: "#aaa",
+    borderWidth: 1,
+    borderRadius: 6,
+  },
+  dropdownContainer: {
+    borderColor: "#aaa",
+    borderWidth: 1,
+    zIndex: 5000,
+    elevation: 5,
   },
   userSelectContainer: {
     position: "relative",
@@ -974,19 +1127,5 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: "#666",
     fontSize: 14,
-  },
-  dropdown: {
-    borderColor: "#aaa",
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "white",
-  },
-  dropdownContainer: {
-    borderColor: "#aaa",
-    borderWidth: 1,
-    borderRadius: 6,
-    backgroundColor: "white",
   },
 });
