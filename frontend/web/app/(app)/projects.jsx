@@ -15,6 +15,8 @@ export default function Projects() {
   const isLargeScreen = width >= 1024;
   const { setSelectedProject, setSelectedProjectID } = useProject();
   
+  const { create } = useLocalSearchParams();
+  
   const [projects, setProjects] = useState([]);
   const [profileLoading, setProfileLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -110,6 +112,13 @@ export default function Projects() {
       setProjects([]);
     }
   }, [companyId, fetchProjects]);
+
+  // opens the create project modal if we navigate from the dashboard quick action
+  useEffect(() => {
+    if (create == 'true') {
+      setCreateOpen(true);
+    }
+  }, [create]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -291,7 +300,9 @@ export default function Projects() {
       {/* Create Project Modal */}
       <CreateProjectModal
         visible={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false)
+        }}
         token={token}
         companyId={companyId}
         onCreated={(project) => {
