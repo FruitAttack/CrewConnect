@@ -15,6 +15,7 @@ const tiles = [
   { label: 'Observations', icon: require('../../../assets/icons/observation.png'), formId: '6d63c47a-2bcf-4954-9efd-2d85c37f4d3a' },
   { label: 'All Forms', icon: require('../../../assets/icons/photos.png'), route: 'forms' },
   { label: 'Contacts', icon: require('../../../assets/icons/contacts.png'), route: 'contacts_list' },
+  { label: 'Maps', icon: require('../../../assets/icons/maps.png'), route: 'project_map_Screen' },
   // { label: 'Change Order', icon: require('../../../assets/icons/change_order.png') },
 ];
 
