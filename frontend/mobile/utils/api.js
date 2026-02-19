@@ -1,4 +1,3 @@
-
 export async function apiCall(token, route, method = 'GET', body = null) {
   // Create AbortController for timeout 
   const controller = new AbortController();
@@ -141,4 +140,64 @@ export async function updateCustomer(token, customerId, updates) {
 
 export async function deleteCustomer(token, customerId) {
   return apiCall(token, `customers/${customerId}`, 'DELETE')
+}
+
+// ============================================
+// USERS
+// ============================================
+
+export async function getUserProfile(token) {
+  return apiCall(token, 'users/me');
+}
+
+export async function getAllUsers(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(token, `users${params ? `?${params}` : ''}`);
+}
+
+// ============================================
+// CREWS
+// ============================================
+
+export async function getCrews(token, companyId) {
+  return apiCall(token, `crews?company_id=${companyId}`);
+}
+
+// ============================================
+// TIME ENTRIES
+// ============================================
+
+export async function getTimeEntries(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(token, `time-entries${params ? `?${params}` : ''}`);
+}
+
+// ============================================
+// TIMECARD APPROVALS
+// ============================================
+
+export async function getTimecardApprovals(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(token, `timecard-approvals${params ? `?${params}` : ''}`);
+}
+
+export async function upsertTimecardApproval(token, body) {
+  return apiCall(token, 'timecard-approvals', 'POST', body);
+}
+
+// ============================================
+// TIME OFF
+// ============================================
+
+export async function getTimeOffAll(token, filters = {}) {
+  const params = new URLSearchParams(filters).toString();
+  return apiCall(token, `time-off/all${params ? `?${params}` : ''}`);
+}
+
+export async function approveTimeOff(token, requestId) {
+  return apiCall(token, `time-off/${requestId}/approve`, 'PATCH');
+}
+
+export async function denyTimeOff(token, requestId, reason) {
+  return apiCall(token, `time-off/${requestId}/deny`, 'PATCH', { reason });
 }
