@@ -2055,9 +2055,14 @@ export default function FilteredFormSubmissionsPage({
         )}
         {renderGraphControls()}
 
-        <View style={[styles.graphCard, { padding: spacing.lg }]}>
+        <View style={styles.graphCard}>
+          <style>{`
+            .ffsp-chart .recharts-surface {
+              background: transparent;
+            }
+          `}</style>
           {graphConfig.chartType === "bar" && (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="name" stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
@@ -2077,7 +2082,7 @@ export default function FilteredFormSubmissionsPage({
           )}
 
           {graphConfig.chartType === "line" && (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="name" stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
@@ -2103,7 +2108,7 @@ export default function FilteredFormSubmissionsPage({
           )}
 
           {graphConfig.chartType === "area" && (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -2135,7 +2140,7 @@ export default function FilteredFormSubmissionsPage({
           )}
 
           {graphConfig.chartType === "pie" && (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <PieChart>
                 <Pie
                   data={chartData}
@@ -2176,7 +2181,7 @@ export default function FilteredFormSubmissionsPage({
           )}
 
           {graphConfig.chartType === "donut" && (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <PieChart>
                 <Pie
                   data={chartData}
@@ -3257,7 +3262,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "white",
     borderRadius: 10,
-    padding: 20,
+    padding: 10,
+    paddingTop: 40,
+    paddingRight: 60,
     borderWidth: 1,
     borderColor: "#ECECEC",
     overflow: "hidden",
