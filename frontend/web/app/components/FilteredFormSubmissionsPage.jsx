@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Modal } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getForm, getFormSubmissions, createFormSubmission, updateFormSubmission, deleteFormSubmission } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
@@ -25,15 +26,60 @@ export default function FilteredFormSubmissionsPage({
   filter = { type: "all" },
   onBack 
 }) {
+  const router = useRouter();
+  const searchParams = useLocalSearchParams();
   const { session } = useSession();
   const token = session?.access_token;
   const { setCreateLabel, setCreateHandler } = useFormTabSafe();
-  const [viewType, setViewType] = useState("table"); // "table", "graph"
+
+  const getParamString = (value) => (Array.isArray(value) ? value[0] : value);
+  const parseJsonParam = (value) => {
+    if (!value || typeof value !== "string") return null;
+    try {
+      return JSON.parse(value);
+    } catch (_err) {
+      return null;
+    }
+  };
+  const normalizeFilterRules = (rules = []) =>
+    rules.map((rule, index) => ({
+      id: rule.id || `${Date.now()}-${index}`,
+      columnId: rule.columnId || "",
+      operator: rule.operator || "",
+      value: rule.value ?? "",
+      values: Array.isArray(rule.values) ? rule.values : [],
+    }));
+  const parseFiltersParam = (value) => {
+    const parsed = parseJsonParam(value);
+    return Array.isArray(parsed) ? parsed : [];
+  };
+  const parseColumnsParam = (value) => {
+    const parsed = parseJsonParam(value);
+    return Array.isArray(parsed) ? parsed : null;
+  };
+  const parseGraphConfigParam = (value) => {
+    const parsed = parseJsonParam(value);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      xAxisField: parsed.xAxisField ?? null,
+      metricField: parsed.metricField ?? null,
+      aggregationType: parsed.aggregationType || "count",
+      chartType: parsed.chartType || "bar",
+      groupByPeriod: parsed.groupByPeriod || "none",
+    };
+  };
+
+  const viewParam = getParamString(searchParams?.view);
+  const filtersParam = getParamString(searchParams?.filters);
+  const columnsParam = getParamString(searchParams?.columns);
+  const graphParam = getParamString(searchParams?.graph);
+
+  const [viewType, setViewType] = useState(() => (viewParam === "graph" ? "graph" : "table")); // "table", "graph"
   const [form, setForm] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterRules, setFilterRules] = useState([]);
-  const [appliedFilterRules, setAppliedFilterRules] = useState([]);
+  const [filterRules, setFilterRules] = useState(() => normalizeFilterRules(parseFiltersParam(filtersParam)));
+  const [appliedFilterRules, setAppliedFilterRules] = useState(() => normalizeFilterRules(parseFiltersParam(filtersParam)));
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
@@ -45,14 +91,19 @@ export default function FilteredFormSubmissionsPage({
   const [submissionSaving, setSubmissionSaving] = useState(false);
   const [submissionError, setSubmissionError] = useState(null);
   const [graphConfigOpen, setGraphConfigOpen] = useState(false);
-  const [graphConfig, setGraphConfig] = useState({
-    xAxisField: null,
-    metricField: null,
-    aggregationType: "count", // count, sum, average, min, max
-    chartType: "bar", // bar, line, area, pie, donut
-    groupByPeriod: "none", // none, day, week, month, year (for dates)
+  const [graphConfig, setGraphConfig] = useState(() => {
+    const parsed = parseGraphConfigParam(graphParam);
+    return {
+      xAxisField: parsed?.xAxisField ?? null,
+      metricField: parsed?.metricField ?? null,
+      aggregationType: parsed?.aggregationType || "count", // count, sum, average, min, max
+      chartType: parsed?.chartType || "bar", // bar, line, area, pie, donut
+      groupByPeriod: parsed?.groupByPeriod || "none", // none, day, week, month, year (for dates)
+    };
   });
   const inputRefs = useRef({});
+  const graphConfigHydratedRef = useRef(!!parseGraphConfigParam(graphParam));
+  const urlHydratedFormRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     if (!token || !formId) return;
@@ -93,6 +144,40 @@ export default function FilteredFormSubmissionsPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!formId) return;
+    if (urlHydratedFormRef.current === formId) return;
+    urlHydratedFormRef.current = formId;
+
+    const nextView = viewParam === "graph" ? "graph" : "table";
+    setViewType(nextView);
+
+    const nextFilters = normalizeFilterRules(parseFiltersParam(filtersParam));
+    setAppliedFilterRules(nextFilters);
+    setFilterRules(
+      nextFilters.map((rule) => ({
+        ...rule,
+        values: Array.isArray(rule.values) ? [...rule.values] : [],
+      })),
+    );
+
+    const nextColumns = parseColumnsParam(columnsParam);
+    if (Array.isArray(nextColumns)) {
+      setVisibleColumnIds(nextColumns);
+    } else {
+      setVisibleColumnIds([]);
+    }
+
+    const nextGraphConfig = parseGraphConfigParam(graphParam);
+    if (nextGraphConfig) {
+      setGraphConfig((prev) => ({
+        ...prev,
+        ...nextGraphConfig,
+      }));
+      graphConfigHydratedRef.current = true;
+    }
+  }, [formId, viewParam, filtersParam, columnsParam, graphParam]);
 
   useEffect(() => {
     if (!pendingFocusRuleId || !filtersOpen) return;
@@ -308,13 +393,21 @@ export default function FilteredFormSubmissionsPage({
     // Use user (driver) association field if enabled, otherwise use first form field or submitted_by
     const xAxisFieldId = form?.user_enabled ? "user" : (parsedFields[0]?.id || "submitted_by");
     
-    setGraphConfig((prev) => ({
-      ...prev,
-      xAxisField: xAxisFieldId,
-      metricField: "count",
-      aggregationType: "count",
-      chartType: "bar",
-    }));
+    setGraphConfig((prev) => {
+      const next = {
+        ...prev,
+        xAxisField: prev.xAxisField || xAxisFieldId,
+        metricField: prev.metricField || "count",
+        aggregationType: prev.aggregationType || "count",
+        chartType: prev.chartType || "bar",
+      };
+      if (!graphConfigHydratedRef.current) {
+        graphConfigHydratedRef.current = true;
+        return next;
+      }
+      if (!prev.xAxisField || !prev.metricField) return next;
+      return prev;
+    });
   }, [form, parsedFields]);
 
   const buildSubmissionDraft = useCallback((sourceData = {}) => {
@@ -363,7 +456,7 @@ export default function FilteredFormSubmissionsPage({
     return columns;
   }, [showProject, showEquipment, showUser, showCustomer, showCostCode, displayFields, form]);
 
-  const [visibleColumnIds, setVisibleColumnIds] = useState([]);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(() => parseColumnsParam(columnsParam) || []);
 
   useEffect(() => {
     setVisibleColumnIds((prev) => {
@@ -374,6 +467,73 @@ export default function FilteredFormSubmissionsPage({
       return [...kept, ...added];
     });
   }, [availableTableColumns]);
+
+  const serializedFilters = useMemo(() => {
+    if (appliedFilterRules.length === 0) return null;
+    const cleaned = appliedFilterRules.map((rule) => ({
+      columnId: rule.columnId || "",
+      operator: rule.operator || "",
+      value: rule.value ?? "",
+      values: Array.isArray(rule.values) ? rule.values : [],
+    }));
+    return JSON.stringify(cleaned);
+  }, [appliedFilterRules]);
+
+  const serializedColumns = useMemo(() => {
+    if (visibleColumnIds.length === 0) return null;
+    return JSON.stringify(visibleColumnIds);
+  }, [visibleColumnIds]);
+
+  const serializedGraphConfig = useMemo(() => {
+    if (!graphConfig.xAxisField && !graphConfig.metricField) return null;
+    return JSON.stringify({
+      xAxisField: graphConfig.xAxisField,
+      metricField: graphConfig.metricField,
+      aggregationType: graphConfig.aggregationType,
+      chartType: graphConfig.chartType,
+      groupByPeriod: graphConfig.groupByPeriod,
+    });
+  }, [graphConfig]);
+
+  useEffect(() => {
+    if (!formId) return;
+    const params = {
+      formId,
+      view: viewType,
+      filters: serializedFilters || undefined,
+      columns: serializedColumns || undefined,
+      graph: serializedGraphConfig || undefined,
+    };
+
+    const currentFormId = getParamString(searchParams?.formId) || null;
+    const currentView = getParamString(searchParams?.view) || null;
+    const currentFilters = getParamString(searchParams?.filters) || null;
+    const currentColumns = getParamString(searchParams?.columns) || null;
+    const currentGraph = getParamString(searchParams?.graph) || null;
+
+    const nextFilters = params.filters || null;
+    const nextColumns = params.columns || null;
+    const nextGraph = params.graph || null;
+
+    const isSameParams =
+      currentFormId === params.formId &&
+      currentView === params.view &&
+      currentFilters === nextFilters &&
+      currentColumns === nextColumns &&
+      currentGraph === nextGraph;
+
+    if (isSameParams) return;
+
+    if (typeof router.setParams === "function") {
+      router.setParams(params);
+      return;
+    }
+
+    router.replace({
+      pathname: "/form/submissions",
+      params,
+    });
+  }, [formId, viewType, serializedFilters, serializedColumns, serializedGraphConfig, router, searchParams]);
 
   const visibleColumnSet = useMemo(() => new Set(visibleColumnIds), [visibleColumnIds]);
   const isColumnVisible = useCallback((columnId) => visibleColumnSet.has(columnId), [visibleColumnSet]);
@@ -2076,7 +2236,7 @@ export default function FilteredFormSubmissionsPage({
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="value" fill={colors.primary.orange} radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill={colors.primary.orange} radius={[8, 8, 0, 0]} animationDuration={200} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -2102,6 +2262,7 @@ export default function FilteredFormSubmissionsPage({
                   stroke={colors.primary.orange}
                   dot={{ fill: colors.primary.orange, r: 5 }}
                   activeDot={{ r: 7 }}
+                  animationDuration={200}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -2134,6 +2295,7 @@ export default function FilteredFormSubmissionsPage({
                   stroke={colors.primary.orange}
                   fillOpacity={1}
                   fill="url(#colorValue)"
+                  animationDuration={200}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -2150,6 +2312,7 @@ export default function FilteredFormSubmissionsPage({
                   outerRadius={130}
                   paddingAngle={2}
                   dataKey="value"
+                  animationDuration={200}
                   label={(props) => {
                     const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
                     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
@@ -2191,6 +2354,7 @@ export default function FilteredFormSubmissionsPage({
                   outerRadius={130}
                   paddingAngle={2}
                   dataKey="value"
+                  animationDuration={200}
                   label={(props) => {
                     const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
                     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
@@ -2285,6 +2449,9 @@ export default function FilteredFormSubmissionsPage({
     </Modal>
   );
 
+  const displayTitle = formTitle || form?.title || "Form";
+  const displayIcon = formIcon || form?.icon || "📄";
+
   return (
     <View style={styles.container}>
       {/* Back Button & View Toggle */}
@@ -2300,7 +2467,7 @@ export default function FilteredFormSubmissionsPage({
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <View style={{ flex: 1 }}>
-          <Text style={styles.pageTitle}>{formIcon} {formTitle}</Text>
+          <Text style={styles.pageTitle}>{displayIcon} {displayTitle}</Text>
           <Text style={styles.subtitle}>{submissions.length} submissions</Text>
           </View>
         </View>
