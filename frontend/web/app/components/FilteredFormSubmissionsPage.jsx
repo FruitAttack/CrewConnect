@@ -2198,7 +2198,7 @@ export default function FilteredFormSubmissionsPage({
             style={styles.configButton}
             onPress={() => setGraphConfigOpen(true)}
           >
-            <Ionicons name="settings" size={16} color="white" />
+            <Ionicons name="settings" size={16} color={colors.neutral.black} />
             <Text style={styles.configButtonText}>Configure</Text>
           </Pressable>
         </View>
@@ -2212,7 +2212,7 @@ export default function FilteredFormSubmissionsPage({
 
     if (!isConfigured) {
       return (
-        <View style={{ flex: 1, position: "relative" }}>
+        <View style={{ position: "relative" }}>
           {renderGraphControls()}
           <View style={[styles.graphCard]}>
             <View style={styles.graphConfigPrompt}>
@@ -2225,7 +2225,7 @@ export default function FilteredFormSubmissionsPage({
                 style={styles.configButton}
                 onPress={() => setGraphConfigOpen(true)}
               >
-                <Ionicons name="settings" size={16} color="white" />
+                <Ionicons name="settings" size={16} color={colors.neutral.black} />
                 <Text style={styles.configButtonText}>Configure Graph</Text>
               </Pressable>
             </View>
@@ -2236,7 +2236,7 @@ export default function FilteredFormSubmissionsPage({
 
     if (chartData.length === 0) {
       return (
-        <View style={{ flex: 1, position: "relative" }}>
+        <View style={{ position: "relative" }}>
           {renderGraphControls()}
           <View style={[styles.graphCard]}>
             <View style={styles.graphEmptyState}>
@@ -2368,7 +2368,7 @@ export default function FilteredFormSubmissionsPage({
         };
 
     return (
-      <View style={{ flex: 1, position: "relative" }}>
+      <View style={{ position: "relative" }}>
         {openDropdown && (
           <Pressable
             style={styles.dropdownBackdropFull}
@@ -2401,7 +2401,11 @@ export default function FilteredFormSubmissionsPage({
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="value" fill={colors.primary.orange} radius={[8, 8, 0, 0]} animationDuration={200} />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]} animationDuration={200}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -2425,8 +2429,8 @@ export default function FilteredFormSubmissionsPage({
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke={colors.primary.orange}
-                  dot={{ fill: colors.primary.orange, r: 5 }}
+                  stroke="#4F46E5"
+                  dot={{ fill: "#4F46E5", r: 5 }}
                   activeDot={{ r: 7 }}
                   animationDuration={200}
                 />
@@ -2439,8 +2443,8 @@ export default function FilteredFormSubmissionsPage({
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={colors.primary.orange} stopOpacity={0.8} />
-                    <stop offset="95%" stopColor={colors.primary.orange} stopOpacity={0} />
+                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -2459,7 +2463,7 @@ export default function FilteredFormSubmissionsPage({
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke={colors.primary.orange}
+                  stroke="#4F46E5"
                   fillOpacity={1}
                   fill="url(#colorValue)"
                   animationDuration={200}
@@ -3593,7 +3597,6 @@ const styles = StyleSheet.create({
     zIndex: 15,
   },
   graphCard: {
-    flex: 1,
     backgroundColor: "white",
     borderRadius: 10,
     padding: 10,
@@ -3620,17 +3623,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.primary.orange,
+    backgroundColor: "white",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.primary.orange,
+    borderColor: colors.border.light,
     ...shadows.small,
   },
   configButtonText: {
     fontSize: 13,
-    color: "white",
+    color: colors.text.primary,
     fontWeight: "600",
   },
   graphConfigPrompt: {
