@@ -790,56 +790,101 @@ export default function FilteredFormSubmissionsPage({
 
     const dataMap = new Map();
 
+    const getColumnById = (fieldId) => {
+      if (fieldId === "submitted_by") return filterableColumns.find((c) => c.id === "submitted_by");
+      if (fieldId === "submitted_at") return filterableColumns.find((c) => c.id === "submitted_at");
+      if (fieldId === "project") return filterableColumns.find((c) => c.id === "project");
+      if (fieldId === "equipment") return filterableColumns.find((c) => c.id === "equipment");
+      if (fieldId === "user") return filterableColumns.find((c) => c.id === "user");
+      if (fieldId === "customer") return filterableColumns.find((c) => c.id === "customer");
+      if (fieldId === "cost_code") return filterableColumns.find((c) => c.id === "cost_code");
+      return filterableColumns.find((c) => c.id === fieldId);
+    };
+
+    const xAxisColumn = getColumnById(graphConfig.xAxisField);
+    if (!xAxisColumn) return [];
+
+    const metricsColumn =
+      graphConfig.metricField !== "count" ? getColumnById(graphConfig.metricField) : null;
+
+    const isDateAxis = xAxisColumn.type === "date" || xAxisColumn.type === "date_time";
+
+    const normalizeDate = (date) => {
+      const next = new Date(date);
+      if (graphConfig.groupByPeriod === "week") {
+        next.setHours(0, 0, 0, 0);
+        next.setDate(next.getDate() - next.getDay());
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        return new Date(next.getFullYear(), next.getMonth(), 1);
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        return new Date(next.getFullYear(), 0, 1);
+      }
+      const day = new Date(next);
+      day.setHours(0, 0, 0, 0);
+      return day;
+    };
+
+    const formatDateLabel = (date) => {
+      if (graphConfig.groupByPeriod === "week") {
+        return `Week of ${date.toLocaleDateString("en-US")}`;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        return date.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        return date.getFullYear().toString();
+      }
+      return date.toLocaleDateString("en-US");
+    };
+
+    const stepDate = (date) => {
+      const next = new Date(date);
+      if (graphConfig.groupByPeriod === "week") {
+        next.setDate(next.getDate() + 7);
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        next.setMonth(next.getMonth() + 1, 1);
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        next.setFullYear(next.getFullYear() + 1, 0, 1);
+        return next;
+      }
+      next.setDate(next.getDate() + 1);
+      return next;
+    };
+
     filteredSubmissions.forEach((submission) => {
-      const col = filterableColumns.find((c) => {
-        if (graphConfig.xAxisField === "submitted_by") return c.id === "submitted_by";
-        if (graphConfig.xAxisField === "submitted_at") return c.id === "submitted_at";
-        if (graphConfig.xAxisField === "project") return c.id === "project";
-        if (graphConfig.xAxisField === "equipment") return c.id === "equipment";
-        if (graphConfig.xAxisField === "user") return c.id === "user";
-        if (graphConfig.xAxisField === "customer") return c.id === "customer";
-        if (graphConfig.xAxisField === "cost_code") return c.id === "cost_code";
-        return c.id === graphConfig.xAxisField;
-      });
+      let groupKey = "Other";
+      let sortKey = groupKey;
 
-      if (!col) return;
-
-      let groupKey = String(col.getValue(submission) || "Other");
-      if (col.type === "date" || col.type === "date_time") {
-        const date = new Date(col.getValue(submission));
-        if (!isNaN(date.getTime())) {
-          if (graphConfig.groupByPeriod === "day") {
-            groupKey = date.toLocaleDateString("en-US");
-          } else if (graphConfig.groupByPeriod === "week") {
-            const weekStart = new Date(date);
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-            groupKey = `Week of ${weekStart.toLocaleDateString("en-US")}`;
-          } else if (graphConfig.groupByPeriod === "month") {
-            groupKey = date.toLocaleDateString("en-US", { year: "numeric", month: "short" });
-          } else if (graphConfig.groupByPeriod === "year") {
-            groupKey = date.getFullYear().toString();
-          } else {
-            groupKey = date.toLocaleDateString("en-US");
-          }
-        }
+      if (isDateAxis) {
+        const rawValue = xAxisColumn.getValue(submission);
+        const parsed = rawValue ? new Date(rawValue) : null;
+        if (!parsed || Number.isNaN(parsed.getTime())) return;
+        const normalized = normalizeDate(parsed);
+        sortKey = normalized.getTime();
+        groupKey = formatDateLabel(normalized);
+      } else {
+        groupKey = String(xAxisColumn.getValue(submission) || "Other");
+        sortKey = groupKey;
       }
 
-      if (!dataMap.has(groupKey)) {
-        dataMap.set(groupKey, { name: groupKey, values: [] });
+      if (!dataMap.has(sortKey)) {
+        dataMap.set(sortKey, { name: groupKey, sortKey, values: [] });
       }
 
-      const metricsCol = filterableColumns.find((c) => {
-        if (graphConfig.metricField === "count") return false;
-        return c.id === graphConfig.metricField;
-      });
-
-      if (graphConfig.metricField !== "count" && metricsCol) {
-        const value = parseFloat(String(metricsCol.getValue(submission) || 0).replace(/,/g, ""));
+      if (graphConfig.metricField !== "count" && metricsColumn) {
+        const value = parseFloat(String(metricsColumn.getValue(submission) || 0).replace(/,/g, ""));
         if (!isNaN(value)) {
-          dataMap.get(groupKey).values.push(value);
+          dataMap.get(sortKey).values.push(value);
         }
       } else {
-        dataMap.get(groupKey).values.push(1);
+        dataMap.get(sortKey).values.push(1);
       }
     });
 
@@ -852,17 +897,27 @@ export default function FilteredFormSubmissionsPage({
       } else if (graphConfig.aggregationType === "average") {
         aggregated = item.values.reduce((a, b) => a + b, 0) / (item.values.length || 1);
       } else if (graphConfig.aggregationType === "min") {
-        aggregated = Math.min(...item.values);
+        aggregated = item.values.length ? Math.min(...item.values) : 0;
       } else if (graphConfig.aggregationType === "max") {
-        aggregated = Math.max(...item.values);
+        aggregated = item.values.length ? Math.max(...item.values) : 0;
       }
       return {
         name: item.name,
         value: Math.round(aggregated * 100) / 100,
+        sortKey: item.sortKey,
       };
     });
 
-    return chartData.sort((a, b) => a.name.localeCompare(b.name));
+    if (!isDateAxis) {
+      return chartData.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }
+
+    return chartData.sort((a, b) => {
+      if (typeof a.sortKey === "number" && typeof b.sortKey === "number") {
+        return a.sortKey - b.sortKey;
+      }
+      return String(a.name).localeCompare(String(b.name));
+    });
   }, [graphConfig, filteredSubmissions, filterableColumns]);
 
   const isRuleComplete = useCallback(
@@ -2203,6 +2258,115 @@ export default function FilteredFormSubmissionsPage({
       "#EC4899",
     ];
 
+    const xAxisColumn = filterableColumns.find((col) => col.id === graphConfig.xAxisField);
+    const isDateAxis = xAxisColumn?.type === "date" || xAxisColumn?.type === "date_time";
+    const maxTicks = 6;
+    const dateKeys = isDateAxis
+      ? chartData
+          .map((item) => item.sortKey)
+          .filter((key) => typeof key === "number")
+          .sort((a, b) => a - b)
+      : [];
+    const uniqueDateKeys = isDateAxis
+      ? Array.from(new Set(dateKeys))
+      : [];
+
+    let dateTicks = [];
+    if (isDateAxis && uniqueDateKeys.length > 0) {
+      const minKey = uniqueDateKeys[0];
+      const lastKey = uniqueDateKeys[uniqueDateKeys.length - 1];
+      
+      const snapToNiceDate = (timestamp) => {
+        const date = new Date(timestamp);
+        if (graphConfig.groupByPeriod === "year") {
+          return new Date(date.getFullYear(), 0, 1).getTime();
+        }
+        if (graphConfig.groupByPeriod === "month") {
+          return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+        }
+        if (graphConfig.groupByPeriod === "week") {
+          const day = new Date(date);
+          day.setHours(0, 0, 0, 0);
+          day.setDate(day.getDate() - day.getDay());
+          return day.getTime();
+        }
+        // For day grouping, snap to midnight
+        const day = new Date(date);
+        day.setHours(0, 0, 0, 0);
+        return day.getTime();
+      };
+      
+      // Find and snap middle
+      const rawMiddle = (minKey + lastKey) / 2;
+      const middleKey = snapToNiceDate(rawMiddle);
+      
+      // Calculate distance from start to middle
+      const distanceToMiddle = middleKey - minKey;
+      const quarterDistance = distanceToMiddle / 2;
+      
+      // Snap and find 1/4 position
+      const rawQuarter = minKey + quarterDistance;
+      const quarterKey = snapToNiceDate(rawQuarter);
+      
+      // Use same distance from middle to find 3/4
+      const rawThreeQuarter = middleKey + quarterDistance;
+      const threeQuarterKey = snapToNiceDate(rawThreeQuarter);
+      
+      dateTicks = [
+        minKey,
+        quarterKey,
+        middleKey,
+        threeQuarterKey,
+        lastKey,
+      ];
+      
+      // Remove duplicates while preserving order
+      dateTicks = [...new Set(dateTicks)].sort((a, b) => a - b);
+    }
+
+    const formatDateStamp = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const formatAxisTick = (value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return formatDateStamp(date);
+    };
+
+    const formatTooltipLabel = (value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value ?? "");
+      if (graphConfig.groupByPeriod === "year") {
+        return `${date.getFullYear()}-01-01`;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        return `${date.getFullYear()}-${month}-01`;
+      }
+      return formatDateStamp(date);
+    };
+
+    const xAxisProps = isDateAxis
+      ? {
+          dataKey: "sortKey",
+          type: "number",
+          domain: ["dataMin", "dataMax"],
+          ticks: dateTicks,
+          tickFormatter: formatAxisTick,
+          stroke: colors.text.secondary,
+          tick: { fontFamily: typography.fontFamily.sans, fontSize: 12 },
+        }
+      : {
+          dataKey: "name",
+          stroke: colors.text.secondary,
+          tick: { fontFamily: typography.fontFamily.sans, fontSize: 12 },
+          interval: 0,
+        };
+
     return (
       <View style={{ flex: 1, position: "relative" }}>
         {openDropdown && (
@@ -2225,9 +2389,10 @@ export default function FilteredFormSubmissionsPage({
             <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <XAxis {...xAxisProps} />
                 <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
                 <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
                   contentStyle={{
                     backgroundColor: "white",
                     border: `1px solid ${colors.border.light}`,
@@ -2245,9 +2410,10 @@ export default function FilteredFormSubmissionsPage({
             <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <XAxis {...xAxisProps} />
                 <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
                 <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
                   contentStyle={{
                     backgroundColor: "white",
                     border: `1px solid ${colors.border.light}`,
@@ -2278,9 +2444,10 @@ export default function FilteredFormSubmissionsPage({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <XAxis {...xAxisProps} />
                 <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
                 <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
                   contentStyle={{
                     backgroundColor: "white",
                     border: `1px solid ${colors.border.light}`,
