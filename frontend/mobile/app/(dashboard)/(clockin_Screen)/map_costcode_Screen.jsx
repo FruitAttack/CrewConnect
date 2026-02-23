@@ -16,66 +16,26 @@ import {
   FlatList,
   SafeAreaView,
 } from "react-native";
-import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiCall } from "../../../utils/api";
 import { useSession } from "../../../utils/ctx";
 import { useTimeStore } from "../../../store/timeStore";
+import * as Location from "expo-location";
 
-// Conditionally import map components
-import MapComponentWeb from "./MapComponentWeb";
-import MapComponentNative from "./MapComponentNative";
+const LAST_CLOCKIN_KEY = "crewconnect_last_clockin";
 
-// Geofence validation helpers
-function calculateDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
+function getDistanceMiles(lat1, lng1, lat2, lng2) {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-function isPointInPolygon(lat, lng, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].lng,
-      yi = polygon[i].lat;
-    const xj = polygon[j].lng,
-      yj = polygon[j].lat;
-
-    if (
-      yi > lat !== yj > lat &&
-      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
-    ) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function isUserInProjectBoundary(userLat, userLng, project) {
-  if (!project.geofenceEnabled) return false;
-
-  if (project.geofenceType === "RADIUS" && project.geofenceCenter) {
-    const center = project.geofenceCenter;
-    const distance = calculateDistance(userLat, userLng, center.lat, center.lng);
-    return distance <= (project.geofenceRadius || 100);
-  } else if (project.geofenceType === "POLYGON" && project.geofencePolygon) {
-    return isPointInPolygon(userLat, userLng, project.geofencePolygon);
-  }
-
-  return false;
-}
-
-// Select the right map component based on platform
-const MapComponent = Platform.OS === "web" ? MapComponentWeb : MapComponentNative;
 
 // Reusable Modal Picker Component
 function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, loading }) {
@@ -160,10 +120,7 @@ function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, 
 }
 
 const pickerStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -173,17 +130,8 @@ const pickerStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E5E5",
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#000",
-  },
+  closeButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 17, fontWeight: "600", color: "#000" },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -193,19 +141,9 @@ const pickerStyles = StyleSheet.create({
     borderRadius: 10,
     height: 44,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#000",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 16, color: "#000" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   item: {
     flexDirection: "row",
     alignItems: "center",
@@ -215,52 +153,39 @@ const pickerStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F2F2F7",
   },
-  itemSelected: {
-    backgroundColor: "#F2F2F7",
-  },
-  itemText: {
-    fontSize: 16,
-    color: "#000",
-    flex: 1,
-  },
-  itemTextSelected: {
-    fontWeight: "500",
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#999",
-  },
+  itemSelected: { backgroundColor: "#F2F2F7" },
+  itemText: { fontSize: 16, color: "#000", flex: 1 },
+  itemTextSelected: { fontWeight: "500" },
+  emptyContainer: { padding: 40, alignItems: "center" },
+  emptyText: { fontSize: 16, color: "#999" },
 });
 
 export default function ClockInDetail() {
   const { session } = useSession();
   const doClockIn = useTimeStore((s) => s.doClockIn);
 
-  // ------------------ Location ------------------
   const [location, setLocation] = useState(null);
 
-  // ------------------ Project (Job) ------------------
+  // Last clock-in
+  const [lastClockIn, setLastClockIn] = useState(null);
+
+  // Nearest jobs
+  const [nearestJobs, setNearestJobs] = useState([]);
+  const [projectsRaw, setProjectsRaw] = useState([]);
+
+  // Project
   const [jobPickerVisible, setJobPickerVisible] = useState(false);
   const [job, setJob] = useState(null);
   const [jobItems, setJobItems] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
-  const [projectsRaw, setProjectsRaw] = useState([]);
 
-  // ------------------ Nearby Project Suggestion ------------------
-  const [nearbyProject, setNearbyProject] = useState(null);
-  const [showNearbyModal, setShowNearbyModal] = useState(false);
-
-  // ------------------ Cost Code ------------------
+  // Cost Code
   const [costPickerVisible, setCostPickerVisible] = useState(false);
   const [costCode, setCostCode] = useState(null);
   const [costItems, setCostItems] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
 
-  // ------------------ Equipment ------------------
+  // Equipment
   const [equipPickerVisible, setEquipPickerVisible] = useState(false);
   const [equipment, setEquipment] = useState(null);
   const [equipmentItems, setEquipmentItems] = useState([]);
@@ -269,130 +194,89 @@ export default function ClockInDetail() {
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get selected labels for display
   const getSelectedLabel = (items, value) => {
     const item = items.find((i) => i.value === value);
     return item ? item.label : "";
   };
 
-  // ------------------ Get User Location ------------------
+  // Load last clock-in from storage
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Location permission denied");
-        return;
-      }
-
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      const { latitude, longitude } = currentLocation.coords;
-
-      setLocation({ latitude, longitude });
+      try {
+        const stored = await AsyncStorage.getItem(LAST_CLOCKIN_KEY);
+        if (stored) setLastClockIn(JSON.parse(stored));
+      } catch {}
     })();
   }, []);
 
-  // ------------------ Load Projects ------------------
+  // Get location silently in background
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setLocation(loc.coords);
+    })();
+  }, []);
+
+  // Load Projects
   useEffect(() => {
     if (!session?.access_token) return;
-
     (async () => {
       setLoadingJobs(true);
       try {
         const res = await apiCall(session.access_token, "projects", "GET");
-
         if (res.success && res.data) {
-          const projectsData = Array.isArray(res.data)
-            ? res.data
-            : res.data.projects || [];
-
-          console.log("Projects loaded:", projectsData.length);
+          const projectsData = Array.isArray(res.data) ? res.data : res.data.projects || [];
           setProjectsRaw(projectsData);
-
-          if (Array.isArray(projectsData) && projectsData.length > 0) {
-            setJobItems(
-              projectsData.map((p) => ({
-                label: p.name,
-                value: p.id,
-              }))
-            );
-          } else {
-            console.warn("No projects found");
-            Alert.alert("No Projects", "No active projects available.");
-          }
+          setJobItems(projectsData.map((p) => ({ label: p.name, value: p.id })));
         } else {
-          console.error("Failed to load projects:", res.message);
           Alert.alert("Error", `Unable to load projects: ${res.message}`);
         }
       } catch (error) {
-        console.error("Error loading projects:", error);
-        Alert.alert(
-          "Error",
-          "Unable to load projects. Please check your connection."
-        );
+        Alert.alert("Error", "Unable to load projects. Please check your connection.");
       } finally {
         setLoadingJobs(false);
       }
     })();
   }, [session]);
 
-  // ------------------ Check if User is Within Project Boundary ------------------
+  // Compute nearest jobs whenever location or projects update
   useEffect(() => {
-    if (!location || projectsRaw.length === 0 || job) return;
+    if (!location || projectsRaw.length === 0) return;
+    const withDistance = projectsRaw
+      .filter((p) => p.lat && p.lng)
+      .map((p) => ({
+        ...p,
+        distance: getDistanceMiles(location.latitude, location.longitude, p.lat, p.lng),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 3);
+    setNearestJobs(withDistance);
+  }, [location, projectsRaw]);
 
-    const { latitude, longitude } = location;
-
-    const nearbyProjects = projectsRaw.filter((project) =>
-      isUserInProjectBoundary(latitude, longitude, project)
-    );
-
-    if (nearbyProjects.length >= 1) {
-      setNearbyProject(nearbyProjects[0]);
-      setShowNearbyModal(true);
-    }
-  }, [location, projectsRaw, job]);
-
-  // ------------------ Load Cost Codes (by Project) ------------------
+  // Load Cost Codes by Project
   useEffect(() => {
     if (!session?.access_token || !job) {
       setCostItems([]);
       return;
     }
-
     setCostCode(null);
     setLoadingCosts(true);
-
     (async () => {
       try {
-        const res = await apiCall(
-          session.access_token,
-          `projects/${job}/cost-codes`,
-          "GET"
-        );
-
+        const res = await apiCall(session.access_token, `projects/${job}/cost-codes`, "GET");
         if (res.success && res.data) {
-          const costCodesData = Array.isArray(res.data)
-            ? res.data
-            : res.data.cost_codes || [];
-
-          if (Array.isArray(costCodesData) && costCodesData.length > 0) {
-            setCostItems(
-              costCodesData
-                .filter((c) => c.cost_code && c.cost_code.active !== false)
-                .map((c) => ({
-                  label: `${c.cost_code.code} - ${c.cost_code.name}`,
-                  value: c.cost_code.id,
-                }))
-            );
-          } else {
-            setCostItems([]);
-          }
+          const data = Array.isArray(res.data) ? res.data : res.data.cost_codes || [];
+          setCostItems(
+            data
+              .filter((c) => c.cost_code && c.cost_code.active !== false)
+              .map((c) => ({ label: `${c.cost_code.code} - ${c.cost_code.name}`, value: c.cost_code.id }))
+          );
         } else {
           setCostItems([]);
         }
-      } catch (error) {
-        console.error("Error loading cost codes:", error);
+      } catch {
         setCostItems([]);
       } finally {
         setLoadingCosts(false);
@@ -400,33 +284,23 @@ export default function ClockInDetail() {
     })();
   }, [job, session]);
 
-  // ------------------ Load Equipment ------------------
+  // Load Equipment
   useEffect(() => {
     if (!session?.access_token) return;
-
     (async () => {
       setLoadingEquip(true);
       try {
         const res = await apiCall(session.access_token, "equipment", "GET");
-
         if (res.success && res.data) {
-          const equipmentData = Array.isArray(res.data)
-            ? res.data
-            : res.data.equipment || [];
-
-          if (Array.isArray(equipmentData) && equipmentData.length > 0) {
-            setEquipmentItems(
-              equipmentData
-                .filter((e) => e.active !== false)
-                .map((e) => ({
-                  label:
-                    e.type && e.label
-                      ? `${e.type} - ${e.label}`
-                      : e.label || e.type || "Unknown",
-                  value: e.id,
-                }))
-            );
-          }
+          const data = Array.isArray(res.data) ? res.data : res.data.equipment || [];
+          setEquipmentItems(
+            data
+              .filter((e) => e.active !== false)
+              .map((e) => ({
+                label: e.type && e.label ? `${e.type} - ${e.label}` : e.label || e.type || "Unknown",
+                value: e.id,
+              }))
+          );
         }
       } catch (error) {
         console.error("Error loading equipment:", error);
@@ -436,27 +310,11 @@ export default function ClockInDetail() {
     })();
   }, [session]);
 
-  // ------------------ Handle Nearby Project Selection ------------------
-  const handleAcceptNearbyProject = () => {
-    if (nearbyProject) {
-      setJob(nearbyProject.id);
-      setShowNearbyModal(false);
-      setNearbyProject(null);
-    }
-  };
-
-  const handleDeclineNearbyProject = () => {
-    setShowNearbyModal(false);
-    setNearbyProject(null);
-  };
-
-  // ------------------ Submit ------------------
   const handleStart = async () => {
     if (!job || !costCode) {
       Alert.alert("Validation Error", "Please select a Job and Cost Code.");
       return;
     }
-
     if (isSubmitting) return;
     setIsSubmitting(true);
 
@@ -476,6 +334,18 @@ export default function ClockInDetail() {
         return;
       }
 
+      // Save last clock-in for quick start
+      try {
+        await AsyncStorage.setItem(LAST_CLOCKIN_KEY, JSON.stringify({
+          jobId: job,
+          jobLabel: getSelectedLabel(jobItems, job),
+          costCodeId: costCode,
+          costCodeLabel: getSelectedLabel(costItems, costCode),
+          equipmentId: equipment || null,
+          equipmentLabel: equipment ? getSelectedLabel(equipmentItems, equipment) : null,
+        }));
+      } catch {}
+
       router.back();
     } catch (error) {
       console.error("Clock-in error:", error);
@@ -484,52 +354,177 @@ export default function ClockInDetail() {
     }
   };
 
-  // ------------------ UI ------------------
   return (
-    <View style={styles.container}>
-      {/* Map */}
-      <View style={styles.mapContainer}>
-        <MapComponent
-          location={location}
-          projects={projectsRaw}
-          selectedProjectId={job}
-        />
-      </View>
-
-      {/* Nearby Project Suggestion Modal */}
-      <Modal
-        visible={showNearbyModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleDeclineNearbyProject}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nearby Project Detected</Text>
-            <Text style={styles.modalText}>
-              You appear to be at{" "}
-              <Text style={styles.modalProjectName}>{nearbyProject?.name}</Text>.
-              {"\n"}Would you like to clock in here?
-            </Text>
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={styles.modalButtonSecondary}
-                onPress={handleDeclineNearbyProject}
-              >
-                <Text style={styles.modalButtonSecondaryText}>No, Choose Manually</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.flex}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Pressable style={styles.backBtn} onPress={() => router.back()}>
+                <Ionicons name="arrow-back" size={20} color="#1a1a1a" />
               </Pressable>
+              <Text style={styles.headerTitle}>Clock In</Text>
+              <View style={{ width: 36 }} />
+            </View>
+
+            {/* Form */}
+            <View style={styles.form}>
+
+              {/* Quick Start Banner */}
+            {lastClockIn && !job && (
               <Pressable
-                style={styles.modalButtonPrimary}
-                onPress={handleAcceptNearbyProject}
+                style={styles.quickStart}
+                onPress={() => {
+                  setJob(lastClockIn.jobId);
+                  setCostCode(lastClockIn.costCodeId);
+                  if (lastClockIn.equipmentId) setEquipment(lastClockIn.equipmentId);
+                }}
               >
-                <Text style={styles.modalButtonPrimaryText}>Yes, Clock In</Text>
+                <View style={styles.quickStartLeft}>
+                  <Ionicons name="flash" size={18} color="#F67011" />
+                  <View>
+                    <Text style={styles.quickStartLabel}>Quick Start</Text>
+                    <Text style={styles.quickStartSub} numberOfLines={1}>
+                      {lastClockIn.jobLabel} · {lastClockIn.costCodeLabel}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.quickStartAction}>Use</Text>
+              </Pressable>
+            )}
+
+            {/* Nearest Jobs */}
+            {nearestJobs.length > 0 && !job && (
+              <View style={styles.nearestContainer}>
+                <View style={styles.nearestHeader}>
+                  <Ionicons name="location" size={14} color="#888" />
+                  <Text style={styles.nearestTitle}>Nearest Jobs</Text>
+                </View>
+                {nearestJobs.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    style={styles.nearestRow}
+                    onPress={() => setJob(p.id)}
+                  >
+                    <View style={styles.nearestLeft}>
+                      <View style={styles.nearestDot} />
+                      <Text style={styles.nearestName} numberOfLines={1}>{p.name}</Text>
+                    </View>
+                    <Text style={styles.nearestDistance}>
+                      {p.distance < 0.1
+                        ? "< 0.1 mi"
+                        : `${p.distance.toFixed(1)} mi`}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Job */}
+              <Pressable style={styles.fieldRow} onPress={() => setJobPickerVisible(true)}>
+                <View style={styles.fieldLeft}>
+                  <Ionicons name="briefcase-outline" size={20} color="#F67011" />
+                  <Text style={styles.fieldLabel}>Job</Text>
+                </View>
+                <View style={styles.fieldRight}>
+                  {loadingJobs ? (
+                    <ActivityIndicator size="small" color="#999" />
+                  ) : (
+                    <>
+                      <Text style={[styles.fieldValue, !job && styles.fieldPlaceholder]} numberOfLines={1}>
+                        {job ? getSelectedLabel(jobItems, job) : "Select a job"}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                    </>
+                  )}
+                </View>
+              </Pressable>
+
+              {/* Cost Code */}
+              <Pressable
+                style={[styles.fieldRow, !job && styles.fieldDisabled]}
+                onPress={() => job && setCostPickerVisible(true)}
+                disabled={!job}
+              >
+                <View style={styles.fieldLeft}>
+                  <Ionicons name="code-outline" size={20} color="#F67011" />
+                  <Text style={styles.fieldLabel}>Cost Code</Text>
+                </View>
+                <View style={styles.fieldRight}>
+                  {loadingCosts ? (
+                    <ActivityIndicator size="small" color="#999" />
+                  ) : (
+                    <>
+                      <Text style={[styles.fieldValue, !costCode && styles.fieldPlaceholder]} numberOfLines={1}>
+                        {costCode ? getSelectedLabel(costItems, costCode) : job ? "Select a cost code" : "Select a job first"}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                    </>
+                  )}
+                </View>
+              </Pressable>
+
+              {/* Equipment */}
+              <Pressable style={styles.fieldRow} onPress={() => setEquipPickerVisible(true)}>
+                <View style={styles.fieldLeft}>
+                  <Ionicons name="construct-outline" size={20} color="#F67011" />
+                  <Text style={styles.fieldLabel}>Equipment</Text>
+                </View>
+                <View style={styles.fieldRight}>
+                  {loadingEquip ? (
+                    <ActivityIndicator size="small" color="#999" />
+                  ) : (
+                    <>
+                      <Text style={[styles.fieldValue, !equipment && styles.fieldPlaceholder]} numberOfLines={1}>
+                        {equipment ? getSelectedLabel(equipmentItems, equipment) : "None (optional)"}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                    </>
+                  )}
+                </View>
+              </Pressable>
+
+              {/* Notes */}
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldLeft}>
+                  <Ionicons name="create-outline" size={20} color="#F67011" />
+                  <Text style={styles.fieldLabel}>Notes</Text>
+                </View>
+                <TextInput
+                  style={[styles.fieldValue, styles.notesInput]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Optional..."
+                  placeholderTextColor="#ccc"
+                  multiline={false}
+                />
+              </View>
+
+            </View>
+
+            {/* Start Button */}
+            <View style={styles.footer}>
+              <Pressable
+                style={[styles.button, (loadingJobs || loadingEquip || isSubmitting) && styles.buttonDisabled]}
+                onPress={handleStart}
+                disabled={loadingJobs || loadingEquip || isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Start</Text>
+                )}
               </Pressable>
             </View>
           </View>
-        </View>
-      </Modal>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
-      {/* Picker Modals */}
+      {/* Pickers */}
       <ModalPicker
         visible={jobPickerVisible}
         onClose={() => setJobPickerVisible(false)}
@@ -539,7 +534,6 @@ export default function ClockInDetail() {
         onSelect={setJob}
         loading={loadingJobs}
       />
-
       <ModalPicker
         visible={costPickerVisible}
         onClose={() => setCostPickerVisible(false)}
@@ -549,7 +543,6 @@ export default function ClockInDetail() {
         onSelect={setCostCode}
         loading={loadingCosts}
       />
-
       <ModalPicker
         visible={equipPickerVisible}
         onClose={() => setEquipPickerVisible(false)}
@@ -559,202 +552,201 @@ export default function ClockInDetail() {
         onSelect={setEquipment}
         loading={loadingEquip}
       />
-
-      {/* Bottom Card */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.cardWrapper}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.card}>
-            {/* Job Field */}
-            <Pressable
-              style={styles.fieldRow}
-              onPress={() => setJobPickerVisible(true)}
-            >
-              <Text style={styles.fieldLabel}>Job:</Text>
-              <View style={styles.fieldValueRow}>
-                {loadingJobs ? (
-                  <ActivityIndicator size="small" color="#999" />
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.fieldValueText,
-                        !job && styles.fieldPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {job ? getSelectedLabel(jobItems, job) : "Select a job"}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={20} color="#999" />
-                  </>
-                )}
-              </View>
-            </Pressable>
-
-            {/* Cost Code Field */}
-            <Pressable
-              style={[styles.fieldRow, !job && styles.fieldDisabled]}
-              onPress={() => job && setCostPickerVisible(true)}
-              disabled={!job}
-            >
-              <Text style={styles.fieldLabel}>Cost Code:</Text>
-              <View style={styles.fieldValueRow}>
-                {loadingCosts ? (
-                  <ActivityIndicator size="small" color="#999" />
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.fieldValueText,
-                        !costCode && styles.fieldPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {costCode
-                        ? getSelectedLabel(costItems, costCode)
-                        : job
-                        ? "Select a cost code"
-                        : "Select a job first"}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={20} color="#999" />
-                  </>
-                )}
-              </View>
-            </Pressable>
-
-            {/* Equipment Field */}
-            <Pressable
-              style={styles.fieldRow}
-              onPress={() => setEquipPickerVisible(true)}
-            >
-              <Text style={styles.fieldLabel}>Equipment:</Text>
-              <View style={styles.fieldValueRow}>
-                {loadingEquip ? (
-                  <ActivityIndicator size="small" color="#999" />
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.fieldValueText,
-                        !equipment && styles.fieldPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {equipment
-                        ? getSelectedLabel(equipmentItems, equipment)
-                        : "None (optional)"}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={20} color="#999" />
-                  </>
-                )}
-              </View>
-            </Pressable>
-
-            {/* Notes Field */}
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Notes:</Text>
-              <TextInput
-                style={styles.notesInput}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Optional notes..."
-                placeholderTextColor="#999"
-                multiline={false}
-              />
-            </View>
-
-            {/* Start Button */}
-            <Pressable
-              style={[
-                styles.button,
-                (loadingJobs || loadingEquip || isSubmitting) &&
-                  styles.buttonDisabled,
-              ]}
-              onPress={handleStart}
-              disabled={loadingJobs || loadingEquip || isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Start</Text>
-              )}
-            </Pressable>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#fff",
   },
-  mapContainer: {
+  flex: {
     flex: 1,
-    width: "100%",
-    minHeight: 200,
+  },
+
+  // Nearest Jobs
+  nearestContainer: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    backgroundColor: "#f9f9f9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#efefef",
     overflow: "hidden",
   },
-  cardWrapper: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  card: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-  },
-  fieldRow: {
-    marginBottom: 20,
+  nearestHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-    paddingBottom: 12,
+    borderBottomColor: "#efefef",
   },
-  fieldDisabled: {
-    opacity: 0.5,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#666",
-    marginBottom: 6,
+  nearestTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#888",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  fieldValueRow: {
+  nearestRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "#efefef",
   },
-  fieldValueText: {
-    fontSize: 17,
-    color: "#000",
+  nearestLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     flex: 1,
   },
+  nearestDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F67011",
+  },
+  nearestName: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    flex: 1,
+  },
+  nearestDistance: {
+    fontSize: 13,
+    color: "#888",
+    marginLeft: 8,
+  },
+
+  // Quick Start
+  quickStart: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 14,
+    backgroundColor: "#fff8f3",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fde8d4",
+  },
+  quickStartLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  quickStartLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#F67011",
+  },
+  quickStartSub: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 1,
+    maxWidth: 220,
+  },
+  quickStartAction: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#F67011",
+    paddingLeft: 12,
+  },
+
+  // Header
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1a1a1a",
+  },
+
+  // Form
+  form: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  fieldDisabled: {
+    opacity: 0.4,
+  },
+  fieldLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    width: 120,
+  },
+  fieldLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1a1a1a",
+  },
+  fieldRight: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  fieldValue: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1a1a1a",
+    textAlign: "right",
+  },
   fieldPlaceholder: {
-    color: "#999",
+    color: "#ccc",
   },
   notesInput: {
-    fontSize: 17,
-    color: "#000",
-    paddingVertical: 4,
+    textAlign: "right",
+    paddingVertical: 0,
+  },
+
+  // Footer
+  footer: {
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 36 : 20,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
   },
   button: {
     backgroundColor: "#1C1C1E",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: 8,
   },
   buttonDisabled: {
     backgroundColor: "#A0A0A0",
@@ -763,63 +755,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 17,
     fontWeight: "600",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 340,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#000",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  modalText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  modalProjectName: {
-    fontWeight: "600",
-    color: "#000",
-  },
-  modalButtons: {
-    flexDirection: "column",
-    gap: 12,
-  },
-  modalButtonPrimary: {
-    backgroundColor: "#1C1C1E",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  modalButtonPrimaryText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  modalButtonSecondary: {
-    backgroundColor: "#F3F4F6",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  modalButtonSecondaryText: {
-    color: "#374151",
-    fontSize: 16,
-    fontWeight: "500",
   },
 });

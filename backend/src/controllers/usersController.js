@@ -15,7 +15,12 @@ export async function createUser(req, res) {
       role_key,
       is_active,
       can_view_rates,
-      hourly_rate
+      // Employment fields — stored in user_employment, not users
+      pay_type,
+      hourly_rate,
+      salary_annual,
+      ot_after_hours_per_day,
+      ot_multiplier
     } = req.body;
 
     // Validate required fields
@@ -54,8 +59,7 @@ export async function createUser(req, res) {
         default_company_id: company_id,
         role_key: role_key || null,
         is_active: is_active !== undefined ? is_active : true,
-        can_view_rates: can_view_rates || false,
-        hourly_rate: hourly_rate || null
+        can_view_rates: can_view_rates || false
       })
       .select()
       .single();
@@ -83,9 +87,37 @@ export async function createUser(req, res) {
       }
     }
 
+    // Create user_employment record if pay info provided
+    let employmentData = null;
+    if (pay_type) {
+      const { data: empData, error: empError } = await supabase
+        .from('user_employment')
+        .insert({
+          user_id: userId,
+          company_id,
+          pay_type,
+          hourly_rate: pay_type === 'hourly' ? (hourly_rate || null) : null,
+          salary_annual: pay_type === 'salary' ? (salary_annual || null) : null,
+          ot_after_hours_per_day: ot_after_hours_per_day || 8.0,
+          ot_multiplier: ot_multiplier || 1.5,
+          effective_from: new Date().toISOString().split('T')[0],
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (empError) {
+        console.error('Create employment error:', empError);
+        // Non-fatal — user was created, employment can be set later via POST /users/:id/employment
+      } else {
+        employmentData = empData;
+      }
+    }
+
     return res.status(201).json({
       message: 'User created successfully',
-      user: profileData
+      user: profileData,
+      employment: employmentData
     });
 
   } catch (err) {
