@@ -199,5 +199,5 @@ export async function approveTimeOff(token, requestId) {
 }
 
 export async function denyTimeOff(token, requestId, reason) {
-  return apiCall(token, `time-off/${requestId}/deny`, 'PATCH', { reason });
+  return apiCall(token, `time-off/${requestId}/deny`, 'PATCH', {notes: reason });
 }

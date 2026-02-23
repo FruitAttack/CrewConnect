@@ -148,7 +148,9 @@ const MyCrew = () => {
 
       const allEntries = timeEntriesRes?.data?.time_entries || [];
       const allApprovals = approvalsRes?.data || [];
-      const allTimeOff = timeOffRes?.data?.data || [];
+      const allTimeOff = timeOffRes?.data?.data || timeOffRes?.data || [];
+console.log('[MyCrew] timeOffRes full:', JSON.stringify(timeOffRes));
+console.log('[MyCrew] allTimeOff count:', allTimeOff.length);
 
       // Index approvals by user_id for fast lookup
       const approvalByUser = {};
