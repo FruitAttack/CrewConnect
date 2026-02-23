@@ -2,20 +2,20 @@ import React from 'react';
 import { ScrollView } from 'react-native';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react-native';
 
-import Projects from '../app/(app)/Projects';
-import CreateProjectModal from '../app/components/projectComponents/createProjectModal';
+import Projects from '../../app/(app)/Projects';
+import CreateProjectModal from '../../app/components/projectComponents/createProjectModal';
 
-import { getUserProfile, getProjects } from '../utils/api';
-import { useSession } from '../utils/ctx';
+import { getUserProfile, getProjects } from '../../utils/api';
+import { useSession } from '../../utils/ctx';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useProject } from '../app/components/projectComponents/projectContext';
+import { useProject } from '../../app/components/projectComponents/projectContext';
 
-jest.mock('../utils/api');
-jest.mock('../utils/ctx');
+jest.mock('../../utils/api');
+jest.mock('../../utils/ctx');
 jest.mock('expo-router');
-jest.mock('../app/components/projectComponents/projectContext');
+jest.mock('../../app/components/projectComponents/projectContext');
 
-jest.mock('../app/components/projectComponents/createProjectModal', () => {
+jest.mock('../../app/components/projectComponents/createProjectModal', () => {
   const React = require('react');
   const { Text } = require('react-native');
   return jest.fn((props) =>
