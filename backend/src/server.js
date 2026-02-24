@@ -135,7 +135,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   const networkInterfaces = os.networkInterfaces();
   const localIP = Object.values(networkInterfaces)
     .flat()

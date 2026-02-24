@@ -10,11 +10,12 @@ const tiles = [
   // { label: 'Materials', icon: require('../../../assets/icons/materials.png') },
   { label: 'DVIR', icon: require('../../../assets/icons/dvir.png'), formId: '9f21dc43-e775-4fe9-87fb-92942e016dc9' },
   // { label: 'Equipment', icon: require('../../../assets/icons/equipment.png') },
-  { label: 'My Crew', icon: require('../../../assets/icons/myCrew.png') },
+  { label: 'My Crew', icon: require('../../../assets/icons/myCrew.png'), route: 'my_crew' },
   // { label: 'Toolbox Talk', icon: require('../../../assets/icons/toolbox.png') },
   { label: 'Observations', icon: require('../../../assets/icons/observation.png'), formId: '6d63c47a-2bcf-4954-9efd-2d85c37f4d3a' },
   { label: 'All Forms', icon: require('../../../assets/icons/photos.png'), route: 'forms' },
   { label: 'Contacts', icon: require('../../../assets/icons/contacts.png'), route: 'contacts_list' },
+  { label: 'Maps', icon: require('../../../assets/icons/maps.png'), route: 'project_map_Screen' },
   // { label: 'Change Order', icon: require('../../../assets/icons/change_order.png') },
 ];
 
