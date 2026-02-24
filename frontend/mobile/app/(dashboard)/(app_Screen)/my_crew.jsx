@@ -18,7 +18,6 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Same overlap-based day calculator used in Timecard_Screen */
 function calculateSecondsForDay(timeEntries, dateString) {
   if (!timeEntries || timeEntries.length === 0) return 0;
   const [year, month, day] = dateString.split('-').map(Number);
@@ -41,57 +40,37 @@ function calculateSecondsForDay(timeEntries, dateString) {
   return Math.round(totalSeconds);
 }
 
-/**
- * Returns the most recently COMPLETED Sun–Sat week.
- * Uses the same Sunday-based week boundary as Timecard_Screen so that
- * week_start values stored in the DB match on both sides.
- *
- * Example (called on a Wednesday Feb 19):
- *   This week started Sunday Feb 16  → not finished yet
- *   Last week started Sunday Feb  9  → returned
- */
 function getLastCompletedWeekRange() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
-  // Find this week's Sunday
   const thisWeekSunday = new Date(today);
-  thisWeekSunday.setDate(today.getDate() - today.getDay()); // back to Sunday
-
-  // Last completed week = one week before this week's Sunday
+  thisWeekSunday.setDate(today.getDate() - today.getDay());
   const lastWeekSunday = new Date(thisWeekSunday);
   lastWeekSunday.setDate(thisWeekSunday.getDate() - 7);
-
   const lastWeekSaturday = new Date(lastWeekSunday);
   lastWeekSaturday.setDate(lastWeekSunday.getDate() + 6);
   lastWeekSaturday.setHours(23, 59, 59, 999);
-
   const toISO = (dt) =>
     `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-
   return { weekStart: toISO(lastWeekSunday), weekEnd: toISO(lastWeekSaturday) };
 }
 
-/** Convert a Date → 'YYYY-MM-DD' without timezone shift */
 function toISO(dt) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-/** Given a 'YYYY-MM-DD' week-start string, return the matching week-end string (+6 days) */
 function weekEndFromStart(weekStartStr) {
   const d = new Date(weekStartStr + 'T00:00:00');
   d.setDate(d.getDate() + 6);
   return toISO(d);
 }
 
-/** Navigate a week-start string by ±N weeks */
 function shiftWeek(weekStartStr, weeks) {
   const d = new Date(weekStartStr + 'T00:00:00');
   d.setDate(d.getDate() + weeks * 7);
   return toISO(d);
 }
 
-/** 'YYYY-MM-DD' → friendly 'Jan 5 - Jan 11, 2025' */
 function formatWeekLabel(weekStartStr) {
   const s = new Date(weekStartStr + 'T00:00:00');
   const e = new Date(weekStartStr + 'T00:00:00');
@@ -132,40 +111,32 @@ const MyCrew = () => {
   const [searchQuery,          setSearchQuery]          = useState('');
   const [selectedTab,          setSelectedTab]          = useState('timecards');
   const [error,                setError]                = useState(null);
-  const [approvingId,          setApprovingId]          = useState(null); // userId being approved
+  const [approvingId,          setApprovingId]          = useState(null);
   const [denyingTimeOffId,     setDenyingTimeOffId]     = useState(null);
   const [denyReason,           setDenyReason]           = useState('');
   const [denyModalVisible,     setDenyModalVisible]     = useState(false);
 
-  // Week navigation — starts on the last completed week, can go back freely
   const { weekStart: defaultWeekStart } = getLastCompletedWeekRange();
   const [selectedWeekStart, setSelectedWeekStart] = useState(defaultWeekStart);
   const isLatestWeek = selectedWeekStart === defaultWeekStart;
 
-  // ─── Fetch & assemble crew data ─────────────────────────────────────────────
+  // ─── Fetch ───────────────────────────────────────────────────────────────────
 
   const fetchCrewMembers = async (weekStartOverride) => {
     if (!token) return;
     setLoading(true);
     setError(null);
-
     try {
-      // 1. Logged-in user profile
       const meRes = await getUserProfile(token);
       const me = meRes?.data?.user;
       if (!me) throw new Error('Could not load user profile');
       const companyId = me.default_company_id || me.default_company?.id || me.company_id;
       const myUserId  = me.id;
 
-      // 2. Crews where I am the foreman
       const crewsRes = await getCrews(token, companyId);
       const allCrews = crewsRes?.data?.crews || [];
       const myCrews  = allCrews.filter(c => String(c.foreman_id) === String(myUserId));
 
-      console.log('[MyCrew] My user ID:', myUserId);
-      console.log('[MyCrew] My crews:', myCrews.map(c => c.name));
-
-      // Collect unique members (excluding myself)
       const memberMap = new Map();
       myCrews.forEach(crew => {
         (crew.crew_members || []).forEach(cm => {
@@ -176,41 +147,24 @@ const MyCrew = () => {
         });
       });
 
-      if (memberMap.size === 0) {
-        setCrewMembers([]);
-        return;
-      }
+      if (memberMap.size === 0) { setCrewMembers([]); return; }
 
-      // 3. Fetch for the selected week (or default to last completed)
       const weekStart = weekStartOverride || getLastCompletedWeekRange().weekStart;
       const weekEnd   = weekEndFromStart(weekStart);
-      console.log('[MyCrew] Fetching week:', weekStart, '→', weekEnd);
 
       const [timeEntriesRes, approvalsRes, timeOffRes] = await Promise.all([
-        getTimeEntries(token, {
-          all_users: 'true',
-          start_date: weekStart,
-          end_date: weekEnd,
-          limit: 500,
-        }),
+        getTimeEntries(token, { all_users: 'true', start_date: weekStart, end_date: weekEnd, limit: 500 }),
         getTimecardApprovals(token, { company_id: companyId, week_start: weekStart }),
         getTimeOffAll(token),
       ]);
 
       const allEntries   = timeEntriesRes?.data?.time_entries || [];
       const allApprovals = approvalsRes?.data || [];
-      // Safely unwrap time-off: API returns { success, data: [...] }
       const rawTimeOffData = timeOffRes?.data;
       const allTimeOff = Array.isArray(rawTimeOffData?.data)
         ? rawTimeOffData.data
-        : Array.isArray(rawTimeOffData)
-          ? rawTimeOffData
-          : [];
+        : Array.isArray(rawTimeOffData) ? rawTimeOffData : [];
 
-      console.log('[MyCrew] Approvals fetched:', allApprovals.length);
-      console.log('[MyCrew] Time-off records:', allTimeOff.length);
-
-      // Index by user_id
       const approvalByUser = {};
       allApprovals.forEach(a => { approvalByUser[a.user_id] = a; });
 
@@ -221,14 +175,11 @@ const MyCrew = () => {
         timeOffByUser[uid].push(req);
       });
 
-      // 4. Build member objects
       const built = [];
       let colorIndex = 0;
 
       memberMap.forEach(({ user }, userId) => {
         const userEntries = allEntries.filter(e => e.user_id === userId);
-
-        // Daily hours breakdown
         const daily_hours = [];
         for (let i = 0; i < 7; i++) {
           const d = new Date(weekStart + 'T00:00:00');
@@ -239,24 +190,22 @@ const MyCrew = () => {
           daily_hours.push({ date: dateStr, day_name: DAY_NAMES[d.getDay()], hours });
         }
 
-        const totalHours   = daily_hours.reduce((sum, d) => sum + d.hours, 0);
-        const regularHours = Math.min(totalHours, 40);
+        const totalHours    = daily_hours.reduce((sum, d) => sum + d.hours, 0);
+        const regularHours  = Math.min(totalHours, 40);
         const overtimeHours = Math.max(0, totalHours - 40);
 
-        // Map DB approval status → UI status
         const approval = approvalByUser[userId] || null;
-        let timecardStatus = 'not_submitted'; // no record at all
+        let timecardStatus = 'not_submitted';
         if (approval) {
           switch (approval.status) {
-            case 'approved':        timecardStatus = 'approved';  break;
-            case 'pending':         timecardStatus = 'pending';   break;
-            case 'rejected':        timecardStatus = 'rejected';  break;
+            case 'approved':        timecardStatus = 'approved';        break;
+            case 'pending':         timecardStatus = 'pending';         break;
+            case 'rejected':        timecardStatus = 'rejected';        break;
             case 'pending_changes': timecardStatus = 'pending_changes'; break;
             default:                timecardStatus = approval.status;
           }
         }
 
-        // Time-off requests
         const rawTimeOff = timeOffByUser[userId] || [];
         const time_off_requests = rawTimeOff.map(r => ({
           id:             r.id,
@@ -276,25 +225,24 @@ const MyCrew = () => {
           name:    user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
           initials: getInitials(user.full_name || `${user.first_name || ''} ${user.last_name || ''}`),
           color:   colorForIndex(colorIndex++),
-          // Store raw approval + metadata needed to upsert
-          _approval:   approval,
-          _companyId:  companyId,
-          _weekStart:  weekStart,
-          _weekEnd:    weekEnd,
+          _approval:  approval,
+          _companyId: companyId,
+          _weekStart: weekStart,
+          _weekEnd:   weekEnd,
           current_period: {
             start_date:  weekStart,
             end_date:    weekEnd,
             total_hours: Math.round(totalHours * 100) / 100,
           },
           timecard: {
-            start_date:       weekStart,
-            end_date:         weekEnd,
-            status:           timecardStatus,
-            regular_hours:    Math.round(regularHours * 100) / 100,
-            overtime_hours:   Math.round(overtimeHours * 100) / 100,
-            employee_signed:  approval?.status === 'pending' || approval?.status === 'approved',
+            start_date:        weekStart,
+            end_date:          weekEnd,
+            status:            timecardStatus,
+            regular_hours:     Math.round(regularHours * 100) / 100,
+            overtime_hours:    Math.round(overtimeHours * 100) / 100,
+            employee_signed:   approval?.status === 'pending' || approval?.status === 'approved',
             supervisor_signed: approval?.status === 'approved',
-            notes:            approval?.notes || null,
+            notes:             approval?.notes || null,
             daily_hours,
           },
           time_off_requests,
@@ -315,15 +263,13 @@ const MyCrew = () => {
 
   const onRefresh = () => { setRefreshing(true); fetchCrewMembers(selectedWeekStart); };
 
-  // Navigate to a different week
   const navigateWeek = (direction) => {
     const next = shiftWeek(selectedWeekStart, direction);
-    // Don't go forward past the last completed week
     if (direction > 0 && next > defaultWeekStart) return;
     setSelectedWeekStart(next);
   };
 
-  // ─── Approve timecard ─────────────────────────────────────────────────────
+  // ─── Approve / Reject timecard ────────────────────────────────────────────
 
   const handleApprove = async (member, notes = null) => {
     setApprovingId(member.id);
@@ -340,12 +286,7 @@ const MyCrew = () => {
         setCrewMembers(prev => prev.map(m => m.id !== member.id ? m : {
           ...m,
           _approval: res.data,
-          timecard: {
-            ...m.timecard,
-            status:           'approved',
-            supervisor_signed: true,
-            employee_signed:   true,
-          },
+          timecard: { ...m.timecard, status: 'approved', supervisor_signed: true, employee_signed: true },
         }));
         setDetailsModalVisible(false);
         Alert.alert('Approved ✓', `${member.name}'s timecard has been approved.`);
@@ -359,8 +300,6 @@ const MyCrew = () => {
       setApprovingId(null);
     }
   };
-
-  // ─── Reject timecard ──────────────────────────────────────────────────────
 
   const handleReject = async () => {
     if (!selectedCrewMember) return;
@@ -380,12 +319,7 @@ const MyCrew = () => {
         setCrewMembers(prev => prev.map(m => m.id !== member.id ? m : {
           ...m,
           _approval: res.data,
-          timecard: {
-            ...m.timecard,
-            status:            'rejected',
-            supervisor_signed: false,
-            notes:             rejectNotes.trim() || null,
-          },
+          timecard: { ...m.timecard, status: 'rejected', supervisor_signed: false, notes: rejectNotes.trim() || null },
         }));
         setDetailsModalVisible(false);
         setRejectNotes('');
@@ -503,7 +437,6 @@ const MyCrew = () => {
     !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Timecards that need the foreman's attention (pending = employee submitted, awaiting foreman)
   const actionableTimecards = filteredCrewMembers.filter(m =>
     m.timecard.status === 'pending' || m.timecard.status === 'rejected'
   );
@@ -530,7 +463,6 @@ const MyCrew = () => {
         </View>
       )}
 
-      {/* Search — always visible */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
@@ -542,7 +474,6 @@ const MyCrew = () => {
         />
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabsContainer}>
         <Pressable
           style={[styles.tab, selectedTab === 'timecards' && styles.tabActive]}
@@ -566,7 +497,6 @@ const MyCrew = () => {
         </Pressable>
       </View>
 
-      {/* Week navigator — only shown on Timecards tab */}
       {selectedTab === 'timecards' && (
         <View style={styles.weekNav}>
           <Pressable onPress={() => navigateWeek(-1)} style={styles.weekNavArrow}>
@@ -610,7 +540,6 @@ const MyCrew = () => {
         >
           {selectedTab === 'timecards' ? (
             <>
-              {/* Action needed section */}
               {actionableTimecards.length > 0 && (
                 <View style={styles.sectionCard}>
                   <View style={styles.sectionHeader}>
@@ -645,7 +574,6 @@ const MyCrew = () => {
                 </View>
               )}
 
-              {/* All crew members */}
               <Text style={styles.allMembersLabel}>All Crew Members</Text>
               {filteredCrewMembers.map(member => (
                 <Pressable
@@ -680,7 +608,6 @@ const MyCrew = () => {
               ))}
             </>
           ) : (
-            /* Time Off Tab */
             <>
               {filteredCrewMembers.map(member => {
                 const requests = member.time_off_requests || [];
@@ -759,121 +686,121 @@ const MyCrew = () => {
               </Pressable>
             </View>
             <View style={styles.modalDivider} />
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
-              {selectedCrewMember && (() => {
-                const m = selectedCrewMember;
-                const tc = m.timecard;
-                return (
-                  <>
-                    {/* Employee header */}
-                    <View style={styles.modalEmployeeSection}>
-                      <View style={[styles.modalAvatar, { backgroundColor: m.color }]}>
-                        <Text style={styles.modalAvatarText}>{m.initials}</Text>
-                      </View>
-                      <Text style={styles.modalEmployeeName}>{m.name}</Text>
-                      <Text style={styles.modalPeriodDate}>{formatDateRange(tc.start_date, tc.end_date)}</Text>
-                      <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(tc.status)}20`, marginTop: 8 }]}>
-                        <View style={[styles.statusDot, { backgroundColor: getStatusColor(tc.status) }]} />
-                        <Text style={[styles.statusBadgeText, { color: getStatusColor(tc.status) }]}>{getStatusLabel(tc.status)}</Text>
-                      </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {!selectedCrewMember && (
+                <Text style={{ color: '#999', textAlign: 'center', marginTop: 20 }}>Loading...</Text>
+              )}
+              {selectedCrewMember && (
+                <>
+                  {/* Employee header */}
+                  <View style={styles.modalEmployeeSection}>
+                    <View style={[styles.modalAvatar, { backgroundColor: selectedCrewMember.color }]}>
+                      <Text style={styles.modalAvatarText}>{selectedCrewMember.initials}</Text>
                     </View>
-
-                    {/* Supervisor notes (if any) */}
-                    {tc.notes && (
-                      <View style={styles.notesBox}>
-                        <Text style={styles.notesLabel}>Notes:</Text>
-                        <Text style={styles.notesText}>{tc.notes}</Text>
-                      </View>
-                    )}
-
-                    {/* Daily hours */}
-                    <View style={styles.dailyBreakdown}>
-                      <Text style={styles.sectionLabel}>Daily Hours</Text>
-                      <View style={styles.dailyTable}>
-                        <View style={styles.tableHeaderRow}>
-                          <Text style={[styles.tableHeaderText, { flex: 1 }]}>Date</Text>
-                          <Text style={[styles.tableHeaderText, { flex: 1 }]}>Day</Text>
-                          <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Hours</Text>
-                        </View>
-                        {tc.daily_hours?.map((day, idx) => (
-                          <View key={idx} style={styles.tableRow}>
-                            <Text style={[styles.tableCellDate, { flex: 1 }]}>{formatDate(day.date)}</Text>
-                            <Text style={[styles.tableCellDay,  { flex: 1 }]}>{day.day_name}</Text>
-                            <Text style={[styles.tableCellHours, { width: 60, textAlign: 'right' }]}>
-                              {day.hours > 0 ? day.hours.toFixed(1) : '-'}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
+                    <Text style={styles.modalEmployeeName}>{selectedCrewMember.name}</Text>
+                    <Text style={styles.modalPeriodDate}>
+                      {formatDateRange(selectedCrewMember.timecard.start_date, selectedCrewMember.timecard.end_date)}
+                    </Text>
+                    <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(selectedCrewMember.timecard.status)}20`, marginTop: 8 }]}>
+                      <View style={[styles.statusDot, { backgroundColor: getStatusColor(selectedCrewMember.timecard.status) }]} />
+                      <Text style={[styles.statusBadgeText, { color: getStatusColor(selectedCrewMember.timecard.status) }]}>
+                        {getStatusLabel(selectedCrewMember.timecard.status)}
+                      </Text>
                     </View>
+                  </View>
 
-                    {/* Summary */}
-                    <View style={styles.summarySection}>
-                      {[
-                        { label: 'REGULAR',  val: tc.regular_hours },
-                        { label: 'OVERTIME', val: tc.overtime_hours },
-                      ].map(({ label, val }) => (
-                        <View key={label} style={styles.summaryRow}>
-                          <Text style={styles.summaryLabel}>{label}</Text>
-                          <Text style={styles.summaryValue}>{(val || 0).toFixed(2)}</Text>
-                        </View>
-                      ))}
-                      <View style={[styles.summaryRow, styles.totalRow]}>
-                        <Text style={styles.totalLabel}>TOTAL</Text>
-                        <Text style={styles.totalValue}>{getTotalHours(tc).toFixed(2)}</Text>
-                      </View>
+                  {/* Supervisor notes */}
+                  {selectedCrewMember.timecard.notes && (
+                    <View style={styles.notesBox}>
+                      <Text style={styles.notesLabel}>Notes:</Text>
+                      <Text style={styles.notesText}>{selectedCrewMember.timecard.notes}</Text>
                     </View>
+                  )}
 
-                    {/* Signature status */}
-                    <View style={styles.signaturesSection}>
-                      {[
-                        { label: 'Employee Signature',   signed: tc.employee_signed },
-                        { label: 'Supervisor Signature', signed: tc.supervisor_signed },
-                      ].map(({ label, signed }) => (
-                        <View key={label} style={styles.signatureBox}>
-                          <Text style={styles.signatureLabel}>{label}</Text>
-                          {signed
-                            ? <View style={styles.signedIndicator}><Ionicons name="checkmark-circle" size={20} color="#50c878" /><Text style={styles.signedText}>Signed</Text></View>
-                            : <Text style={styles.unsignedText}>Not signed</Text>
-                          }
+                  {/* Daily hours */}
+                  <View style={styles.dailyBreakdown}>
+                    <Text style={styles.sectionLabel}>Daily Hours</Text>
+                    <View style={styles.dailyTable}>
+                      <View style={styles.tableHeaderRow}>
+                        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Date</Text>
+                        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Day</Text>
+                        <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Hours</Text>
+                      </View>
+                      {selectedCrewMember.timecard.daily_hours?.map((day, idx) => (
+                        <View key={idx} style={styles.tableRow}>
+                          <Text style={[styles.tableCellDate, { flex: 1 }]}>{formatDate(day.date)}</Text>
+                          <Text style={[styles.tableCellDay,  { flex: 1 }]}>{day.day_name}</Text>
+                          <Text style={[styles.tableCellHours, { width: 60, textAlign: 'right' }]}>
+                            {day.hours > 0 ? day.hours.toFixed(1) : '-'}
+                          </Text>
                         </View>
                       ))}
                     </View>
+                  </View>
 
-                    {/* Actions — shown only when employee has submitted (pending) */}
-                    {tc.status === 'pending' && (
-                      <View style={styles.modalActions}>
-                        <Pressable
-                          style={[styles.approveButton, approvingId === m.id && { opacity: 0.6 }]}
-                          onPress={() => handleApprove(m)}
-                          disabled={approvingId === m.id}
-                        >
-                          {approvingId === m.id
-                            ? <ActivityIndicator color="#fff" />
-                            : <><Ionicons name="checkmark-circle" size={20} color="#fff" /><Text style={styles.actionButtonText}>Approve Timecard</Text></>
-                          }
-                        </Pressable>
-                        <Pressable
-                          style={styles.rejectButton}
-                          onPress={() => setRejectModalVisible(true)}
-                        >
-                          <Ionicons name="close-circle" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Reject Timecard</Text>
-                        </Pressable>
+                  {/* Summary */}
+                  <View style={styles.summarySection}>
+                    {[
+                      { label: 'REGULAR',  val: selectedCrewMember.timecard.regular_hours },
+                      { label: 'OVERTIME', val: selectedCrewMember.timecard.overtime_hours },
+                    ].map(({ label, val }) => (
+                      <View key={label} style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>{label}</Text>
+                        <Text style={styles.summaryValue}>{(val || 0).toFixed(2)}</Text>
                       </View>
-                    )}
-                    {/* Already approved — show re-open option */}
-                    {tc.status === 'approved' && (
-                      <View style={styles.modalActions}>
-                        <View style={styles.approvedBanner}>
-                          <Ionicons name="checkmark-circle" size={22} color="#50c878" />
-                          <Text style={styles.approvedBannerText}>This timecard has been approved</Text>
-                        </View>
+                    ))}
+                    <View style={[styles.summaryRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>TOTAL</Text>
+                      <Text style={styles.totalValue}>{getTotalHours(selectedCrewMember.timecard).toFixed(2)}</Text>
+                    </View>
+                  </View>
+
+                  {/* Signature status */}
+                  <View style={styles.signaturesSection}>
+                    {[
+                      { label: 'Employee Signature',   signed: selectedCrewMember.timecard.employee_signed },
+                      { label: 'Supervisor Signature', signed: selectedCrewMember.timecard.supervisor_signed },
+                    ].map(({ label, signed }) => (
+                      <View key={label} style={styles.signatureBox}>
+                        <Text style={styles.signatureLabel}>{label}</Text>
+                        {signed
+                          ? <View style={styles.signedIndicator}><Ionicons name="checkmark-circle" size={20} color="#50c878" /><Text style={styles.signedText}>Signed</Text></View>
+                          : <Text style={styles.unsignedText}>Not signed</Text>
+                        }
                       </View>
-                    )}
-                  </>
-                );
-              })()}
+                    ))}
+                  </View>
+
+                  {/* Actions */}
+                  {selectedCrewMember.timecard.status === 'pending' && (
+                    <View style={styles.modalActions}>
+                      <Pressable
+                        style={[styles.approveButton, approvingId === selectedCrewMember.id && { opacity: 0.6 }]}
+                        onPress={() => handleApprove(selectedCrewMember)}
+                        disabled={approvingId === selectedCrewMember.id}
+                      >
+                        {approvingId === selectedCrewMember.id
+                          ? <ActivityIndicator color="#fff" />
+                          : <><Ionicons name="checkmark-circle" size={20} color="#fff" /><Text style={styles.actionButtonText}>Approve Timecard</Text></>
+                        }
+                      </Pressable>
+                      <Pressable style={styles.rejectButton} onPress={() => setRejectModalVisible(true)}>
+                        <Ionicons name="close-circle" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Reject Timecard</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {selectedCrewMember.timecard.status === 'approved' && (
+                    <View style={styles.modalActions}>
+                      <View style={styles.approvedBanner}>
+                        <Ionicons name="checkmark-circle" size={22} color="#50c878" />
+                        <Text style={styles.approvedBannerText}>This timecard has been approved</Text>
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -928,76 +855,82 @@ const MyCrew = () => {
               </Pressable>
             </View>
             <View style={styles.modalDivider} />
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
-              {selectedCrewMember && selectedTimeOffRequest && (() => {
-                const req = selectedTimeOffRequest;
-                return (
-                  <>
-                    <View style={styles.modalEmployeeSection}>
-                      <View style={[styles.modalAvatar, { backgroundColor: selectedCrewMember.color }]}>
-                        <Text style={styles.modalAvatarText}>{selectedCrewMember.initials}</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {selectedCrewMember && selectedTimeOffRequest && (
+                <>
+                  <View style={styles.modalEmployeeSection}>
+                    <View style={[styles.modalAvatar, { backgroundColor: selectedCrewMember.color }]}>
+                      <Text style={styles.modalAvatarText}>{selectedCrewMember.initials}</Text>
+                    </View>
+                    <Text style={styles.modalEmployeeName}>{selectedCrewMember.name}</Text>
+                    <View style={[styles.timeOffTypeBadge, { backgroundColor: `${getTimeOffTypeColor(selectedTimeOffRequest.type)}20`, marginTop: 8, paddingHorizontal: 16, paddingVertical: 8 }]}>
+                      <Text style={[styles.timeOffTypeText, { color: getTimeOffTypeColor(selectedTimeOffRequest.type), fontSize: 14, fontWeight: '600' }]}>
+                        {selectedTimeOffRequest.type}
+                      </Text>
+                    </View>
+                    <View style={[styles.timeOffStatusBadge, { backgroundColor: `${getTimeOffStatusColor(selectedTimeOffRequest.status)}20`, marginTop: 8 }]}>
+                      <View style={[styles.statusDot, { backgroundColor: getTimeOffStatusColor(selectedTimeOffRequest.status) }]} />
+                      <Text style={[styles.timeOffStatusText, { color: getTimeOffStatusColor(selectedTimeOffRequest.status) }]}>
+                        {selectedTimeOffRequest.status.charAt(0).toUpperCase() + selectedTimeOffRequest.status.slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.timeOffDetailsSection}>
+                    {[
+                      { icon: 'calendar-outline',       label: 'Date Range', value: formatDateRange(selectedTimeOffRequest.start_date, selectedTimeOffRequest.end_date) },
+                      { icon: 'time-outline',           label: 'Duration',   value: `${selectedTimeOffRequest.days} ${selectedTimeOffRequest.days === 1 ? 'day' : 'days'}` },
+                      { icon: 'document-text-outline',  label: 'Submitted',  value: formatDate(selectedTimeOffRequest.submitted_date) },
+                      ...(selectedTimeOffRequest.reviewed_date
+                        ? [{ icon: 'checkmark-circle-outline', label: 'Reviewed', value: formatDate(selectedTimeOffRequest.reviewed_date) }]
+                        : []),
+                    ].map(({ icon, label, value }) => (
+                      <View key={label} style={styles.timeOffDetailRow}>
+                        <Ionicons name={icon} size={20} color="#666" />
+                        <View style={styles.timeOffDetailContent}>
+                          <Text style={styles.timeOffDetailLabel}>{label}</Text>
+                          <Text style={styles.timeOffDetailValue}>{value}</Text>
+                        </View>
                       </View>
-                      <Text style={styles.modalEmployeeName}>{selectedCrewMember.name}</Text>
-                      <View style={[styles.timeOffTypeBadge, { backgroundColor: `${getTimeOffTypeColor(req.type)}20`, marginTop: 8, paddingHorizontal: 16, paddingVertical: 8 }]}>
-                        <Text style={[styles.timeOffTypeText, { color: getTimeOffTypeColor(req.type), fontSize: 14, fontWeight: '600' }]}>{req.type}</Text>
-                      </View>
-                      <View style={[styles.timeOffStatusBadge, { backgroundColor: `${getTimeOffStatusColor(req.status)}20`, marginTop: 8 }]}>
-                        <View style={[styles.statusDot, { backgroundColor: getTimeOffStatusColor(req.status) }]} />
-                        <Text style={[styles.timeOffStatusText, { color: getTimeOffStatusColor(req.status) }]}>
-                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                        </Text>
+                    ))}
+                  </View>
+
+                  {selectedTimeOffRequest.reason ? (
+                    <View style={styles.timeOffReasonSection}>
+                      <Text style={styles.sectionLabel}>Reason</Text>
+                      <View style={styles.timeOffReasonBox}>
+                        <Text style={styles.timeOffReasonText}>{selectedTimeOffRequest.reason}</Text>
                       </View>
                     </View>
-                    <View style={styles.timeOffDetailsSection}>
-                      {[
-                        { icon: 'calendar-outline', label: 'Date Range', value: formatDateRange(req.start_date, req.end_date) },
-                        { icon: 'time-outline',     label: 'Duration',   value: `${req.days} ${req.days === 1 ? 'day' : 'days'}` },
-                        { icon: 'document-text-outline', label: 'Submitted', value: formatDate(req.submitted_date) },
-                        ...(req.reviewed_date ? [{ icon: 'checkmark-circle-outline', label: 'Reviewed', value: formatDate(req.reviewed_date) }] : []),
-                      ].map(({ icon, label, value }) => (
-                        <View key={label} style={styles.timeOffDetailRow}>
-                          <Ionicons name={icon} size={20} color="#666" />
-                          <View style={styles.timeOffDetailContent}>
-                            <Text style={styles.timeOffDetailLabel}>{label}</Text>
-                            <Text style={styles.timeOffDetailValue}>{value}</Text>
-                          </View>
-                        </View>
-                      ))}
+                  ) : null}
+
+                  {selectedTimeOffRequest.status === 'denied' && selectedTimeOffRequest.denial_reason ? (
+                    <View style={styles.timeOffReasonSection}>
+                      <Text style={styles.sectionLabel}>Denial Reason</Text>
+                      <View style={[styles.timeOffReasonBox, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                        <Text style={[styles.timeOffReasonText, { color: '#991b1b' }]}>{selectedTimeOffRequest.denial_reason}</Text>
+                      </View>
                     </View>
-                    {req.reason ? (
-                      <View style={styles.timeOffReasonSection}>
-                        <Text style={styles.sectionLabel}>Reason</Text>
-                        <View style={styles.timeOffReasonBox}>
-                          <Text style={styles.timeOffReasonText}>{req.reason}</Text>
-                        </View>
-                      </View>
-                    ) : null}
-                    {req.status === 'denied' && req.denial_reason ? (
-                      <View style={styles.timeOffReasonSection}>
-                        <Text style={styles.sectionLabel}>Denial Reason</Text>
-                        <View style={[styles.timeOffReasonBox, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
-                          <Text style={[styles.timeOffReasonText, { color: '#991b1b' }]}>{req.denial_reason}</Text>
-                        </View>
-                      </View>
-                    ) : null}
-                    {req.status === 'pending' && (
-                      <View style={styles.modalActions}>
-                        <Pressable style={styles.approveButton} onPress={() => handleApproveTimeOff(req)}>
-                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Approve Request</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.rejectButton}
-                          onPress={() => { setDenyingTimeOffId(req.id); setDenyModalVisible(true); }}
-                        >
-                          <Ionicons name="close-circle" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Deny Request</Text>
-                        </Pressable>
-                      </View>
-                    )}
-                  </>
-                );
-              })()}
+                  ) : null}
+
+                  {selectedTimeOffRequest.status === 'pending' && (
+                    <View style={styles.modalActions}>
+                      <Pressable style={styles.approveButton} onPress={() => handleApproveTimeOff(selectedTimeOffRequest)}>
+                        <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Approve Request</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.rejectButton}
+                        onPress={() => { setDenyingTimeOffId(selectedTimeOffRequest.id); setDenyModalVisible(true); }}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Deny Request</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -1079,30 +1012,29 @@ const styles = StyleSheet.create({
   scrollView:    { flex: 1 },
   scrollContent: { padding: 16, paddingTop: 8 },
 
-  // Action needed section
   sectionCard:     { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3 },
   sectionHeader:   { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   sectionTitle:    { fontSize: 17, fontWeight: '700', color: '#333', marginLeft: 8, flex: 1 },
   sectionSubtitle: { fontSize: 12, color: '#999', fontWeight: '500' },
   sectionLabel:    { fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  actionCard:        { backgroundColor: '#fafafa', borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center', padding: 12 },
-  actionAvatar:      { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  actionAvatarText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
-  actionInfo:        { flex: 1 },
-  actionName:        { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 4 },
-  actionHours:       { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actionHoursValue:  { fontSize: 16, fontWeight: '700', color: '#4a90e2' },
+  actionCard:       { backgroundColor: '#fafafa', borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center', padding: 12 },
+  actionAvatar:     { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  actionAvatarText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  actionInfo:       { flex: 1 },
+  actionName:       { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 4 },
+  actionHours:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionHoursValue: { fontSize: 16, fontWeight: '700', color: '#4a90e2' },
 
   allMembersLabel: { fontSize: 13, fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4 },
 
-  card:         { backgroundColor: '#fff', borderRadius: 12, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
-  leftBorder:   { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
-  cardContent:  { flexDirection: 'row', alignItems: 'center', padding: 16, paddingLeft: 20 },
-  avatar:       { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  avatarText:   { fontSize: 16, fontWeight: '700', color: '#fff' },
-  infoSection:  { flex: 1 },
-  memberName:   { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 4 },
+  card:        { backgroundColor: '#fff', borderRadius: 12, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+  leftBorder:  { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  cardContent: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingLeft: 20 },
+  avatar:      { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  avatarText:  { fontSize: 16, fontWeight: '700', color: '#fff' },
+  infoSection: { flex: 1 },
+  memberName:  { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 4 },
 
   statusBadge:     { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginBottom: 6, gap: 4 },
   statusDot:       { width: 6, height: 6, borderRadius: 3 },
@@ -1115,7 +1047,6 @@ const styles = StyleSheet.create({
   hoursValue:     { fontSize: 18, fontWeight: '700', color: '#4a90e2', marginBottom: 2 },
   hoursLabel:     { fontSize: 11, color: '#4a90e2', textTransform: 'uppercase', fontWeight: '600' },
 
-  // Modal
   modalOverlay:         { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent:         { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 500, maxHeight: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 },
   modalScrollView:      { flex: 1 },
@@ -1134,9 +1065,9 @@ const styles = StyleSheet.create({
   notesLabel: { fontSize: 12, color: '#f57c00', fontWeight: '600', marginBottom: 4 },
   notesText:  { fontSize: 13, color: '#5d4037' },
 
-  dailyBreakdown: { marginBottom: 20 },
-  dailyTable:     { backgroundColor: '#f9f9f9', borderRadius: 8, overflow: 'hidden' },
-  tableHeaderRow: { flexDirection: 'row', backgroundColor: '#f0f0f0', paddingVertical: 8, paddingHorizontal: 12 },
+  dailyBreakdown:  { marginBottom: 20 },
+  dailyTable:      { backgroundColor: '#f9f9f9', borderRadius: 8, overflow: 'hidden' },
+  tableHeaderRow:  { flexDirection: 'row', backgroundColor: '#f0f0f0', paddingVertical: 8, paddingHorizontal: 12 },
   tableHeaderText: { fontSize: 12, fontWeight: '600', color: '#666', textTransform: 'uppercase' },
   tableRow:        { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   tableCellDate:   { fontSize: 13, color: '#666' },
@@ -1165,23 +1096,21 @@ const styles = StyleSheet.create({
   approvedBanner:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#e8f5e9', borderRadius: 8, padding: 14 },
   approvedBannerText: { fontSize: 15, color: '#2e7d32', fontWeight: '600' },
 
-  // Reject modal
-  rejectPrompt:     { fontSize: 14, color: '#333', marginBottom: 12 },
-  rejectInput:      { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, fontSize: 14, color: '#333', minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 16 },
-  rejectActions:    { flexDirection: 'row', gap: 12 },
-  rejectCancelBtn:  { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
-  rejectCancelText: { fontSize: 14, fontWeight: '600', color: '#666' },
-  rejectConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#e74c3c', alignItems: 'center' },
+  rejectPrompt:      { fontSize: 14, color: '#333', marginBottom: 12 },
+  rejectInput:       { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, fontSize: 14, color: '#333', minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 16 },
+  rejectActions:     { flexDirection: 'row', gap: 12 },
+  rejectCancelBtn:   { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
+  rejectCancelText:  { fontSize: 14, fontWeight: '600', color: '#666' },
+  rejectConfirmBtn:  { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#e74c3c', alignItems: 'center' },
   rejectConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 
-  // Time off
-  timeOffEmployeeCard:   { backgroundColor: '#fff', borderRadius: 12, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
-  timeOffEmployeeHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fafafa', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  timeOffHeaderAvatar:   { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  timeOffEmployeeCard:     { backgroundColor: '#fff', borderRadius: 12, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+  timeOffEmployeeHeader:   { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fafafa', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  timeOffHeaderAvatar:     { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   timeOffHeaderAvatarText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  timeOffHeaderInfo:     { flex: 1 },
-  timeOffHeaderName:     { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 2 },
-  timeOffHeaderCount:    { fontSize: 13, color: '#666' },
+  timeOffHeaderInfo:       { flex: 1 },
+  timeOffHeaderName:       { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 2 },
+  timeOffHeaderCount:      { fontSize: 13, color: '#666' },
 
   timeOffRequestItem:  { flexDirection: 'row', padding: 16 },
   timeOffRequestLeft:  { flex: 1, marginRight: 12 },
@@ -1198,11 +1127,11 @@ const styles = StyleSheet.create({
   timeOffDivider:      { height: 1, backgroundColor: '#f0f0f0', marginHorizontal: 16 },
 
   timeOffDetailsSection: { backgroundColor: '#f9f9f9', borderRadius: 8, padding: 16, marginBottom: 20 },
-  timeOffDetailRow:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  timeOffDetailContent: { marginLeft: 12, flex: 1 },
-  timeOffDetailLabel:   { fontSize: 12, color: '#666', marginBottom: 2, textTransform: 'uppercase', fontWeight: '600' },
-  timeOffDetailValue:   { fontSize: 14, color: '#333', fontWeight: '500' },
-  timeOffReasonSection: { marginBottom: 20 },
-  timeOffReasonBox:     { backgroundColor: '#f0f9ff', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#e0f2fe' },
-  timeOffReasonText:    { fontSize: 14, color: '#0c4a6e', lineHeight: 20 },
+  timeOffDetailRow:      { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  timeOffDetailContent:  { marginLeft: 12, flex: 1 },
+  timeOffDetailLabel:    { fontSize: 12, color: '#666', marginBottom: 2, textTransform: 'uppercase', fontWeight: '600' },
+  timeOffDetailValue:    { fontSize: 14, color: '#333', fontWeight: '500' },
+  timeOffReasonSection:  { marginBottom: 20 },
+  timeOffReasonBox:      { backgroundColor: '#f0f9ff', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#e0f2fe' },
+  timeOffReasonText:     { fontSize: 14, color: '#0c4a6e', lineHeight: 20 },
 });
