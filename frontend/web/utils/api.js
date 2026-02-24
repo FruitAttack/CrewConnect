@@ -1,9 +1,11 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
 // windows command: ipconfig (look for IPv4 Address)
-const API_URL = "http://localhost:5001"
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? "" // Use relative URLs in production (same server)
+  : "http://localhost:3001" // Use localhost in development
 import { SAMPLE_FORMS } from "./sampleForms"
-//const API_URL = "http://192.168.86.22:5001"
+//const API_URL = "http://192.168.86.22:3001"
 
 /**
  * Make API call with optional authentication

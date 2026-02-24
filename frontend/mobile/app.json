@@ -24,7 +24,8 @@
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/CC_logo_nobackground.png"
+      "favicon": "./assets/CC_logo_nobackground.png",
+      "bundler": "metro"
     }
   }
 }

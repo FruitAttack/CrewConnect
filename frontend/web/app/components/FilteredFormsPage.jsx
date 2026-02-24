@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { getForms, getFormSubmissions, createForm } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
 import { useFormTab, useFormTabSafe } from "./formTabComponents/formTabContext";
@@ -32,6 +33,8 @@ import {
  * @param {string} filter.name - Display name for the filter context
  */
 export default function FilteredFormsPage({ filter = { type: "all" } }) {
+  const router = useRouter();
+  const searchParams = useLocalSearchParams();
   const { session } = useSession();
   const token = session?.access_token;
   const {
@@ -54,6 +57,9 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
   const [selectedForm, setSelectedForm] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingForm, setEditingForm] = useState(null);
+
+  const getParamString = (value) => (Array.isArray(value) ? value[0] : value);
+  const selectedFormIdParam = getParamString(searchParams?.formId);
 
   useEffect(() => {
     if (selectedForm) {
@@ -135,6 +141,18 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     fetchForms();
   }, [fetchForms]);
 
+  useEffect(() => {
+    if (!selectedFormIdParam) return;
+    if (selectedForm?.formId === selectedFormIdParam) return;
+    const matchedForm = forms.find((form) => form.id === selectedFormIdParam);
+    if (!matchedForm) return;
+    setSelectedForm({
+      formId: matchedForm.id,
+      formTitle: matchedForm.title,
+      formIcon: matchedForm.icon || "📄",
+    });
+  }, [selectedFormIdParam, forms, selectedForm]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchForms();
@@ -207,6 +225,39 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
     }
   };
 
+  const updateParams = (params) => {
+    if (typeof router.setParams === "function") {
+      router.setParams(params);
+      return;
+    }
+    router.replace({
+      pathname: "/form/submissions",
+      params,
+    });
+  };
+
+  const handleSelectForm = (form) => {
+    setSelectedForm(form);
+    updateParams({
+      formId: form.formId,
+      view: "table",
+      filters: undefined,
+      columns: undefined,
+      graph: undefined,
+    });
+  };
+
+  const handleBackToForms = () => {
+    setSelectedForm(null);
+    updateParams({
+      formId: undefined,
+      view: undefined,
+      filters: undefined,
+      columns: undefined,
+      graph: undefined,
+    });
+  };
+
   // If a form is selected, show the submissions page
   if (selectedForm) {
     return (
@@ -215,7 +266,7 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
         formTitle={selectedForm.formTitle}
         formIcon={selectedForm.formIcon}
         filter={filter}
-        onBack={() => setSelectedForm(null)}
+        onBack={handleBackToForms}
       />
     );
   }
@@ -243,7 +294,7 @@ export default function FilteredFormsPage({ filter = { type: "all" } }) {
       <ScrollView style={styles.scrollContainer}>
         <FormsTableView
           forms={forms}
-          onSelectForm={setSelectedForm}
+          onSelectForm={handleSelectForm}
           onEditForm={handleEdit}
         />
       </ScrollView>
