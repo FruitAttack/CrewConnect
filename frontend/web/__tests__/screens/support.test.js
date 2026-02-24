@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
-import Support from '../app/support';
+import Support from '../../app/support';
 
 // Mock dependencies
 jest.mock('expo-router', () => ({
