@@ -39,6 +39,9 @@ app.use(express.json());
 // Serve static files from the web frontend
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Serve mobile web app at /mobile
+app.use('/mobile', express.static(path.join(__dirname, '../public/mobile')));
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
@@ -114,7 +117,14 @@ app.get("/api", (req, res) => {
 // Handle client-side routing - serve index.html for all non-API routes (production only)
 app.use((req, res) => {
   if (hasPublicFolder) {
-    res.sendFile(indexPath);
+    // Serve mobile index.html for /mobile/* routes
+    if (req.path.startsWith('/mobile')) {
+      const mobileIndexPath = path.join(__dirname, '../public/mobile/index.html');
+      res.sendFile(mobileIndexPath);
+    } else {
+      // Serve web index.html for all other routes
+      res.sendFile(indexPath);
+    }
   } else {
     res.status(404).json({ 
       message: 'Endpoint not found',

@@ -22,7 +22,11 @@ export async function apiCall(token, route, method = 'GET', body = null) {
       options.body = JSON.stringify(body)
     }
     
-    const url = `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/${route}`
+    // Use relative URL in production (when deployed as web app), localhost in development
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? '' 
+      : (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001');
+    const url = `${baseUrl}/api/${route}`
     console.log(`API Call: ${method} ${url}`)
     
     const response = await fetch(url, options)
