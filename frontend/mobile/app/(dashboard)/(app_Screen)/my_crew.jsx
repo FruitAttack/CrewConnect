@@ -24,9 +24,7 @@ import {
   approveTimeOff,
   denyTimeOff,
 } from "../../../utils/api";
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function calculateSecondsForDay(timeEntries, dateString) {
   if (!timeEntries || timeEntries.length === 0) return 0;
   const [year, month, day] = dateString.split("-").map(Number);
@@ -48,7 +46,6 @@ function calculateSecondsForDay(timeEntries, dateString) {
   });
   return Math.round(totalSeconds);
 }
-
 function getLastCompletedWeekRange() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -63,23 +60,19 @@ function getLastCompletedWeekRange() {
     `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
   return { weekStart: toISO(lastWeekSunday), weekEnd: toISO(lastWeekSaturday) };
 }
-
 function toISO(dt) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
-
 function weekEndFromStart(weekStartStr) {
   const d = new Date(weekStartStr + "T00:00:00");
   d.setDate(d.getDate() + 6);
   return toISO(d);
 }
-
 function shiftWeek(weekStartStr, weeks) {
   const d = new Date(weekStartStr + "T00:00:00");
   d.setDate(d.getDate() + weeks * 7);
   return toISO(d);
 }
-
 function formatWeekLabel(weekStartStr) {
   const s = new Date(weekStartStr + "T00:00:00");
   const e = new Date(weekStartStr + "T00:00:00");
@@ -104,7 +97,6 @@ function formatWeekLabel(weekStartStr) {
   }
   return `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}, ${year}`;
 }
-
 const DAY_NAMES = [
   "SUNDAY",
   "MONDAY",
@@ -114,7 +106,6 @@ const DAY_NAMES = [
   "FRIDAY",
   "SATURDAY",
 ];
-
 function getInitials(name) {
   if (!name) return "??";
   return name
@@ -124,7 +115,6 @@ function getInitials(name) {
     .toUpperCase()
     .slice(0, 2);
 }
-
 const AVATAR_COLORS = [
   "#50c878",
   "#4a90e2",
@@ -137,13 +127,10 @@ const AVATAR_COLORS = [
 function colorForIndex(i) {
   return AVATAR_COLORS[i % AVATAR_COLORS.length];
 }
-
 // ─── Component ────────────────────────────────────────────────────────────────
-
 const MyCrew = () => {
   const { session } = useSession();
   const token = session?.access_token;
-
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [timeOffModalVisible, setTimeOffModalVisible] = useState(false);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -160,13 +147,10 @@ const MyCrew = () => {
   const [denyingTimeOffId, setDenyingTimeOffId] = useState(null);
   const [denyReason, setDenyReason] = useState("");
   const [denyModalVisible, setDenyModalVisible] = useState(false);
-
   const { weekStart: defaultWeekStart } = getLastCompletedWeekRange();
   const [selectedWeekStart, setSelectedWeekStart] = useState(defaultWeekStart);
   const isLatestWeek = selectedWeekStart === defaultWeekStart;
-
   // ─── Fetch ───────────────────────────────────────────────────────────────────
-
   const fetchCrewMembers = async (weekStartOverride) => {
     if (!token) return;
     setLoading(true);
@@ -178,13 +162,11 @@ const MyCrew = () => {
       const companyId =
         me.default_company_id || me.default_company?.id || me.company_id;
       const myUserId = me.id;
-
       const crewsRes = await getCrews(token, companyId);
       const allCrews = crewsRes?.data?.crews || [];
       const myCrews = allCrews.filter(
         (c) => String(c.foreman_id) === String(myUserId),
       );
-
       const memberMap = new Map();
       myCrews.forEach((crew) => {
         (crew.crew_members || []).forEach((cm) => {
@@ -194,16 +176,13 @@ const MyCrew = () => {
           }
         });
       });
-
       if (memberMap.size === 0) {
         setCrewMembers([]);
         return;
       }
-
       const weekStart =
         weekStartOverride || getLastCompletedWeekRange().weekStart;
       const weekEnd = weekEndFromStart(weekStart);
-
       const [timeEntriesRes, approvalsRes, timeOffRes] = await Promise.all([
         getTimeEntries(token, {
           all_users: "true",
@@ -217,7 +196,6 @@ const MyCrew = () => {
         }),
         getTimeOffAll(token),
       ]);
-
       const allEntries = timeEntriesRes?.data?.time_entries || [];
       const allApprovals = approvalsRes?.data || [];
       const rawTimeOffData = timeOffRes?.data;
@@ -226,22 +204,18 @@ const MyCrew = () => {
         : Array.isArray(rawTimeOffData)
           ? rawTimeOffData
           : [];
-
       const approvalByUser = {};
       allApprovals.forEach((a) => {
         approvalByUser[a.user_id] = a;
       });
-
       const timeOffByUser = {};
       allTimeOff.forEach((req) => {
         const uid = req.user_id;
         if (!timeOffByUser[uid]) timeOffByUser[uid] = [];
         timeOffByUser[uid].push(req);
       });
-
       const built = [];
       let colorIndex = 0;
-
       memberMap.forEach(({ user }, userId) => {
         const userEntries = allEntries.filter((e) => e.user_id === userId);
         const daily_hours = [];
@@ -257,11 +231,9 @@ const MyCrew = () => {
             hours,
           });
         }
-
         const totalHours = daily_hours.reduce((sum, d) => sum + d.hours, 0);
         const regularHours = Math.min(totalHours, 40);
         const overtimeHours = Math.max(0, totalHours - 40);
-
         const approval = approvalByUser[userId] || null;
         let timecardStatus = "not_submitted";
         if (approval) {
@@ -282,7 +254,6 @@ const MyCrew = () => {
               timecardStatus = approval.status;
           }
         }
-
         const rawTimeOff = timeOffByUser[userId] || [];
         const time_off_requests = rawTimeOff.map((r) => ({
           id: r.id,
@@ -298,7 +269,6 @@ const MyCrew = () => {
             : undefined,
           denial_reason: r.denial_reason || undefined,
         }));
-
         built.push({
           id: userId,
           name:
@@ -333,7 +303,6 @@ const MyCrew = () => {
           time_off_requests,
         });
       });
-
       setCrewMembers(built);
     } catch (err) {
       console.error("fetchCrewMembers error:", err);
@@ -343,24 +312,19 @@ const MyCrew = () => {
       setRefreshing(false);
     }
   };
-
   useEffect(() => {
     fetchCrewMembers(selectedWeekStart);
   }, [token, selectedWeekStart]);
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchCrewMembers(selectedWeekStart);
   };
-
   const navigateWeek = (direction) => {
     const next = shiftWeek(selectedWeekStart, direction);
     if (direction > 0 && next > defaultWeekStart) return;
     setSelectedWeekStart(next);
   };
-
   // ─── Approve / Reject timecard ────────────────────────────────────────────
-
   const handleApprove = async (member, notes = null) => {
     setApprovingId(member.id);
     try {
@@ -404,7 +368,6 @@ const MyCrew = () => {
       setApprovingId(null);
     }
   };
-
   const handleReject = async () => {
     if (!selectedCrewMember) return;
     const member = selectedCrewMember;
@@ -436,7 +399,6 @@ const MyCrew = () => {
                 },
           ),
         );
-        setDetailsModalVisible(false);
         setRejectNotes("");
         Alert.alert("Rejected", `${member.name}'s timecard has been rejected.`);
       } else {
@@ -449,9 +411,7 @@ const MyCrew = () => {
       setApprovingId(null);
     }
   };
-
   // ─── Time off handlers ────────────────────────────────────────────────────
-
   const handleApproveTimeOff = async (request) => {
     try {
       const res = await approveTimeOff(token, request.id);
@@ -472,7 +432,6 @@ const MyCrew = () => {
       Alert.alert("Error", "Failed to approve time off.");
     }
   };
-
   const handleDenyTimeOff = async () => {
     if (!selectedTimeOffRequest) return;
     setDenyModalVisible(false);
@@ -493,7 +452,6 @@ const MyCrew = () => {
             ),
           })),
         );
-        setTimeOffModalVisible(false);
         setDenyReason("");
       } else {
         Alert.alert("Error", res.message || "Failed to deny time off.");
@@ -502,16 +460,13 @@ const MyCrew = () => {
       Alert.alert("Error", "Failed to deny time off.");
     }
   };
-
   // ─── UI helpers ───────────────────────────────────────────────────────────
-
   const formatDate = (dateString) => {
     if (!dateString) return "";
     const [year, month, day] = dateString.split("-").map(Number);
     const d = new Date(year, month - 1, day);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
-
   const formatDateRange = (start, end) => {
     const s = new Date(start + "T00:00:00");
     const e = new Date(end + "T00:00:00");
@@ -520,10 +475,8 @@ const MyCrew = () => {
     const year = s.getFullYear();
     return `${sm} ${s.getDate()} - ${em} ${e.getDate()}, ${year}`;
   };
-
   const getTotalHours = (timecard) =>
     (timecard.regular_hours || 0) + (timecard.overtime_hours || 0);
-
   const getStatusColor = (status) =>
     ({
       approved: "#50c878",
@@ -532,7 +485,6 @@ const MyCrew = () => {
       rejected: "#e74c3c",
       not_submitted: "#999",
     })[status] ?? "#999";
-
   const getStatusLabel = (status) =>
     ({
       approved: "Approved",
@@ -541,14 +493,12 @@ const MyCrew = () => {
       rejected: "Rejected",
       not_submitted: "Not Submitted",
     })[status] ?? status;
-
   const getTimeOffStatusColor = (status) =>
     ({
       approved: "#50c878",
       denied: "#e74c3c",
       pending: "#f39c12",
     })[status] ?? "#999";
-
   const getTimeOffTypeColor = (type) =>
     ({
       VACATION: "#4a90e2",
@@ -558,10 +508,8 @@ const MyCrew = () => {
       "Sick Leave": "#e74c3c",
       Personal: "#9b59b6",
     })[type] ?? "#999";
-
   const getPendingCount = () =>
     crewMembers.filter((m) => m.timecard.status === "pending").length;
-
   const getPendingTimeOffCount = () =>
     crewMembers.reduce(
       (n, m) =>
@@ -570,18 +518,14 @@ const MyCrew = () => {
           0),
       0,
     );
-
   const filteredCrewMembers = crewMembers.filter(
     (m) =>
       !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
-
   const actionableTimecards = filteredCrewMembers.filter(
     (m) => m.timecard.status === "pending" || m.timecard.status === "rejected",
   );
-
   // ─── Render ───────────────────────────────────────────────────────────────
-
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -592,7 +536,6 @@ const MyCrew = () => {
           {getPendingCount() === 1 ? "review" : "reviews"}
         </Text>
       </View>
-
       {error && (
         <View style={styles.errorBanner}>
           <Ionicons name="alert-circle-outline" size={18} color="#e74c3c" />
@@ -602,7 +545,6 @@ const MyCrew = () => {
           </Pressable>
         </View>
       )}
-
       <View style={styles.searchContainer}>
         <Ionicons
           name="search"
@@ -618,7 +560,6 @@ const MyCrew = () => {
           placeholderTextColor="#999"
         />
       </View>
-
       <View style={styles.tabsContainer}>
         <Pressable
           style={[styles.tab, selectedTab === "timecards" && styles.tabActive]}
@@ -667,7 +608,6 @@ const MyCrew = () => {
           )}
         </Pressable>
       </View>
-
       {selectedTab === "timecards" && (
         <View style={styles.weekNav}>
           <Pressable
@@ -698,7 +638,6 @@ const MyCrew = () => {
           </Pressable>
         </View>
       )}
-
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff7a00" />
@@ -802,7 +741,6 @@ const MyCrew = () => {
                   ))}
                 </View>
               )}
-
               <Text style={styles.allMembersLabel}>All Crew Members</Text>
               {filteredCrewMembers.map((member) => (
                 <Pressable
@@ -1025,7 +963,6 @@ const MyCrew = () => {
           )}
         </ScrollView>
       )}
-
       {/* ── Timecard Details Modal ─────────────────────────────────────────── */}
       <Modal
         animationType="fade"
@@ -1046,7 +983,6 @@ const MyCrew = () => {
               </Pressable>
             </View>
             <View style={styles.modalDivider} />
-
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 20 }}
@@ -1114,7 +1050,6 @@ const MyCrew = () => {
                       </Text>
                     </View>
                   </View>
-
                   {/* Supervisor notes */}
                   {selectedCrewMember.timecard.notes && (
                     <View style={styles.notesBox}>
@@ -1124,7 +1059,6 @@ const MyCrew = () => {
                       </Text>
                     </View>
                   )}
-
                   {/* Daily hours */}
                   <View style={styles.dailyBreakdown}>
                     <Text style={styles.sectionLabel}>Daily Hours</Text>
@@ -1167,7 +1101,6 @@ const MyCrew = () => {
                       )}
                     </View>
                   </View>
-
                   {/* Summary */}
                   <View style={styles.summarySection}>
                     {[
@@ -1194,7 +1127,6 @@ const MyCrew = () => {
                       </Text>
                     </View>
                   </View>
-
                   {/* Signature status */}
                   <View style={styles.signaturesSection}>
                     {[
@@ -1224,7 +1156,6 @@ const MyCrew = () => {
                       </View>
                     ))}
                   </View>
-
                   {/* Actions */}
                   {selectedCrewMember.timecard.status === "pending" && (
                     <View style={styles.modalActions}>
@@ -1253,9 +1184,13 @@ const MyCrew = () => {
                           </>
                         )}
                       </Pressable>
+                      {/* ── FIX: close details modal first, then open reject modal ── */}
                       <Pressable
                         style={styles.rejectButton}
-                        onPress={() => setRejectModalVisible(true)}
+                        onPress={() => {
+                          setDetailsModalVisible(false);
+                          setTimeout(() => setRejectModalVisible(true), 300);
+                        }}
                       >
                         <Ionicons name="close-circle" size={20} color="#fff" />
                         <Text style={styles.actionButtonText}>
@@ -1284,7 +1219,6 @@ const MyCrew = () => {
           </View>
         </View>
       </Modal>
-
       {/* ── Reject Notes Modal ─────────────────────────────────────────────── */}
       <Modal
         animationType="fade"
@@ -1332,7 +1266,6 @@ const MyCrew = () => {
           </View>
         </View>
       </Modal>
-
       {/* ── Time Off Details Modal ─────────────────────────────────────────── */}
       <Modal
         animationType="fade"
@@ -1353,7 +1286,6 @@ const MyCrew = () => {
               </Pressable>
             </View>
             <View style={styles.modalDivider} />
-
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 20 }}
@@ -1434,7 +1366,6 @@ const MyCrew = () => {
                       </Text>
                     </View>
                   </View>
-
                   <View style={styles.timeOffDetailsSection}>
                     {[
                       {
@@ -1478,7 +1409,6 @@ const MyCrew = () => {
                       </View>
                     ))}
                   </View>
-
                   {selectedTimeOffRequest.reason ? (
                     <View style={styles.timeOffReasonSection}>
                       <Text style={styles.sectionLabel}>Reason</Text>
@@ -1489,7 +1419,6 @@ const MyCrew = () => {
                       </View>
                     </View>
                   ) : null}
-
                   {selectedTimeOffRequest.status === "denied" &&
                   selectedTimeOffRequest.denial_reason ? (
                     <View style={styles.timeOffReasonSection}>
@@ -1514,7 +1443,6 @@ const MyCrew = () => {
                       </View>
                     </View>
                   ) : null}
-
                   {selectedTimeOffRequest.status === "pending" && (
                     <View style={styles.modalActions}>
                       <Pressable
@@ -1532,11 +1460,13 @@ const MyCrew = () => {
                           Approve Request
                         </Text>
                       </Pressable>
+                      {/* ── FIX: close time off modal first, then open deny modal ── */}
                       <Pressable
                         style={styles.rejectButton}
                         onPress={() => {
                           setDenyingTimeOffId(selectedTimeOffRequest.id);
-                          setDenyModalVisible(true);
+                          setTimeOffModalVisible(false);
+                          setTimeout(() => setDenyModalVisible(true), 300);
                         }}
                       >
                         <Ionicons name="close-circle" size={20} color="#fff" />
@@ -1552,7 +1482,6 @@ const MyCrew = () => {
           </View>
         </View>
       </Modal>
-
       {/* ── Deny Time Off Reason Modal ─────────────────────────────────────── */}
       <Modal
         animationType="fade"
@@ -1606,9 +1535,7 @@ const MyCrew = () => {
     </View>
   );
 };
-
 export default MyCrew;
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   header: {
@@ -1624,7 +1551,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerSubtitle: { fontSize: 16, color: "rgba(255,255,255,0.9)" },
-
   weekNav: {
     flexDirection: "row",
     alignItems: "center",
@@ -1651,7 +1577,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   weekNavText: { fontSize: 14, fontWeight: "600", color: "#333" },
-
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1663,7 +1588,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#ffc8c8",
   },
   errorBannerText: { flex: 1, fontSize: 13, color: "#e74c3c" },
-
   searchContainer: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
@@ -1682,7 +1606,6 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 16, color: "#333" },
-
   tabsContainer: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -1720,7 +1643,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: { fontSize: 11, fontWeight: "700", color: "#fff" },
-
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 12, fontSize: 16, color: "#666" },
   emptyContainer: {
@@ -1736,10 +1658,8 @@ const styles = StyleSheet.create({
     color: "#ccc",
     textAlign: "center",
   },
-
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingTop: 8 },
-
   sectionCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -1775,7 +1695,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-
   actionCard: {
     backgroundColor: "#fafafa",
     borderRadius: 8,
@@ -1804,7 +1723,6 @@ const styles = StyleSheet.create({
   },
   actionHours: { flexDirection: "row", alignItems: "center", gap: 4 },
   actionHoursValue: { fontSize: 16, fontWeight: "700", color: "#4a90e2" },
-
   allMembersLabel: {
     fontSize: 13,
     fontWeight: "600",
@@ -1814,7 +1732,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 4,
   },
-
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -1849,7 +1766,6 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 4,
   },
-
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1862,10 +1778,8 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusBadgeText: { fontSize: 11, fontWeight: "600" },
-
   dateRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   dateText: { fontSize: 13, color: "#999" },
-
   hoursContainer: {
     alignItems: "flex-end",
     backgroundColor: "#e8f4ff",
@@ -1885,7 +1799,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontWeight: "600",
   },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1935,7 +1848,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modalPeriodDate: { fontSize: 14, color: "#999", marginBottom: 8 },
-
   notesBox: {
     backgroundColor: "#fff8e1",
     borderRadius: 8,
@@ -1951,7 +1863,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   notesText: { fontSize: 13, color: "#5d4037" },
-
   dailyBreakdown: { marginBottom: 20 },
   dailyTable: {
     backgroundColor: "#f9f9f9",
@@ -1980,7 +1891,6 @@ const styles = StyleSheet.create({
   tableCellDate: { fontSize: 13, color: "#666" },
   tableCellDay: { fontSize: 13, color: "#4a90e2", fontWeight: "500" },
   tableCellHours: { fontSize: 13, color: "#333", fontWeight: "600" },
-
   summarySection: {
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
@@ -2005,7 +1915,6 @@ const styles = StyleSheet.create({
   },
   totalLabel: { fontSize: 16, color: "#333", fontWeight: "700" },
   totalValue: { fontSize: 16, color: "#ff7a00", fontWeight: "700" },
-
   signaturesSection: { marginBottom: 20 },
   signatureBox: {
     backgroundColor: "#f9f9f9",
@@ -2017,7 +1926,6 @@ const styles = StyleSheet.create({
   signedIndicator: { flexDirection: "row", alignItems: "center", gap: 6 },
   signedText: { fontSize: 14, color: "#50c878", fontWeight: "600" },
   unsignedText: { fontSize: 14, color: "#999", fontStyle: "italic" },
-
   modalActions: { gap: 12 },
   approveButton: {
     flexDirection: "row",
@@ -2048,7 +1956,6 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   approvedBannerText: { fontSize: 15, color: "#2e7d32", fontWeight: "600" },
-
   rejectPrompt: { fontSize: 14, color: "#333", marginBottom: 12 },
   rejectInput: {
     backgroundColor: "#f5f5f5",
@@ -2080,7 +1987,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rejectConfirmText: { fontSize: 14, fontWeight: "600", color: "#fff" },
-
   timeOffEmployeeCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -2117,7 +2023,6 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   timeOffHeaderCount: { fontSize: 13, color: "#666" },
-
   timeOffRequestItem: { flexDirection: "row", padding: 16 },
   timeOffRequestLeft: { flex: 1, marginRight: 12 },
   timeOffRequestRight: {
@@ -2160,7 +2065,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     marginHorizontal: 16,
   },
-
   timeOffDetailsSection: {
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
