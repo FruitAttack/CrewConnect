@@ -2,7 +2,7 @@ import { supabase } from '../utils/supabase.js';
 
 /**
  * Get timecard approvals for a company and week
- * GET /api/timecard-approvals?company_id=xxx&week_start=2025-01-19
+ * GET /api/timecard-approvals?company_id=xxx&week_start=2025-01-19&user_id=xxx
  */
 export const getTimecardApprovals = async (req, res) => {
   try {
@@ -40,26 +40,30 @@ export const getTimecardApprovals = async (req, res) => {
  * Create or update timecard approval (upsert)
  * POST /api/timecard-approvals
  * Body: { company_id, user_id, week_start, week_end, status, notes? }
+ *
+ * Called by:
+ *   - Employee submitting their timecard  → status: 'pending'
+ *   - Foreman approving/rejecting         → status: 'approved' | 'rejected' | 'pending_changes'
  */
 export const upsertTimecardApproval = async (req, res) => {
   try {
-    const { id: approver_id } = req.user;
+    const { id: requester_id } = req.user; // The person making the request
     const { company_id, user_id, week_start, week_end, status, notes } = req.body;
 
     if (!company_id || !user_id || !week_start || !week_end || !status) {
-      return res.status(400).json({ 
-        error: 'company_id, user_id, week_start, week_end, and status are required' 
+      return res.status(400).json({
+        error: 'company_id, user_id, week_start, week_end, and status are required',
       });
     }
 
-    // Validate status
     const validStatuses = ['pending', 'approved', 'rejected', 'pending_changes'];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
       });
     }
 
+    // Only set approved_by / approved_at when a foreman takes action (non-pending)
     const approvalData = {
       company_id,
       user_id,
@@ -67,11 +71,10 @@ export const upsertTimecardApproval = async (req, res) => {
       week_end,
       status,
       notes: notes || null,
-      approved_by: status !== 'pending' ? approver_id : null,
+      approved_by: status !== 'pending' ? requester_id : null,
       approved_at: status !== 'pending' ? new Date().toISOString() : null,
     };
 
-    // Upsert: insert or update if exists
     const { data, error } = await supabase
       .from('timecard_approvals')
       .upsert(approvalData, {
@@ -101,8 +104,8 @@ export const bulkUpdateApprovals = async (req, res) => {
     const { company_id, week_start, week_end, user_ids, status, notes } = req.body;
 
     if (!company_id || !week_start || !week_end || !user_ids || !status) {
-      return res.status(400).json({ 
-        error: 'company_id, week_start, week_end, user_ids, and status are required' 
+      return res.status(400).json({
+        error: 'company_id, week_start, week_end, user_ids, and status are required',
       });
     }
 
@@ -110,16 +113,14 @@ export const bulkUpdateApprovals = async (req, res) => {
       return res.status(400).json({ error: 'user_ids must be a non-empty array' });
     }
 
-    // Validate status
     const validStatuses = ['pending', 'approved', 'rejected', 'pending_changes'];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
       });
     }
 
-    // Create approval records for each user
-    const approvals = user_ids.map(user_id => ({
+    const approvals = user_ids.map((user_id) => ({
       company_id,
       user_id,
       week_start,
@@ -130,7 +131,6 @@ export const bulkUpdateApprovals = async (req, res) => {
       approved_at: status !== 'pending' ? new Date().toISOString() : null,
     }));
 
-    // Bulk upsert
     const { data, error } = await supabase
       .from('timecard_approvals')
       .upsert(approvals, {
@@ -141,10 +141,10 @@ export const bulkUpdateApprovals = async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ 
+    res.json({
       success: true,
       message: `Successfully updated ${data.length} timecard approvals`,
-      approvals: data 
+      approvals: data,
     });
   } catch (error) {
     console.error('Bulk update approvals error:', error);
@@ -153,7 +153,7 @@ export const bulkUpdateApprovals = async (req, res) => {
 };
 
 /**
- * Delete a timecard approval (reset to pending)
+ * Delete a timecard approval
  * DELETE /api/timecard-approvals/:id
  */
 export const deleteTimecardApproval = async (req, res) => {
