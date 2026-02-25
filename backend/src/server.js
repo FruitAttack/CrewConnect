@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import os from "os";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import authRoutes from "./routes/authRoutes.js";
 import usersRoutes from "./routes/usersRoutes.js";
 import projectsRoutes from './routes/projectsRoutes.js';
@@ -21,9 +24,23 @@ import mapRoutes from './routes/mapRoutes.js';
 
 const app = express();
 
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Middleware
-app.use(cors()); // Allow all origins for development
+app.use(cors({
+  origin: true,
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
 app.use(express.json());
+
+// Serve static files from the web frontend
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve mobile web app at /mobile
+app.use('/mobile', express.static(path.join(__dirname, '../public/mobile')));
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -44,8 +61,38 @@ app.use("/api/forms", formsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
 app.use("/api/map", mapRoutes);
 
-// Health check
-app.get("/", (req, res) => {
+// Check if we have the built frontend
+const indexPath = path.join(__dirname, '../public/index.html');
+const hasPublicFolder = fs.existsSync(indexPath);
+
+if (!hasPublicFolder) {
+  // Development mode - show health check at root
+  app.get("/", (req, res) => {
+    res.json({ 
+      message: "Time tracking API is running",
+      version: "1.0.0",
+      environment: process.env.NODE_ENV || 'development',
+      note: "Frontend runs separately in development (expo start)",
+      endpoints: {
+        auth: "/api/auth",
+        users: "/api/users",
+        customers: "/api/customers",
+        projects: "/api/projects",
+        costCodes: "/api/cost-codes",
+        equipment: "/api/equipment",
+        employeeAssignments: "/api/employee-assignments",
+        timeEntries: "/api/time-entries",
+        reports: "/api/reports",
+        dailyProduction: "/api/daily-production",
+        forms: "/api/forms",
+        formSubmissions: "/api/form-submissions"
+      }
+    });
+  });
+}
+
+// API health check
+app.get("/api", (req, res) => {
   res.json({ 
     message: "Time tracking API is running",
     version: "1.0.0",
@@ -67,12 +114,26 @@ app.get("/", (req, res) => {
   });
 });
 
-// 404 handler
+// Handle client-side routing - serve index.html for all non-API routes (production only)
 app.use((req, res) => {
-  res.status(404).json({ message: "Endpoint not found" });
+  if (hasPublicFolder) {
+    // Serve mobile index.html for /mobile/* routes
+    if (req.path.startsWith('/mobile')) {
+      const mobileIndexPath = path.join(__dirname, '../public/mobile/index.html');
+      res.sendFile(mobileIndexPath);
+    } else {
+      // Serve web index.html for all other routes
+      res.sendFile(indexPath);
+    }
+  } else {
+    res.status(404).json({ 
+      message: 'Endpoint not found',
+      tip: 'API endpoints are under /api. Frontend runs separately in development.'
+    });
+  }
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, '0.0.0.0', () => {
   const networkInterfaces = os.networkInterfaces();

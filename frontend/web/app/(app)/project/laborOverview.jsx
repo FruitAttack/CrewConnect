@@ -5,7 +5,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useSession } from "../../../utils/ctx";
 import { useProject } from "../../components/projectComponents/projectContext";
 import { colors, spacing, borderRadius, shadows, } from "../../../constants/theme";
-import { getAllProjectCostCodes, getTimeEntries, getUserProfile, } from "../../../utils/api";
+import { getAllProjectCostCodes, getTimeEntries, getUserProfile, getAllUsers} from "../../../utils/api";
 
 // Helper functions and variables
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -140,6 +140,7 @@ export default function LaborOverview() {
   const [costCodes, setCostCodes] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [error, setError] = useState(null);
+  const [users, setUsers] = useState([]);
 
   /* ---------------- Load Company ---------------- */
 
@@ -170,10 +171,11 @@ export default function LaborOverview() {
         ...(startDate ? { start_date: startDate } : {}),
       };
 
-      const [ccRes, teRes] = await Promise.all([
-        getAllProjectCostCodes(token, projectId),
-        getTimeEntries(token, companyId, filters),
-      ]);
+      const [ccRes, teRes, usersRes] = await Promise.all([
+      getAllProjectCostCodes(token, projectId),
+      getTimeEntries(token, companyId, filters),
+      getAllUsers(token, { company_id: companyId }), 
+    ]);
 
       if (!ccRes.success) {
         setError(ccRes.message || "Failed to load cost codes");
@@ -183,43 +185,74 @@ export default function LaborOverview() {
 
       setCostCodes(ccRes.data || []);
       setTimeEntries(teRes.success ? teRes.data?.time_entries || [] : []);
+
+      const usersPayload = usersRes.success ? usersRes.data : null;
+      const loadedUsers = usersPayload?.users || usersPayload || [];
+      setUsers(Array.isArray(loadedUsers) ? loadedUsers : []);
+      
       setLoading(false);
     }
 
     load();
   }, [token, projectId, companyId]);
 
+  const HOURS_PER_YEAR = 52 * 40; // 2080
+
+function toNumber(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getEffectiveHourlyRate(entry, employment) {
+  const hourly = toNumber(entry.hourly_rate ?? employment?.hourly_rate);
+  if (hourly > 0) return hourly;
+
+  // convert salary to 'hourly' basically
+  const salaryAnnual = toNumber(
+    entry.salary_annual ??
+    employment?.salary_annual ??
+    entry.salary_rate
+  );
+
+  if (salaryAnnual > 0) return salaryAnnual / HOURS_PER_YEAR;
+
+  return 0;
+}
+
   // Aggregates all of the hours and dollars for each cost code
-  const computed = useMemo(() => {
-    const map = {};
+const computed = useMemo(() => {
+  const map = {};
 
-    for (const pc of costCodes) {
-      const id = pc.cost_code?.id;
-      if (!id) continue;
-      map[id] = { ...pc, actual_hours: 0, actual_cost: 0 };
-    }
+  for (const pc of costCodes) {
+    const id = pc.cost_code?.id;
+    if (!id) continue;
+    map[id] = { ...pc, actual_hours: 0, actual_cost: 0 };
+  }
 
-    for (const entry of timeEntries) {
-      const bucket = map[entry.cost_code_id];
-      if (!bucket) continue;
+  const employmentByUserId = new Map();
+  for (const u of users) {
+    const emp = (u.user_employment && u.user_employment[0]) || u.employment || null;
+    if (u?.id) employmentByUserId.set(u.id, emp);
+  }
 
-      const hours = hoursBetween(
-        entry.clock_in,
-        entry.clock_out,
-        entry.break_minutes
-      );
+  for (const entry of timeEntries) {
+    const bucket = map[entry.cost_code_id];
+    if (!bucket) continue;
 
-      const rate =
-        entry.hourly_rate ??
-        entry.salary_rate ??
-        0;
+    const hours = hoursBetween(entry.clock_in, entry.clock_out, entry.break_minutes);
 
-      bucket.actual_hours += hours;
-      bucket.actual_cost += hours * rate;
-    }
+    const userId = entry.user_id ?? entry.user?.id;
+    const employment = userId ? employmentByUserId.get(userId) : null;
 
-    return Object.values(map);
-  }, [costCodes, timeEntries]);
+    const rate = getEffectiveHourlyRate(entry, employment);
+
+    bucket.actual_hours += hours;
+    bucket.actual_cost += hours * rate;
+  }
+
+  return Object.values(map);
+}, [costCodes, timeEntries, users]);
 
   const active = computed.filter(c => c.is_active);
   const inactive = computed.filter(c => !c.is_active);

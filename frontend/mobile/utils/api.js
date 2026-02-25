@@ -3,19 +3,37 @@ export async function apiCall(token, route, method = 'GET', body = null) {
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const options = { method, headers, signal: controller.signal };
-    if (body) options.body = JSON.stringify(body);
-
-    const url = `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/${route}`;
-    console.log(`API Call: ${method} ${url}`);
-
-    const response = await fetch(url, options);
-    clearTimeout(timeoutId);
-
-    let data = {};
+    const headers = { 'Content-Type': 'application/json' }
+    
+    // Add Authorization header only if token provided
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    const options = { 
+      method, 
+      headers,
+      signal: controller.signal
+    }
+    
+    if (body) {
+      options.body = JSON.stringify(body)
+    }
+    
+    // Use relative URL in production (when deployed as web app), localhost in development
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? '' 
+      : (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001');
+    const url = `${baseUrl}/api/${route}`
+    console.log(`API Call: ${method} ${url}`)
+    
+    const response = await fetch(url, options)
+    
+    // Clear timeout on successful response
+    clearTimeout(timeoutId)
+    
+    // Attempt JSON parse always
+    let data = {}
     try {
       data = await response.json();
     } catch (parseError) {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Modal } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getForm, getFormSubmissions, createFormSubmission, updateFormSubmission, deleteFormSubmission } from "../../utils/api";
 import { useSession } from "../../utils/ctx";
 import { useFormTabSafe } from "./formTabComponents/formTabContext";
@@ -24,15 +26,60 @@ export default function FilteredFormSubmissionsPage({
   filter = { type: "all" },
   onBack 
 }) {
+  const router = useRouter();
+  const searchParams = useLocalSearchParams();
   const { session } = useSession();
   const token = session?.access_token;
   const { setCreateLabel, setCreateHandler } = useFormTabSafe();
-  const [viewType, setViewType] = useState("table"); // "table", "graph", "donut"
+
+  const getParamString = (value) => (Array.isArray(value) ? value[0] : value);
+  const parseJsonParam = (value) => {
+    if (!value || typeof value !== "string") return null;
+    try {
+      return JSON.parse(value);
+    } catch (_err) {
+      return null;
+    }
+  };
+  const normalizeFilterRules = (rules = []) =>
+    rules.map((rule, index) => ({
+      id: rule.id || `${Date.now()}-${index}`,
+      columnId: rule.columnId || "",
+      operator: rule.operator || "",
+      value: rule.value ?? "",
+      values: Array.isArray(rule.values) ? rule.values : [],
+    }));
+  const parseFiltersParam = (value) => {
+    const parsed = parseJsonParam(value);
+    return Array.isArray(parsed) ? parsed : [];
+  };
+  const parseColumnsParam = (value) => {
+    const parsed = parseJsonParam(value);
+    return Array.isArray(parsed) ? parsed : null;
+  };
+  const parseGraphConfigParam = (value) => {
+    const parsed = parseJsonParam(value);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      xAxisField: parsed.xAxisField ?? null,
+      metricField: parsed.metricField ?? null,
+      aggregationType: parsed.aggregationType || "count",
+      chartType: parsed.chartType || "bar",
+      groupByPeriod: parsed.groupByPeriod || "none",
+    };
+  };
+
+  const viewParam = getParamString(searchParams?.view);
+  const filtersParam = getParamString(searchParams?.filters);
+  const columnsParam = getParamString(searchParams?.columns);
+  const graphParam = getParamString(searchParams?.graph);
+
+  const [viewType, setViewType] = useState(() => (viewParam === "graph" ? "graph" : "table")); // "table", "graph"
   const [form, setForm] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterRules, setFilterRules] = useState([]);
-  const [appliedFilterRules, setAppliedFilterRules] = useState([]);
+  const [filterRules, setFilterRules] = useState(() => normalizeFilterRules(parseFiltersParam(filtersParam)));
+  const [appliedFilterRules, setAppliedFilterRules] = useState(() => normalizeFilterRules(parseFiltersParam(filtersParam)));
   const [openDropdown, setOpenDropdown] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
@@ -43,7 +90,20 @@ export default function FilteredFormSubmissionsPage({
   const [submissionDraft, setSubmissionDraft] = useState({});
   const [submissionSaving, setSubmissionSaving] = useState(false);
   const [submissionError, setSubmissionError] = useState(null);
+  const [graphConfigOpen, setGraphConfigOpen] = useState(false);
+  const [graphConfig, setGraphConfig] = useState(() => {
+    const parsed = parseGraphConfigParam(graphParam);
+    return {
+      xAxisField: parsed?.xAxisField ?? null,
+      metricField: parsed?.metricField ?? null,
+      aggregationType: parsed?.aggregationType || "count", // count, sum, average, min, max
+      chartType: parsed?.chartType || "bar", // bar, line, area, pie, donut
+      groupByPeriod: parsed?.groupByPeriod || "none", // none, day, week, month, year (for dates)
+    };
+  });
   const inputRefs = useRef({});
+  const graphConfigHydratedRef = useRef(!!parseGraphConfigParam(graphParam));
+  const urlHydratedFormRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     if (!token || !formId) return;
@@ -84,6 +144,40 @@ export default function FilteredFormSubmissionsPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!formId) return;
+    if (urlHydratedFormRef.current === formId) return;
+    urlHydratedFormRef.current = formId;
+
+    const nextView = viewParam === "graph" ? "graph" : "table";
+    setViewType(nextView);
+
+    const nextFilters = normalizeFilterRules(parseFiltersParam(filtersParam));
+    setAppliedFilterRules(nextFilters);
+    setFilterRules(
+      nextFilters.map((rule) => ({
+        ...rule,
+        values: Array.isArray(rule.values) ? [...rule.values] : [],
+      })),
+    );
+
+    const nextColumns = parseColumnsParam(columnsParam);
+    if (Array.isArray(nextColumns)) {
+      setVisibleColumnIds(nextColumns);
+    } else {
+      setVisibleColumnIds([]);
+    }
+
+    const nextGraphConfig = parseGraphConfigParam(graphParam);
+    if (nextGraphConfig) {
+      setGraphConfig((prev) => ({
+        ...prev,
+        ...nextGraphConfig,
+      }));
+      graphConfigHydratedRef.current = true;
+    }
+  }, [formId, viewParam, filtersParam, columnsParam, graphParam]);
 
   useEffect(() => {
     if (!pendingFocusRuleId || !filtersOpen) return;
@@ -292,6 +386,30 @@ export default function FilteredFormSubmissionsPage({
   );
   const displayFields = useMemo(() => parsedFields || [], [parsedFields]);
 
+  // Initialize graph config with defaults when form loads
+  useEffect(() => {
+    if (!form) return;
+    
+    // Use user (driver) association field if enabled, otherwise use first form field or submitted_by
+    const xAxisFieldId = form?.user_enabled ? "user" : (parsedFields[0]?.id || "submitted_by");
+    
+    setGraphConfig((prev) => {
+      const next = {
+        ...prev,
+        xAxisField: prev.xAxisField || xAxisFieldId,
+        metricField: prev.metricField || "count",
+        aggregationType: prev.aggregationType || "count",
+        chartType: prev.chartType || "bar",
+      };
+      if (!graphConfigHydratedRef.current) {
+        graphConfigHydratedRef.current = true;
+        return next;
+      }
+      if (!prev.xAxisField || !prev.metricField) return next;
+      return prev;
+    });
+  }, [form, parsedFields]);
+
   const buildSubmissionDraft = useCallback((sourceData = {}) => {
     const draft = {};
     displayFields.forEach((field) => {
@@ -338,7 +456,7 @@ export default function FilteredFormSubmissionsPage({
     return columns;
   }, [showProject, showEquipment, showUser, showCustomer, showCostCode, displayFields, form]);
 
-  const [visibleColumnIds, setVisibleColumnIds] = useState([]);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(() => parseColumnsParam(columnsParam) || []);
 
   useEffect(() => {
     setVisibleColumnIds((prev) => {
@@ -349,6 +467,73 @@ export default function FilteredFormSubmissionsPage({
       return [...kept, ...added];
     });
   }, [availableTableColumns]);
+
+  const serializedFilters = useMemo(() => {
+    if (appliedFilterRules.length === 0) return null;
+    const cleaned = appliedFilterRules.map((rule) => ({
+      columnId: rule.columnId || "",
+      operator: rule.operator || "",
+      value: rule.value ?? "",
+      values: Array.isArray(rule.values) ? rule.values : [],
+    }));
+    return JSON.stringify(cleaned);
+  }, [appliedFilterRules]);
+
+  const serializedColumns = useMemo(() => {
+    if (visibleColumnIds.length === 0) return null;
+    return JSON.stringify(visibleColumnIds);
+  }, [visibleColumnIds]);
+
+  const serializedGraphConfig = useMemo(() => {
+    if (!graphConfig.xAxisField && !graphConfig.metricField) return null;
+    return JSON.stringify({
+      xAxisField: graphConfig.xAxisField,
+      metricField: graphConfig.metricField,
+      aggregationType: graphConfig.aggregationType,
+      chartType: graphConfig.chartType,
+      groupByPeriod: graphConfig.groupByPeriod,
+    });
+  }, [graphConfig]);
+
+  useEffect(() => {
+    if (!formId) return;
+    const params = {
+      formId,
+      view: viewType,
+      filters: serializedFilters || undefined,
+      columns: serializedColumns || undefined,
+      graph: serializedGraphConfig || undefined,
+    };
+
+    const currentFormId = getParamString(searchParams?.formId) || null;
+    const currentView = getParamString(searchParams?.view) || null;
+    const currentFilters = getParamString(searchParams?.filters) || null;
+    const currentColumns = getParamString(searchParams?.columns) || null;
+    const currentGraph = getParamString(searchParams?.graph) || null;
+
+    const nextFilters = params.filters || null;
+    const nextColumns = params.columns || null;
+    const nextGraph = params.graph || null;
+
+    const isSameParams =
+      currentFormId === params.formId &&
+      currentView === params.view &&
+      currentFilters === nextFilters &&
+      currentColumns === nextColumns &&
+      currentGraph === nextGraph;
+
+    if (isSameParams) return;
+
+    if (typeof router.setParams === "function") {
+      router.setParams(params);
+      return;
+    }
+
+    router.replace({
+      pathname: "/form/submissions",
+      params,
+    });
+  }, [formId, viewType, serializedFilters, serializedColumns, serializedGraphConfig, router, searchParams]);
 
   const visibleColumnSet = useMemo(() => new Set(visibleColumnIds), [visibleColumnIds]);
   const isColumnVisible = useCallback((columnId) => visibleColumnSet.has(columnId), [visibleColumnSet]);
@@ -481,6 +666,62 @@ export default function FilteredFormSubmissionsPage({
     return columns;
   }, [parsedFields, showProject, showEquipment, showUser, showCustomer, showCostCode, form, submissions]);
 
+  // Helper functions for chart configuration
+  const getGroupableFields = useCallback(() => {
+    const fields = [
+      { id: "submitted_by", label: "Submitted By", type: "text" },
+      { id: "submitted_at", label: "Submitted At", type: "date" },
+    ];
+
+    if (showProject) fields.push({ id: "project", label: form?.project_question || "Project", type: "text" });
+    if (showEquipment) fields.push({ id: "equipment", label: form?.equipment_question || "Equipment", type: "text" });
+    if (showUser) fields.push({ id: "user", label: form?.user_question || "User", type: "text" });
+    if (showCustomer) fields.push({ id: "customer", label: form?.customer_question || "Customer", type: "text" });
+    if (showCostCode) fields.push({ id: "cost_code", label: form?.cost_code_question || "Cost Code", type: "text" });
+
+    parsedFields.forEach((field) => {
+      if (field.type === FORM_FIELD_TYPES.PHOTO) return;
+      if (field.type === FORM_FIELD_TYPES.NUMBER) {
+        fields.push({ id: field.id, label: field.question, type: "number" });
+      } else if (field.type === FORM_FIELD_TYPES.DATE) {
+        fields.push({ id: field.id, label: field.question, type: "date" });
+      } else if (field.type === FORM_FIELD_TYPES.DATE_TIME) {
+        fields.push({ id: field.id, label: field.question, type: "date_time" });
+      } else if (field.type === FORM_FIELD_TYPES.MULTIPLE_CHOICE) {
+        fields.push({ id: field.id, label: field.question, type: "text" });
+      }
+    });
+
+    return fields;
+  }, [showProject, showEquipment, showUser, showCustomer, showCostCode, parsedFields, form]);
+
+  const getMetricFields = useCallback(() => {
+    const fields = [
+      { id: "count", label: "Count", type: "number" },
+    ];
+
+    parsedFields.forEach((field) => {
+      if (field.type === FORM_FIELD_TYPES.NUMBER) {
+        fields.push({ id: field.id, label: field.question, type: "number" });
+      }
+    });
+
+    return fields;
+  }, [parsedFields]);
+
+  const getAggregationTypes = useCallback((metricFieldId) => {
+    if (metricFieldId === "count") {
+      return [{ value: "count", label: "Count" }];
+    }
+    return [
+      { value: "sum", label: "Sum" },
+      { value: "average", label: "Average" },
+      { value: "min", label: "Minimum" },
+      { value: "max", label: "Maximum" },
+      { value: "count", label: "Count" },
+    ];
+  }, []);
+
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((submission) => {
       return appliedFilterRules.every((rule) => {
@@ -543,6 +784,141 @@ export default function FilteredFormSubmissionsPage({
       });
     });
   }, [submissions, appliedFilterRules, filterableColumns]);
+
+  const processChartData = useCallback(() => {
+    if (!graphConfig.xAxisField || !graphConfig.metricField) return [];
+
+    const dataMap = new Map();
+
+    const getColumnById = (fieldId) => {
+      if (fieldId === "submitted_by") return filterableColumns.find((c) => c.id === "submitted_by");
+      if (fieldId === "submitted_at") return filterableColumns.find((c) => c.id === "submitted_at");
+      if (fieldId === "project") return filterableColumns.find((c) => c.id === "project");
+      if (fieldId === "equipment") return filterableColumns.find((c) => c.id === "equipment");
+      if (fieldId === "user") return filterableColumns.find((c) => c.id === "user");
+      if (fieldId === "customer") return filterableColumns.find((c) => c.id === "customer");
+      if (fieldId === "cost_code") return filterableColumns.find((c) => c.id === "cost_code");
+      return filterableColumns.find((c) => c.id === fieldId);
+    };
+
+    const xAxisColumn = getColumnById(graphConfig.xAxisField);
+    if (!xAxisColumn) return [];
+
+    const metricsColumn =
+      graphConfig.metricField !== "count" ? getColumnById(graphConfig.metricField) : null;
+
+    const isDateAxis = xAxisColumn.type === "date" || xAxisColumn.type === "date_time";
+
+    const normalizeDate = (date) => {
+      const next = new Date(date);
+      if (graphConfig.groupByPeriod === "week") {
+        next.setHours(0, 0, 0, 0);
+        next.setDate(next.getDate() - next.getDay());
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        return new Date(next.getFullYear(), next.getMonth(), 1);
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        return new Date(next.getFullYear(), 0, 1);
+      }
+      const day = new Date(next);
+      day.setHours(0, 0, 0, 0);
+      return day;
+    };
+
+    const formatDateLabel = (date) => {
+      if (graphConfig.groupByPeriod === "week") {
+        return `Week of ${date.toLocaleDateString("en-US")}`;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        return date.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        return date.getFullYear().toString();
+      }
+      return date.toLocaleDateString("en-US");
+    };
+
+    const stepDate = (date) => {
+      const next = new Date(date);
+      if (graphConfig.groupByPeriod === "week") {
+        next.setDate(next.getDate() + 7);
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        next.setMonth(next.getMonth() + 1, 1);
+        return next;
+      }
+      if (graphConfig.groupByPeriod === "year") {
+        next.setFullYear(next.getFullYear() + 1, 0, 1);
+        return next;
+      }
+      next.setDate(next.getDate() + 1);
+      return next;
+    };
+
+    filteredSubmissions.forEach((submission) => {
+      let groupKey = "Other";
+      let sortKey = groupKey;
+
+      if (isDateAxis) {
+        const rawValue = xAxisColumn.getValue(submission);
+        const parsed = rawValue ? new Date(rawValue) : null;
+        if (!parsed || Number.isNaN(parsed.getTime())) return;
+        const normalized = normalizeDate(parsed);
+        sortKey = normalized.getTime();
+        groupKey = formatDateLabel(normalized);
+      } else {
+        groupKey = String(xAxisColumn.getValue(submission) || "Other");
+        sortKey = groupKey;
+      }
+
+      if (!dataMap.has(sortKey)) {
+        dataMap.set(sortKey, { name: groupKey, sortKey, values: [] });
+      }
+
+      if (graphConfig.metricField !== "count" && metricsColumn) {
+        const value = parseFloat(String(metricsColumn.getValue(submission) || 0).replace(/,/g, ""));
+        if (!isNaN(value)) {
+          dataMap.get(sortKey).values.push(value);
+        }
+      } else {
+        dataMap.get(sortKey).values.push(1);
+      }
+    });
+
+    const chartData = Array.from(dataMap.values()).map((item) => {
+      let aggregated = 0;
+      if (graphConfig.aggregationType === "count") {
+        aggregated = item.values.length;
+      } else if (graphConfig.aggregationType === "sum") {
+        aggregated = item.values.reduce((a, b) => a + b, 0);
+      } else if (graphConfig.aggregationType === "average") {
+        aggregated = item.values.reduce((a, b) => a + b, 0) / (item.values.length || 1);
+      } else if (graphConfig.aggregationType === "min") {
+        aggregated = item.values.length ? Math.min(...item.values) : 0;
+      } else if (graphConfig.aggregationType === "max") {
+        aggregated = item.values.length ? Math.max(...item.values) : 0;
+      }
+      return {
+        name: item.name,
+        value: Math.round(aggregated * 100) / 100,
+        sortKey: item.sortKey,
+      };
+    });
+
+    if (!isDateAxis) {
+      return chartData.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }
+
+    return chartData.sort((a, b) => {
+      if (typeof a.sortKey === "number" && typeof b.sortKey === "number") {
+        return a.sortKey - b.sortKey;
+      }
+      return String(a.name).localeCompare(String(b.name));
+    });
+  }, [graphConfig, filteredSubmissions, filterableColumns]);
 
   const isRuleComplete = useCallback(
     (rule) => {
@@ -1181,20 +1557,6 @@ export default function FilteredFormSubmissionsPage({
           Graph
         </Text>
       </Pressable>
-
-      <Pressable
-        style={[styles.toggleButton, viewType === "donut" && styles.toggleButtonActive]}
-        onPress={() => setViewType("donut")}
-      >
-        <Ionicons 
-          name="pie-chart" 
-          size={18} 
-          color={viewType === "donut" ? colors.primary.orange : colors.text.secondary} 
-        />
-        <Text style={[styles.toggleText, viewType === "donut" && styles.toggleTextActive]}>
-          Donut
-        </Text>
-      </Pressable>
     </View>
   );
 
@@ -1525,6 +1887,681 @@ export default function FilteredFormSubmissionsPage({
     </View>
   );
 
+  const renderGraphConfigModal = () => {
+    const groupableFields = getGroupableFields();
+    const metricFields = getMetricFields();
+    const aggregationTypes = getAggregationTypes(graphConfig.metricField);
+
+    return (
+      <Modal
+        visible={graphConfigOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGraphConfigOpen(false)}
+      >
+        <View style={styles.submissionModalBackdrop}>
+          <View style={[styles.submissionModalCard, { maxWidth: 500 }]}>
+            <View style={styles.submissionModalHeader}>
+              <Text style={styles.submissionModalTitle}>Configure Graph</Text>
+              <Pressable onPress={() => setGraphConfigOpen(false)}>
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.submissionModalBody} contentContainerStyle={{ paddingBottom: spacing.lg }}>
+              {/* Chart Type Selection */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>Chart Type</Text>
+                <View style={styles.configChipGroup}>
+                  {[
+                    { value: "bar", label: "Bar" },
+                    { value: "line", label: "Line" },
+                    { value: "area", label: "Area" },
+                    { value: "pie", label: "Pie" },
+                    { value: "donut", label: "Donut" },
+                  ].map((type) => (
+                    <Pressable
+                      key={type.value}
+                      style={[
+                        styles.configChip,
+                        graphConfig.chartType === type.value && styles.configChipActive,
+                      ]}
+                      onPress={() => setGraphConfig((prev) => ({ ...prev, chartType: type.value }))}
+                    >
+                      <Text
+                        style={[
+                          styles.configChipText,
+                          graphConfig.chartType === type.value && styles.configChipTextActive,
+                        ]}
+                      >
+                        {type.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* X-Axis Field Selection */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>Group By (X-Axis)</Text>
+                <ScrollView
+                  style={styles.configDropdown}
+                  nestedScrollEnabled={true}
+                  scrollEventThrottle={16}
+                >
+                  {groupableFields.map((field) => (
+                    <Pressable
+                      key={field.id}
+                      style={[
+                        styles.configDropdownItem,
+                        graphConfig.xAxisField === field.id && styles.configDropdownItemActive,
+                      ]}
+                      onPress={() => setGraphConfig((prev) => ({ ...prev, xAxisField: field.id }))}
+                    >
+                      <Ionicons
+                        name={graphConfig.xAxisField === field.id ? "radio-button-on" : "radio-button-off"}
+                        size={18}
+                        color={
+                          graphConfig.xAxisField === field.id ? colors.primary.orange : colors.text.secondary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.configDropdownItemText,
+                          graphConfig.xAxisField === field.id && styles.configDropdownItemTextActive,
+                        ]}
+                      >
+                        {field.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Date Grouping Period */}
+              {graphConfig.xAxisField &&
+                groupableFields.find((f) => f.id === graphConfig.xAxisField)?.type === "date" && (
+                  <View style={styles.configSection}>
+                    <Text style={styles.configLabel}>Group Period</Text>
+                    <View style={styles.configChipGroup}>
+                      {[
+                        { value: "none", label: "Daily" },
+                        { value: "week", label: "Weekly" },
+                        { value: "month", label: "Monthly" },
+                        { value: "year", label: "Yearly" },
+                      ].map((period) => (
+                        <Pressable
+                          key={period.value}
+                          style={[
+                            styles.configChip,
+                            graphConfig.groupByPeriod === period.value && styles.configChipActive,
+                          ]}
+                          onPress={() => setGraphConfig((prev) => ({ ...prev, groupByPeriod: period.value }))}
+                        >
+                          <Text
+                            style={[
+                              styles.configChipText,
+                              graphConfig.groupByPeriod === period.value && styles.configChipTextActive,
+                            ]}
+                          >
+                            {period.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+              {/* Metric Field Selection */}
+              {graphConfig.chartType !== "pie" && (
+                <>
+                  <View style={styles.configSection}>
+                    <Text style={styles.configLabel}>Metric (Y-Axis)</Text>
+                    <ScrollView
+                      style={styles.configDropdown}
+                      nestedScrollEnabled={true}
+                      scrollEventThrottle={16}
+                    >
+                      {metricFields.map((field) => (
+                        <Pressable
+                          key={field.id}
+                          style={[
+                            styles.configDropdownItem,
+                            graphConfig.metricField === field.id && styles.configDropdownItemActive,
+                          ]}
+                          onPress={() => setGraphConfig((prev) => ({ ...prev, metricField: field.id }))}
+                        >
+                          <Ionicons
+                            name={graphConfig.metricField === field.id ? "radio-button-on" : "radio-button-off"}
+                            size={18}
+                            color={
+                              graphConfig.metricField === field.id ? colors.primary.orange : colors.text.secondary
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.configDropdownItemText,
+                              graphConfig.metricField === field.id && styles.configDropdownItemTextActive,
+                            ]}
+                          >
+                            {field.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Aggregation Type */}
+                  {graphConfig.metricField && (
+                    <View style={styles.configSection}>
+                      <Text style={styles.configLabel}>Aggregation</Text>
+                      <View style={styles.configChipGroup}>
+                        {aggregationTypes.map((agg) => (
+                          <Pressable
+                            key={agg.value}
+                            style={[
+                              styles.configChip,
+                              graphConfig.aggregationType === agg.value && styles.configChipActive,
+                            ]}
+                            onPress={() =>
+                              setGraphConfig((prev) => ({ ...prev, aggregationType: agg.value }))
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.configChipText,
+                                graphConfig.aggregationType === agg.value && styles.configChipTextActive,
+                              ]}
+                            >
+                              {agg.label}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* For Pie/Donut, metric is always the value field */}
+              {graphConfig.chartType === "pie" && (
+                <View style={styles.configSection}>
+                  <Text style={styles.configLabel}>Values</Text>
+                  <ScrollView
+                    style={styles.configDropdown}
+                    nestedScrollEnabled={true}
+                    scrollEventThrottle={16}
+                  >
+                    {metricFields.map((field) => (
+                      <Pressable
+                        key={field.id}
+                        style={[
+                          styles.configDropdownItem,
+                          graphConfig.metricField === field.id && styles.configDropdownItemActive,
+                        ]}
+                        onPress={() => setGraphConfig((prev) => ({ ...prev, metricField: field.id }))}
+                      >
+                        <Ionicons
+                          name={graphConfig.metricField === field.id ? "radio-button-on" : "radio-button-off"}
+                          size={18}
+                          color={
+                            graphConfig.metricField === field.id ? colors.primary.orange : colors.text.secondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.configDropdownItemText,
+                            graphConfig.metricField === field.id && styles.configDropdownItemTextActive,
+                          ]}
+                        >
+                          {field.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.submissionModalFooter}>
+              <Pressable
+                style={styles.submissionCancelButton}
+                onPress={() => setGraphConfigOpen(false)}
+              >
+                <Text style={styles.submissionCancelText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderGraphControls = () => (
+    <View style={styles.controlsCard}>
+      <View style={styles.filterBar}>
+        <View style={styles.filterControls}>
+          <Pressable
+            style={styles.filterToggle}
+            onPress={() => {
+              setFiltersOpen((v) => !v);
+            }}
+          >
+            <Ionicons name="filter" size={16} color="white" />
+            <Text style={styles.filterToggleText}>Filters</Text>
+            {appliedFilterRules.length > 0 && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountText}>
+                  {formatCountDisplay(appliedFilterRules.length)}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+        <ScrollView
+          horizontal
+          style={styles.appliedFiltersInline}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.appliedFiltersRow}
+        >
+          {appliedFilterRules.length === 0 ? (
+            <View style={styles.noFiltersChip}>
+              <Text style={styles.noFiltersText}>No filters</Text>
+            </View>
+          ) : (
+            appliedFilterRules.map((rule) => (
+              <Pressable
+                key={rule.id}
+                style={styles.appliedFilterChip}
+                onPress={() => {
+                  const column = filterableColumns.find((col) => col.id === rule.columnId);
+                  const isTextInput =
+                    column?.type === "text" ||
+                    column?.type === "number" ||
+                    column?.type === "date" ||
+                    column?.type === "date_time" ||
+                    column?.type === "time";
+                  setFiltersOpen(true);
+                  setOpenDropdown(isTextInput ? null : { type: "values", ruleId: rule.id });
+                  setPendingFocusRuleId(isTextInput ? rule.id : null);
+                }}
+              >
+                <Text style={styles.appliedFilterText} numberOfLines={1}>
+                  {buildAppliedFilterLabel(rule)}
+                </Text>
+              </Pressable>
+            ))
+          )}
+        </ScrollView>
+        <View style={styles.filterRightControls}>
+          <Pressable
+            style={styles.configButton}
+            onPress={() => setGraphConfigOpen(true)}
+          >
+            <Ionicons name="settings" size={16} color={colors.neutral.black} />
+            <Text style={styles.configButtonText}>Configure</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderGraphView = () => {
+    const chartData = processChartData();
+    const isConfigured = graphConfig.xAxisField && graphConfig.metricField;
+
+    if (!isConfigured) {
+      return (
+        <View style={{ position: "relative" }}>
+          {renderGraphControls()}
+          <View style={[styles.graphCard]}>
+            <View style={styles.graphConfigPrompt}>
+              <Ionicons name="bar-chart-outline" size={48} color={colors.text.tertiary} />
+              <Text style={styles.graphConfigPromptTitle}>Configure Your Graph</Text>
+              <Text style={styles.graphConfigPromptSubtitle}>
+                Select chart type, axes, and aggregation method to visualize your data
+              </Text>
+              <Pressable
+                style={styles.configButton}
+                onPress={() => setGraphConfigOpen(true)}
+              >
+                <Ionicons name="settings" size={16} color={colors.neutral.black} />
+                <Text style={styles.configButtonText}>Configure Graph</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    if (chartData.length === 0) {
+      return (
+        <View style={{ position: "relative" }}>
+          {renderGraphControls()}
+          <View style={[styles.graphCard]}>
+            <View style={styles.graphEmptyState}>
+              <Text style={styles.graphEmptyText}>No data to display</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    const COLORS = [
+      colors.primary.orange,
+      "#4F46E5",
+      "#06B6D4",
+      "#10B981",
+      "#F59E0B",
+      "#EF4444",
+      "#8B5CF6",
+      "#EC4899",
+    ];
+
+    const xAxisColumn = filterableColumns.find((col) => col.id === graphConfig.xAxisField);
+    const isDateAxis = xAxisColumn?.type === "date" || xAxisColumn?.type === "date_time";
+    const maxTicks = 6;
+    const dateKeys = isDateAxis
+      ? chartData
+          .map((item) => item.sortKey)
+          .filter((key) => typeof key === "number")
+          .sort((a, b) => a - b)
+      : [];
+    const uniqueDateKeys = isDateAxis
+      ? Array.from(new Set(dateKeys))
+      : [];
+
+    let dateTicks = [];
+    if (isDateAxis && uniqueDateKeys.length > 0) {
+      const minKey = uniqueDateKeys[0];
+      const lastKey = uniqueDateKeys[uniqueDateKeys.length - 1];
+      
+      const snapToNiceDate = (timestamp) => {
+        const date = new Date(timestamp);
+        if (graphConfig.groupByPeriod === "year") {
+          return new Date(date.getFullYear(), 0, 1).getTime();
+        }
+        if (graphConfig.groupByPeriod === "month") {
+          return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+        }
+        if (graphConfig.groupByPeriod === "week") {
+          const day = new Date(date);
+          day.setHours(0, 0, 0, 0);
+          day.setDate(day.getDate() - day.getDay());
+          return day.getTime();
+        }
+        // For day grouping, snap to midnight
+        const day = new Date(date);
+        day.setHours(0, 0, 0, 0);
+        return day.getTime();
+      };
+      
+      // Find and snap middle
+      const rawMiddle = (minKey + lastKey) / 2;
+      const middleKey = snapToNiceDate(rawMiddle);
+      
+      // Calculate distance from start to middle
+      const distanceToMiddle = middleKey - minKey;
+      const quarterDistance = distanceToMiddle / 2;
+      
+      // Snap and find 1/4 position
+      const rawQuarter = minKey + quarterDistance;
+      const quarterKey = snapToNiceDate(rawQuarter);
+      
+      // Use same distance from middle to find 3/4
+      const rawThreeQuarter = middleKey + quarterDistance;
+      const threeQuarterKey = snapToNiceDate(rawThreeQuarter);
+      
+      dateTicks = [
+        minKey,
+        quarterKey,
+        middleKey,
+        threeQuarterKey,
+        lastKey,
+      ];
+      
+      // Remove duplicates while preserving order
+      dateTicks = [...new Set(dateTicks)].sort((a, b) => a - b);
+    }
+
+    const formatDateStamp = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const formatAxisTick = (value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return formatDateStamp(date);
+    };
+
+    const formatTooltipLabel = (value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value ?? "");
+      if (graphConfig.groupByPeriod === "year") {
+        return `${date.getFullYear()}-01-01`;
+      }
+      if (graphConfig.groupByPeriod === "month") {
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        return `${date.getFullYear()}-${month}-01`;
+      }
+      return formatDateStamp(date);
+    };
+
+    const xAxisProps = isDateAxis
+      ? {
+          dataKey: "sortKey",
+          type: "number",
+          domain: ["dataMin", "dataMax"],
+          ticks: dateTicks,
+          tickFormatter: formatAxisTick,
+          stroke: colors.text.secondary,
+          tick: { fontFamily: typography.fontFamily.sans, fontSize: 12 },
+        }
+      : {
+          dataKey: "name",
+          stroke: colors.text.secondary,
+          tick: { fontFamily: typography.fontFamily.sans, fontSize: 12 },
+          interval: 0,
+        };
+
+    return (
+      <View style={{ position: "relative" }}>
+        {openDropdown && (
+          <Pressable
+            style={styles.dropdownBackdropFull}
+            onPress={() => {
+              setOpenDropdown(null);
+            }}
+          />
+        )}
+        {renderGraphControls()}
+
+        <View style={styles.graphCard}>
+          <style>{`
+            .ffsp-chart .recharts-surface {
+              background: transparent;
+            }
+          `}</style>
+          {graphConfig.chartType === "bar" && (
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis {...xAxisProps} />
+                <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 8,
+                    fontFamily: typography.fontFamily.sans,
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]} animationDuration={200}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {graphConfig.chartType === "line" && (
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis {...xAxisProps} />
+                <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 8,
+                    fontFamily: typography.fontFamily.sans,
+                    fontSize: 12,
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#4F46E5"
+                  dot={{ fill: "#4F46E5", r: 5 }}
+                  activeDot={{ r: 7 }}
+                  animationDuration={200}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {graphConfig.chartType === "area" && (
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis {...xAxisProps} />
+                <YAxis stroke={colors.text.secondary} tick={{ fontFamily: typography.fontFamily.sans, fontSize: 12 }} />
+                <Tooltip
+                  labelFormatter={isDateAxis ? formatTooltipLabel : undefined}
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 8,
+                    fontFamily: typography.fontFamily.sans,
+                    fontSize: 12,
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#4F46E5"
+                  fillOpacity={1}
+                  fill="url(#colorValue)"
+                  animationDuration={200}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+
+          {graphConfig.chartType === "pie" && (
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={0}
+                  outerRadius={130}
+                  paddingAngle={2}
+                  dataKey="value"
+                  animationDuration={200}
+                  label={(props) => {
+                    const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                    return (
+                      <text x={x} y={y} fill={colors.text.primary} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontFamily={typography.fontFamily.sans} fontSize="12" fontWeight="500">
+                        {`${name}: ${value}`}
+                      </text>
+                    );
+                  }}
+                  labelLine={false}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 8,
+                    fontFamily: typography.fontFamily.sans,
+                    fontSize: 12,
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+
+          {graphConfig.chartType === "donut" && (
+            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={80}
+                  outerRadius={130}
+                  paddingAngle={2}
+                  dataKey="value"
+                  animationDuration={200}
+                  label={(props) => {
+                    const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                    return (
+                      <text x={x} y={y} fill={colors.text.primary} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontFamily={typography.fontFamily.sans} fontSize="12" fontWeight="500">
+                        {`${name}: ${value}`}
+                      </text>
+                    );
+                  }}
+                  labelLine={false}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 8,
+                    fontFamily: typography.fontFamily.sans,
+                    fontSize: 12,
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+
+
   const renderSubmissionModal = () => (
     <Modal
       visible={submissionModalOpen}
@@ -1583,6 +2620,9 @@ export default function FilteredFormSubmissionsPage({
     </Modal>
   );
 
+  const displayTitle = formTitle || form?.title || "Form";
+  const displayIcon = formIcon || form?.icon || "📄";
+
   return (
     <View style={styles.container}>
       {/* Back Button & View Toggle */}
@@ -1598,7 +2638,7 @@ export default function FilteredFormSubmissionsPage({
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <View style={{ flex: 1 }}>
-          <Text style={styles.pageTitle}>{formIcon} {formTitle}</Text>
+          <Text style={styles.pageTitle}>{displayIcon} {displayTitle}</Text>
           <Text style={styles.subtitle}>{submissions.length} submissions</Text>
           </View>
         </View>
@@ -1607,10 +2647,10 @@ export default function FilteredFormSubmissionsPage({
       {/* Content based on view type */}
       <View style={styles.contentContainer}>
         {viewType === "table" && renderTableView()}
-        {viewType === "graph" && renderPlaceholder("Graph")}
-        {viewType === "donut" && renderPlaceholder("Donut Chart")}
+        {viewType === "graph" && renderGraphView()}
       </View>
-      {viewType === "table" && renderFilterDrawer(styles.filterDrawerOverlayPage)}
+      {renderFilterDrawer(styles.filterDrawerOverlayPage)}
+      {renderGraphConfigModal()}
       {renderSubmissionModal()}
     </View>
   );
@@ -2555,5 +3595,139 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 15,
+  },
+  graphCard: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 10,
+    paddingTop: 40,
+    paddingRight: 60,
+    borderWidth: 1,
+    borderColor: "#ECECEC",
+    overflow: "hidden",
+    ...shadows.small,
+  },
+  graphContainerWithConfig: {
+    flex: 1,
+    backgroundColor: "transparent",
+    gap: 12,
+  },
+  graphToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingHorizontal: 0,
+    gap: 8,
+  },
+  configButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "white",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    ...shadows.small,
+  },
+  configButtonText: {
+    fontSize: 13,
+    color: colors.text.primary,
+    fontWeight: "600",
+  },
+  graphConfigPrompt: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    gap: 12,
+  },
+  graphConfigPromptTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#161519",
+    marginTop: 16,
+  },
+  graphConfigPromptSubtitle: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    textAlign: "center",
+    maxWidth: 340,
+    margin: 12,
+  },
+  graphEmptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  graphEmptyText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  configSection: {
+    marginBottom: spacing.lg,
+    gap: 8,
+  },
+  configLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text.primary,
+  },
+  configChipGroup: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  configChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: "white",
+    ...shadows.small,
+  },
+  configChipActive: {
+    borderColor: colors.primary.orange,
+    backgroundColor: colors.primary.orangeSubtle,
+  },
+  configChipText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: "500",
+  },
+  configChipTextActive: {
+    color: colors.primary.orange,
+    fontWeight: "600",
+  },
+  configDropdown: {
+    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+    backgroundColor: "white",
+    ...shadows.small,
+  },
+  configDropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  configDropdownItemActive: {
+    backgroundColor: colors.primary.orangeSubtle,
+  },
+  configDropdownItemText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text.primary,
+  },
+  configDropdownItemTextActive: {
+    color: colors.primary.orange,
+    fontWeight: "600",
   },
 });
