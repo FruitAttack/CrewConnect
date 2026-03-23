@@ -78,10 +78,10 @@ export async function signUpWithCompany(req, res) {
   let companyId = null;
 
   try {
-    const { email, password, companyName } = req.body;
+    const { email, password, companyName, fullName } = req.body;
 
-    if (!email || !password || !companyName) {
-      return res.status(400).json({ message: 'email, password, and companyName are required' });
+    if (!email || !password || !companyName || !fullName) {
+      return res.status(400).json({ message: 'email, password, companyName, and fullname are required' });
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -113,8 +113,10 @@ export async function signUpWithCompany(req, res) {
       .insert({
         id: userId,
         email,
+        full_name: fullName || null,
         default_company_id: companyId,
         is_active: true,
+        can_view_rates: true,
       });
 
     if (userError) throw new Error('Failed to create user profile: ' + userError.message);

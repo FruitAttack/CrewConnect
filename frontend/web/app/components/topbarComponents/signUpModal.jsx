@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal, View, Text, StyleSheet, TextInput, Pressable, TouchableWithoutFeedback, ActivityIndicator, Image } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from "../../../utils/ctx";
+import { useRouter } from "expo-router";
 import { signUpWithCompany } from '../../../utils/api';
 import { colors, spacing, borderRadius, shadows } from '../../../constants/theme';
 
@@ -18,56 +19,64 @@ export default function SignUpModal({ visible, onClose, onSignIn }) {
   const [isLoading, setIsLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
   const [companyName, setCompanyName] = useState("");
+  const [fullName, setFullName] = useState("");
+  const router = useRouter();
+
 
   async function handleSignUp() {
-  setErrorMsg("");
+    setErrorMsg("");
 
-  if (!companyName) {
-    setErrorMsg("Please enter your company name.");
-    return;
-  }
-
-  if (!email) {
-    setErrorMsg("Please enter your email address.");
-    return;
-  }
-
-  if (password !== confirmPassword) {
-    setErrorMsg("Passwords do not match.");
-    return;
-  }
-
-  if (!password || password.length < 6) {
-    setErrorMsg("Password must be at least 6 characters.");
-    return;
-  }
-
-  try {
-    setIsLoading(true);
-
-    const res = await signUpWithCompany(email, password, companyName);
-
-    if (!res.success) {
-      throw new Error(res.message);
+    if (!fullName) {
+      setErrorMsg("Please enter your full name.");
+      return;
+    }
+    if (!companyName) {
+      setErrorMsg("Please enter your company name.");
+      return;
+    }
+    if (!email) {
+      setErrorMsg("Please enter your email address.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMsg("Passwords do not match.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
+      return;
     }
 
-    await signIn(email, password);
+    try {
+      setIsLoading(true);
 
-    setCompanyName("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    onClose();
+      const res = await signUpWithCompany(email, password, companyName, fullName);
 
-  } catch (err) {
-    setErrorMsg(err.message || "Sign up failed. Please try again.");
-  } finally {
-    setIsLoading(false);
+      if (!res.success) {
+        throw new Error(res.message);
+      }
+
+      await signIn(email, password);
+
+      setFullName("");
+      setCompanyName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      onClose();
+
+      router.replace("/(app)/dashboard");
+
+    } catch (err) {
+      setErrorMsg(err.message || "Sign up failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   }
-}
 
   function handleClose() {
     setCompanyName("");
+    setFullName("");
     setEmail("");
     setPassword("");
     setConfirmPassword("");
@@ -142,6 +151,30 @@ export default function SignUpModal({ visible, onClose, onSignIn }) {
                     onChangeText={setCompanyName}
                     editable={!isLoading}
                     onFocus={() => setFocusedInput('company')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Full Name</Text>
+                <View style={[
+                  styles.inputContainer,
+                  focusedInput === 'fullName' && styles.inputContainerFocused
+                ]}>
+                  <Ionicons
+                    name="person-outline"
+                    size={18}
+                    color={focusedInput === 'fullName' ? colors.primary.orange : colors.text.tertiary}
+                  />
+                  <TextInput
+                    placeholder="Your full name"
+                    placeholderTextColor={colors.text.tertiary}
+                    style={styles.input}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    editable={!isLoading}
+                    onFocus={() => setFocusedInput('fullName')}
                     onBlur={() => setFocusedInput(null)}
                   />
                 </View>
