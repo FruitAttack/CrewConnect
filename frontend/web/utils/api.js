@@ -517,6 +517,15 @@ export async function deleteCompany(token) {
   return apiCall('companies', token, 'DELETE');
 }
 
+// Creates new user, new company, and assign user to that company with an admin role
+export async function signUpWithCompany(email, password, companyName) {
+  return apiCall('companies/signup-with-company', null, 'POST', {
+    email,
+    password,
+    companyName,
+  });
+}
+
 // ============================================
 // DEBUG/SEEDING (UNOFFICIAL)
 // ============================================

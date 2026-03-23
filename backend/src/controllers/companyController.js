@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase.js';
+import jwt from 'jsonwebtoken';
 
 export async function createCompany(req, res) {
     try {
@@ -51,7 +52,7 @@ export async function deleteCompany(req, res) {
         const { data, error } = await supabase
             .from('companies')
             .delete()
-            .eq('company_id', company_id)
+            .eq('id', company_id)
             .select()
             .single();
 
@@ -129,6 +130,28 @@ export async function signUpWithCompany(req, res) {
     if (roleError) {
       return res.status(500).json({ message: roleError.message });
     }
+
+    const token = jwt.sign({
+      user_id: userId,
+      email,
+      company_id: company.id,
+      role: 'admin'
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    return res.status(201).json({
+      message: 'Account and company created successfully',
+      token,
+      user: {
+        id: userId,
+        email,
+        company_id: company.id,
+        role: 'admin'
+      },
+      company
+    });
 
   } catch (err) {
     console.error('Signup with company error:', err);
