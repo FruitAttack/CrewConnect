@@ -71,3 +71,67 @@ export async function deleteCompany(req, res) {
         return res.status(500).json({message: 'Server error' });
     }
 }
+
+export async function signUpWithCompany(req, res) {
+  try {
+    const { email, password, companyName } = req.body;
+
+    if(!email || !password || !companyName) {
+      return res.status(400).json({ message: 'email, password, and companyName are required' });
+    }
+
+    // First create an auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password
+    });
+
+    if (authError) {
+      return res.status(400).json({ message: authError.message });
+    }
+
+    const userId = authData.user.id;
+
+    // Then create the new company
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .insert([{ name: companyName }])
+      .select()
+      .single();
+
+    if (companyError) {
+      return res.status(500).json({ message: companyError.message });
+    }
+
+    // Next we create the user profile
+    const { error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        email,
+        default_company_id: company.id,
+        is_active: true
+      });
+
+    if (userError) {
+      return res.status(500).json({ message: userError.message });
+    }
+
+    // And finally, we assign the user the admin role in the new company
+    const { error: roleError } = await supabase
+      .from('user_roles')
+      .insert({
+        user_id: userId,
+        company_id: company.id,
+        role_key: 'admin'
+      });
+
+    if (roleError) {
+      return res.status(500).json({ message: roleError.message });
+    }
+
+  } catch (err) {
+    console.error('Signup with company error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
