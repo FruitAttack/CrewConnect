@@ -21,6 +21,7 @@ import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
+import companyRoutes from './routes/companyRoutes';
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use("/api/daily-production", dailyProductionRoutes);
 app.use("/api/forms", formsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
 app.use("/api/map", mapRoutes);
+app.use("/api/companies", companyRoutes)
 
 // Check if we have the built frontend
 const indexPath = path.join(__dirname, '../public/index.html');

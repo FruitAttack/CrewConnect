@@ -131,19 +131,8 @@ export async function signUpWithCompany(req, res) {
       return res.status(500).json({ message: roleError.message });
     }
 
-    const token = jwt.sign({
-      user_id: userId,
-      email,
-      company_id: company.id,
-      role: 'admin'
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
     return res.status(201).json({
       message: 'Account and company created successfully',
-      token,
       user: {
         id: userId,
         email,
