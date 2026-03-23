@@ -21,7 +21,7 @@ import dailyProductionRoutes from './routes/dailyProductionRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
-import companyRoutes from './routes/companyRoutes';
+import companyRoutes from './routes/companyRoutes.js';
 
 const app = express();
 

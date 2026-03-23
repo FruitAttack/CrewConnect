@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase.js';
-import jwt from 'jsonwebtoken';
+import { createUserClient } from '../utils/supabase.js';
 
 export async function createCompany(req, res) {
     try {
@@ -74,76 +74,86 @@ export async function deleteCompany(req, res) {
 }
 
 export async function signUpWithCompany(req, res) {
+  let userId = null;
+  let companyId = null;
+
   try {
     const { email, password, companyName } = req.body;
 
-    if(!email || !password || !companyName) {
+    if (!email || !password || !companyName) {
       return res.status(400).json({ message: 'email, password, and companyName are required' });
     }
 
-    // First create an auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
-      password
+      password,
+      email_confirm: true,
     });
 
     if (authError) {
       return res.status(400).json({ message: authError.message });
     }
 
-    const userId = authData.user.id;
+    userId = authData.user.id;
 
-    // Then create the new company
     const { data: company, error: companyError } = await supabase
+      .schema('app')
       .from('companies')
       .insert([{ name: companyName }])
       .select()
       .single();
 
-    if (companyError) {
-      return res.status(500).json({ message: companyError.message });
-    }
+    if (companyError) throw new Error('Failed to create company: ' + companyError.message);
 
-    // Next we create the user profile
+    companyId = company.id;
+
     const { error: userError } = await supabase
+      .schema('app')
       .from('users')
       .insert({
         id: userId,
         email,
-        default_company_id: company.id,
-        is_active: true
+        default_company_id: companyId,
+        is_active: true,
       });
 
-    if (userError) {
-      return res.status(500).json({ message: userError.message });
-    }
+    if (userError) throw new Error('Failed to create user profile: ' + userError.message);
 
-    // And finally, we assign the user the admin role in the new company
     const { error: roleError } = await supabase
+      .schema('app')
       .from('user_roles')
       .insert({
         user_id: userId,
-        company_id: company.id,
-        role_key: 'admin'
+        company_id: companyId,
+        role_key: 'admin',
       });
 
-    if (roleError) {
-      return res.status(500).json({ message: roleError.message });
-    }
+    if (roleError) throw new Error('Failed to assign admin role: ' + roleError.message);
 
     return res.status(201).json({
       message: 'Account and company created successfully',
-      user: {
-        id: userId,
-        email,
-        company_id: company.id,
-        role: 'admin'
-      },
-      company
+      user: { id: userId, email, company_id: companyId, role: 'admin' },
+      company,
     });
 
   } catch (err) {
     console.error('Signup with company error:', err);
-    return res.status(500).json({ message: 'Server error' });
+
+    try {
+      if (companyId && userId) {
+        await supabase.schema('app').from('user_roles').delete().eq('user_id', userId).eq('company_id', companyId);
+        await supabase.schema('app').from('users').delete().eq('id', userId);
+        await supabase.schema('app').from('companies').delete().eq('id', companyId);
+      } else if (companyId) {
+        await supabase.schema('app').from('companies').delete().eq('id', companyId);
+      }
+      if (userId) {
+        await supabase.auth.admin.deleteUser(userId);
+      }
+    } catch (rollbackErr) {
+      console.error('Rollback error - manual cleanup may be needed:', rollbackErr);
+    }
+
+    return res.status(500).json({ message: err.message || 'Server error' });
   }
 }
