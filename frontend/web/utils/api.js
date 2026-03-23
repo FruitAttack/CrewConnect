@@ -504,6 +504,20 @@ export async function deleteDailyProduction(token, id) {
 }
 
 // ============================================
+// COMPANIES
+// ============================================
+
+// Create a new company
+export async function createCompany(token, companyData) {
+  return apiCall('companies', token, 'POST', companyData);
+}
+
+// Delete current user's company (admin only)
+export async function deleteCompany(token) {
+  return apiCall('companies', token, 'DELETE');
+}
+
+// ============================================
 // DEBUG/SEEDING (UNOFFICIAL)
 // ============================================
 export async function seedForms(token) {
