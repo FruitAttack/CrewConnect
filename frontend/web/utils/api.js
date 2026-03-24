@@ -5,7 +5,7 @@
 // Allow overriding via environment variable `REACT_APP_API_URL`.
 const API_URL = process.env.NODE_ENV === 'production'
   ? "" // Use relative URLs in production (same server)
-  : (process.env.REACT_APP_API_URL || "http://localhost:3001")
+  : (process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001")
 import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:3001"
 

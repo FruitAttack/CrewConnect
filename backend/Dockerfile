@@ -22,3 +22,6 @@ CMD ["node", "src/server.js"]
 # Build and run commands:
 # docker build -t crewconnect-backend .
 # docker run --env-file .env -p 3001:3001 --name crewconnect-backend crewconnect-backend
+# Push to aws ecr:
+# aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 613426352709.dkr.ecr.us-east-2.amazonaws.com
+# docker push 613426352709.dkr.ecr.us-east-2.amazonaws.com/crewconnect/backend:latest
