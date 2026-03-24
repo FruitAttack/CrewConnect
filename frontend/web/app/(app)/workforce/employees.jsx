@@ -3,7 +3,17 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
-import { getActiveRoster, updateUser, getUserProfile, createUser, deleteUser, getAllUsers, updateUserEmployment } from '../../../utils/api';
+import {
+  getActiveRoster,
+  updateUser,
+  getUserProfile,
+  createUser,
+  deleteUser,
+  getAllUsers,
+  updateUserEmployment,
+  getAllPtoBalances,
+  adjustPtoBalance,
+} from '../../../utils/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 
 const activeColor = "#10b981";
@@ -18,9 +28,8 @@ function formatRate(emp) {
   const payType = employment.pay_type;
   const hourlyRate = employment.hourly_rate;
   const salaryAnnual = employment.salary_annual;
-  
+
   if (payType === 'salary' && salaryAnnual) {
-    // Format as $XX,XXX/yr
     const formatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -29,10 +38,19 @@ function formatRate(emp) {
     }).format(salaryAnnual);
     return `${formatted}/yr`;
   } else if (hourlyRate) {
-    // Format as $XX.XX/hr
     return `$${parseFloat(hourlyRate).toFixed(2)}/hr`;
   }
   return '—';
+}
+
+function formatPtoBalance(emp) {
+  const b = emp.pto_balance;
+  if (!b && b !== 0) return '—';
+  const available = typeof b === 'object'
+    ? (b.available_hours ?? (b.allocated_hours - b.used_hours - b.pending_hours))
+    : b;
+  if (available === null || available === undefined) return '—';
+  return `${parseFloat(available).toFixed(1)} hrs`;
 }
 
 const ROLES = [
@@ -90,17 +108,28 @@ const modalStyles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border.light },
   title: { fontSize: 18, fontWeight: '600', color: colors.text.primary },
   closeBtn: { padding: 4 },
-  body: { maxHeight: 400 },
+  body: { maxHeight: 500 },
   bodyContent: { padding: 16 },
 });
 
 // Form Field
-const FormField = ({ label, required, children }) => (
+const FormField = ({ label, required, hint, children }) => (
   <View style={{ marginBottom: 16 }}>
-    <Text style={{ fontSize: 13, fontWeight: '500', color: colors.text.secondary, marginBottom: 8 }}>
-      {label} {required && <Text style={{ color: colors.semantic.error }}>*</Text>}
-    </Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 }}>
+      <Text style={{ fontSize: 13, fontWeight: '500', color: colors.text.secondary }}>
+        {label} {required && <Text style={{ color: colors.semantic.error }}>*</Text>}
+      </Text>
+      {hint && <Text style={{ fontSize: 11, color: colors.text.tertiary }}>{hint}</Text>}
+    </View>
     {children}
+  </View>
+);
+
+// Section Divider
+const SectionDivider = ({ label }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, marginTop: 8 }}>
+    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+    <View style={{ flex: 1, height: 1, backgroundColor: colors.border.light }} />
   </View>
 );
 
@@ -126,17 +155,20 @@ export default function EmployeesPage() {
   const [modalMode, setModalMode] = useState('edit'); // 'edit' | 'add'
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [formData, setFormData] = useState({ 
-    full_name: '', 
+  const [formData, setFormData] = useState({
+    full_name: '',
     email: '',
     password: '',
-    phone: '', 
-    role_key: 'laborer', 
-    is_active: true, 
+    phone: '',
+    role_key: 'laborer',
+    is_active: true,
     can_view_rates: false,
     pay_type: 'hourly',
     hourly_rate: '',
     salary_annual: '',
+    // PTO
+    pto_manual_adjustment: '',
+    pto_adjustment_note: '',
   });
 
   const [sortField, setSortField] = useState('full_name');
@@ -152,41 +184,48 @@ export default function EmployeesPage() {
       setCompanyId(cid);
       setCurrentUser(user);
       if (cid) {
-        // Get active roster for clock status
         const rosterRes = await getActiveRoster(token, cid);
         const rosterData = rosterRes?.data?.roster || [];
         setRoster(rosterData);
-        
-        // Try to get all users (including inactive), fall back to roster if it fails
+
         let allUsers = [];
         try {
           const usersRes = await getAllUsers(token, { company_id: cid });
           allUsers = usersRes?.data?.users || usersRes?.data || [];
         } catch (err) {
           console.warn('getAllUsers failed, using roster data only:', err);
-          // Fall back to extracting users from roster (won't include inactive users)
           allUsers = rosterData.map(r => r.user).filter(Boolean);
         }
-        
-        // Create a map of clocked-in status from roster
+
+        // Fetch PTO balances for all users
+        let ptoBalanceMap = new Map();
+        try {
+          const currentYear = new Date().getFullYear();
+          const ptoRes = await getAllPtoBalances(token, cid, currentYear);
+          const ptoData = ptoRes?.data?.data || ptoRes?.data || [];
+          ptoData.forEach(b => ptoBalanceMap.set(b.user_id, b));
+        } catch (err) {
+          console.warn('PTO balance fetch failed:', err);
+        }
+
         const clockedInMap = new Map();
         rosterData.forEach(r => {
           if (r.user?.id) {
-            clockedInMap.set(r.user.id, { 
+            clockedInMap.set(r.user.id, {
               is_clocked_in: r.is_clocked_in,
-              role_key: r.user.role_key 
+              role_key: r.user.role_key,
             });
           }
         });
-        
+
         const users = allUsers.map(usr => ({
           ...usr,
           is_clocked_in: clockedInMap.get(usr.id)?.is_clocked_in || false,
           role_key: usr.role_key || clockedInMap.get(usr.id)?.role_key || null,
-          // Employment data should come from getAllUsers if backend includes it
           user_employment: usr.user_employment || [],
+          pto_balance: ptoBalanceMap.get(usr.id) ?? null,
         }));
-        
+
         setEmployees(users);
       }
     } catch (err) {
@@ -204,7 +243,7 @@ export default function EmployeesPage() {
       const rosterRes = await getActiveRoster(token, companyId);
       const rosterData = rosterRes?.data?.roster || [];
       setRoster(rosterData);
-      
+
       let allUsers = [];
       try {
         const usersRes = await getAllUsers(token, { company_id: companyId });
@@ -213,23 +252,34 @@ export default function EmployeesPage() {
         console.warn('getAllUsers failed, using roster data only');
         allUsers = rosterData.map(r => r.user).filter(Boolean);
       }
-      
+
+      let ptoBalanceMap = new Map();
+      try {
+        const currentYear = new Date().getFullYear();
+        const ptoRes = await getAllPtoBalances(token, companyId, currentYear);
+        const ptoData = ptoRes?.data?.data || ptoRes?.data || [];
+        ptoData.forEach(b => ptoBalanceMap.set(b.user_id, b));
+      } catch (err) {
+        console.warn('PTO balance fetch failed:', err);
+      }
+
       const clockedInMap = new Map();
       rosterData.forEach(r => {
         if (r.user?.id) {
-          clockedInMap.set(r.user.id, { 
+          clockedInMap.set(r.user.id, {
             is_clocked_in: r.is_clocked_in,
-            role_key: r.user.role_key 
+            role_key: r.user.role_key,
           });
         }
       });
-      
+
       const users = allUsers.map(usr => ({
         ...usr,
         is_clocked_in: clockedInMap.get(usr.id)?.is_clocked_in || false,
         role_key: usr.role_key || clockedInMap.get(usr.id)?.role_key || null,
+        pto_balance: ptoBalanceMap.get(usr.id) ?? null,
       }));
-      
+
       setEmployees(users);
     } finally {
       setRefreshing(false);
@@ -238,19 +288,15 @@ export default function EmployeesPage() {
 
   useEffect(() => { load(); }, [token]);
 
-  const statusCounts = useMemo(() => {
-    return {
-      all: employees.length,
-      active: employees.filter(e => e.is_active).length,
-      inactive: employees.filter(e => !e.is_active).length,
-    };
-  }, [employees]);
+  const statusCounts = useMemo(() => ({
+    all: employees.length,
+    active: employees.filter(e => e.is_active).length,
+    inactive: employees.filter(e => !e.is_active).length,
+  }), [employees]);
 
   const roleCounts = useMemo(() => {
     const counts = { all: employees.length };
-    ROLES.forEach(r => {
-      counts[r.key] = employees.filter(e => e.role_key === r.key).length;
-    });
+    ROLES.forEach(r => { counts[r.key] = employees.filter(e => e.role_key === r.key).length; });
     return counts;
   }, [employees]);
 
@@ -262,33 +308,25 @@ export default function EmployeesPage() {
       return matchesSearch && matchesStatus && matchesRole;
     });
 
-    // Sort
     result.sort((a, b) => {
       let aVal, bVal;
       switch (sortField) {
         case 'full_name':
-          aVal = (a.full_name || '').toLowerCase();
-          bVal = (b.full_name || '').toLowerCase();
-          break;
+          aVal = (a.full_name || '').toLowerCase(); bVal = (b.full_name || '').toLowerCase(); break;
         case 'role_key':
-          aVal = (a.role_key || '').toLowerCase();
-          bVal = (b.role_key || '').toLowerCase();
-          break;
+          aVal = (a.role_key || '').toLowerCase(); bVal = (b.role_key || '').toLowerCase(); break;
         case 'phone':
-          aVal = (a.phone || '').toLowerCase();
-          bVal = (b.phone || '').toLowerCase();
-          break;
+          aVal = (a.phone || '').toLowerCase(); bVal = (b.phone || '').toLowerCase(); break;
         case 'hourly_rate':
-          aVal = parseFloat(a.hourly_rate) || 0;
-          bVal = parseFloat(b.hourly_rate) || 0;
-          break;
+          aVal = parseFloat(a.hourly_rate) || 0; bVal = parseFloat(b.hourly_rate) || 0; break;
         case 'is_active':
-          aVal = a.is_active ? 1 : 0;
-          bVal = b.is_active ? 1 : 0;
+          aVal = a.is_active ? 1 : 0; bVal = b.is_active ? 1 : 0; break;
+        case 'pto_balance':
+          aVal = parseFloat(a.pto_balance?.available_hours ?? a.pto_balance) || 0;
+          bVal = parseFloat(b.pto_balance?.available_hours ?? b.pto_balance) || 0;
           break;
         default:
-          aVal = (a.full_name || '').toLowerCase();
-          bVal = (b.full_name || '').toLowerCase();
+          aVal = (a.full_name || '').toLowerCase(); bVal = (b.full_name || '').toLowerCase();
       }
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
@@ -308,20 +346,20 @@ export default function EmployeesPage() {
   };
 
   const openEditModal = (emp) => {
-    // role_key might be directly on user or nested in user_roles
     const roleKey = emp.role_key || emp.user_roles?.[0]?.role_key || 'laborer';
-    // Get employment info
     const employment = emp.user_employment?.[0] || emp.employment || {};
-    setFormData({ 
-      full_name: emp.full_name || '', 
+    setFormData({
+      full_name: emp.full_name || '',
       email: emp.email || '',
-      phone: emp.phone || '', 
-      role_key: roleKey, 
-      is_active: emp.is_active, 
+      phone: emp.phone || '',
+      role_key: roleKey,
+      is_active: emp.is_active,
       can_view_rates: emp.can_view_rates || false,
       pay_type: employment.pay_type || 'hourly',
       hourly_rate: employment.hourly_rate || '',
       salary_annual: employment.salary_annual || '',
+      pto_manual_adjustment: '',
+      pto_adjustment_note: '',
     });
     setSelectedEmployee(emp);
     setModalMode('edit');
@@ -329,27 +367,27 @@ export default function EmployeesPage() {
   };
 
   const openAddModal = () => {
-    setFormData({ 
-      full_name: '', 
+    setFormData({
+      full_name: '',
       email: '',
       password: '',
-      phone: '', 
-      role_key: 'laborer', 
-      is_active: true, 
+      phone: '',
+      role_key: 'laborer',
+      is_active: true,
       can_view_rates: false,
       pay_type: 'hourly',
       hourly_rate: '',
       salary_annual: '',
+      pto_manual_adjustment: '',
+      pto_adjustment_note: '',
     });
     setSelectedEmployee(null);
     setModalMode('add');
     setModalVisible(true);
   };
 
-  useEffect( () => {
-    if(addNew == 'true') {
-      openAddModal();
-    }
+  useEffect(() => {
+    if (addNew == 'true') { openAddModal(); }
   }, [addNew]);
 
   const closeModal = () => { setModalVisible(false); setSelectedEmployee(null); setError(null); };
@@ -358,8 +396,9 @@ export default function EmployeesPage() {
     setSaving(true);
     setError(null);
     try {
+      let targetUserId;
+
       if (modalMode === 'add') {
-        // Create new employee
         if (!formData.full_name || !formData.email || !formData.password) {
           setError('Name, email, and password are required');
           setSaving(false);
@@ -376,19 +415,8 @@ export default function EmployeesPage() {
         };
         const res = await createUser(token, createData);
         if (!res.success) { setError(res.message || 'Failed to create employee'); setSaving(false); return; }
-        
-        // Save employment/rate info for new user
-        const newUserId = res.data?.user?.id;
-        if (newUserId && (formData.hourly_rate || formData.salary_annual)) {
-          await updateUserEmployment(token, newUserId, {
-            company_id: companyId,
-            pay_type: formData.pay_type,
-            hourly_rate: formData.pay_type === 'hourly' ? parseFloat(formData.hourly_rate) || null : null,
-            salary_annual: formData.pay_type === 'salary' ? parseFloat(formData.salary_annual) || null : null,
-          });
-        }
+        targetUserId = res.data?.user?.id;
       } else {
-        // Update existing employee
         const updateData = {
           full_name: formData.full_name,
           phone: formData.phone,
@@ -397,17 +425,39 @@ export default function EmployeesPage() {
         };
         const res = await updateUser(token, selectedEmployee.id, updateData);
         if (!res.success) { setError(res.message || 'Failed to update'); setSaving(false); return; }
-        
-        // Save employment/rate info
-        if (formData.hourly_rate || formData.salary_annual) {
-          await updateUserEmployment(token, selectedEmployee.id, {
-            company_id: companyId,
-            pay_type: formData.pay_type,
-            hourly_rate: formData.pay_type === 'hourly' ? parseFloat(formData.hourly_rate) || null : null,
-            salary_annual: formData.pay_type === 'salary' ? parseFloat(formData.salary_annual) || null : null,
+        targetUserId = selectedEmployee.id;
+      }
+
+      // Save employment/rate info
+      if (targetUserId && (formData.hourly_rate || formData.salary_annual)) {
+        await updateUserEmployment(token, targetUserId, {
+          company_id: companyId,
+          pay_type: formData.pay_type,
+          hourly_rate: formData.pay_type === 'hourly' ? parseFloat(formData.hourly_rate) || null : null,
+          salary_annual: formData.pay_type === 'salary' ? parseFloat(formData.salary_annual) || null : null,
+        });
+      }
+
+      // Apply manual PTO adjustment if provided (edit mode only)
+      if (
+        modalMode === 'edit' &&
+        targetUserId &&
+        formData.pto_manual_adjustment !== '' &&
+        parseFloat(formData.pto_manual_adjustment) !== 0
+      ) {
+        try {
+          await adjustPtoBalance(token, {
+            user_id: targetUserId,
+            year: new Date().getFullYear(),
+            adjustment_hours: parseFloat(formData.pto_manual_adjustment),
+            note: formData.pto_adjustment_note || 'Manual admin adjustment',
           });
+        } catch (ptoErr) {
+          console.warn('PTO adjustment failed:', ptoErr);
+          // Non-fatal — don't block the save
         }
       }
+
       closeModal();
       refresh();
     } catch (err) { setError('An error occurred'); }
@@ -415,17 +465,15 @@ export default function EmployeesPage() {
   };
 
   const handleArchive = async (emp) => {
-    try { 
-      await updateUser(token, emp.id, { is_active: !emp.is_active }); 
-      refresh(); 
-    }
-    catch (err) { setError('Failed to update status'); }
+    try {
+      await updateUser(token, emp.id, { is_active: !emp.is_active });
+      refresh();
+    } catch (err) { setError('Failed to update status'); }
   };
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
     try {
-      // Use hard delete since we only allow deleting archived employees
       const res = await deleteUser(token, confirmDelete.id, true);
       if (!res.success) {
         setError(res.message || 'Failed to delete employee');
@@ -440,10 +488,15 @@ export default function EmployeesPage() {
     }
   };
 
-  // Check if current user can view rates
   const canViewRates = currentUser?.can_view_rates || currentUser?.role_key === 'admin';
+  const canManagePto = currentUser?.role_key === 'admin' || currentUser?.role_key === 'supervisor';
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary.orange} /><Text style={styles.loadingText}>Loading employees...</Text></View>;
+  if (loading) return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary.orange} />
+      <Text style={styles.loadingText}>Loading employees...</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -452,18 +505,18 @@ export default function EmployeesPage() {
         <View style={styles.toolbarLeft}>
           <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
             <Ionicons name="search" size={16} color={searchFocused ? colors.primary.orange : colors.text.tertiary} />
-            <TextInput 
-              style={styles.searchInput} 
-              placeholder="Search employees..." 
-              placeholderTextColor={colors.text.tertiary} 
-              value={search} 
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search employees..."
+              placeholderTextColor={colors.text.tertiary}
+              value={search}
               onChangeText={setSearch}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
             />
             {search.length > 0 && <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={16} color={colors.text.tertiary} /></Pressable>}
           </View>
-          
+
           {/* Status Toggle */}
           <View style={styles.viewToggle}>
             {['all', 'active', 'inactive'].map(s => (
@@ -488,7 +541,7 @@ export default function EmployeesPage() {
             ))}
           </View>
         </View>
-        
+
         <View style={styles.toolbarRight}>
           <Pressable style={styles.addBtn} onPress={openAddModal}>
             <Ionicons name="add" size={18} color="#fff" />
@@ -533,6 +586,11 @@ export default function EmployeesPage() {
               {sortField === 'hourly_rate' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
             </Pressable>
           )}
+          {/* PTO Balance Column */}
+          <Pressable style={{ width: 100, flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => handleSort('pto_balance')}>
+            <Text style={styles.columnLabel}>PTO Bal.</Text>
+            {sortField === 'pto_balance' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
+          </Pressable>
           <Pressable style={{ flex: 1, minWidth: 80, flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => handleSort('is_active')}>
             <Text style={styles.columnLabel}>Status</Text>
             {sortField === 'is_active' && <Ionicons name={sortDirection === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} color={colors.text.tertiary} />}
@@ -540,7 +598,11 @@ export default function EmployeesPage() {
           <View style={{ width: 120 }}><Text style={styles.columnLabel}>Actions</Text></View>
         </View>
 
-        <ScrollView style={styles.tableBody} contentContainerStyle={styles.tableBodyContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary.orange} />}>
+        <ScrollView
+          style={styles.tableBody}
+          contentContainerStyle={styles.tableBodyContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary.orange} />}
+        >
           {filtered.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}><Ionicons name="people-outline" size={32} color={colors.text.tertiary} /></View>
@@ -550,6 +612,7 @@ export default function EmployeesPage() {
           ) : (
             filtered.map(emp => (
               <Pressable key={emp.id} style={({ hovered }) => [styles.row, hovered && styles.rowHovered]}>
+                {/* Employee */}
                 <View style={{ flex: 2, minWidth: 200, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>{getInitials(emp.full_name)}</Text>
@@ -560,22 +623,31 @@ export default function EmployeesPage() {
                     <Text style={styles.employeeEmail} numberOfLines={1}>{emp.email}</Text>
                   </View>
                 </View>
+                {/* Role */}
                 <View style={{ flex: 1, minWidth: 100 }}>
                   <Text style={styles.roleText}>{emp.role_key || '—'}</Text>
                 </View>
+                {/* Contact */}
                 <View style={{ flex: 1, minWidth: 120 }}>
                   <Text style={styles.contactText}>{emp.phone || '—'}</Text>
                 </View>
+                {/* Rate */}
                 {canViewRates && (
                   <View style={{ width: 110 }}>
                     <Text style={styles.rateText}>{formatRate(emp)}</Text>
                   </View>
                 )}
+                {/* PTO Balance */}
+                <View style={{ width: 100 }}>
+                  <Text style={styles.ptoBalanceText}>{formatPtoBalance(emp)}</Text>
+                </View>
+                {/* Status */}
                 <View style={{ flex: 1, minWidth: 80 }}>
                   <Text style={[styles.statusText, emp.is_active ? styles.statusActive : styles.statusInactive]}>
                     {emp.is_active ? 'Active' : 'Archived'}
                   </Text>
                 </View>
+                {/* Actions */}
                 <View style={{ width: 120, flexDirection: 'row', gap: 4 }}>
                   <Pressable style={({ hovered }) => [styles.actionBtn, hovered && styles.actionBtnHovered]} onPress={() => openEditModal(emp)}>
                     <Ionicons name="pencil" size={14} color={colors.text.secondary} />
@@ -603,6 +675,9 @@ export default function EmployeesPage() {
             <Text style={styles.modalErrorText}>{error}</Text>
           </View>
         )}
+
+        {/* ── Basic Info ── */}
+        <SectionDivider label="Basic Info" />
         <FormField label="Full Name" required>
           <TextInput style={styles.input} value={formData.full_name} onChangeText={v => setFormData({...formData, full_name: v})} placeholder="John Smith" placeholderTextColor={colors.text.tertiary} />
         </FormField>
@@ -628,60 +703,78 @@ export default function EmployeesPage() {
             ))}
           </View>
         </FormField>
-        {canViewRates && (
-          <FormField label="Pay Type">
-            <View style={styles.payTypeToggle}>
-              <Pressable 
-                style={[styles.payTypeOption, formData.pay_type === 'hourly' && styles.payTypeOptionActive]} 
-                onPress={() => setFormData({...formData, pay_type: 'hourly'})}
-              >
-                <Text style={[styles.payTypeText, formData.pay_type === 'hourly' && styles.payTypeTextActive]}>Hourly</Text>
-              </Pressable>
-              <Pressable 
-                style={[styles.payTypeOption, formData.pay_type === 'salary' && styles.payTypeOptionActive]} 
-                onPress={() => setFormData({...formData, pay_type: 'salary'})}
-              >
-                <Text style={[styles.payTypeText, formData.pay_type === 'salary' && styles.payTypeTextActive]}>Salary</Text>
-              </Pressable>
-            </View>
-          </FormField>
-        )}
-        {canViewRates && formData.pay_type === 'hourly' && (
-          <FormField label="Hourly Rate">
-            <View style={styles.rateInputContainer}>
-              <Text style={styles.ratePrefix}>$</Text>
-              <TextInput 
-                style={[styles.input, styles.rateInput]} 
-                value={formData.hourly_rate?.toString() || ''} 
-                onChangeText={v => setFormData({...formData, hourly_rate: v})} 
-                placeholder="0.00" 
-                placeholderTextColor={colors.text.tertiary}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.rateSuffix}>/hr</Text>
-            </View>
-          </FormField>
-        )}
-        {canViewRates && formData.pay_type === 'salary' && (
-          <FormField label="Annual Salary">
-            <View style={styles.rateInputContainer}>
-              <Text style={styles.ratePrefix}>$</Text>
-              <TextInput 
-                style={[styles.input, styles.rateInput]} 
-                value={formData.salary_annual?.toString() || ''} 
-                onChangeText={v => setFormData({...formData, salary_annual: v})} 
-                placeholder="50,000" 
-                placeholderTextColor={colors.text.tertiary}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.rateSuffix}>/yr</Text>
-            </View>
-          </FormField>
-        )}
         <Pressable style={styles.checkboxRow} onPress={() => setFormData({...formData, can_view_rates: !formData.can_view_rates})}>
           <Ionicons name={formData.can_view_rates ? 'checkbox' : 'square-outline'} size={20} color={formData.can_view_rates ? colors.primary.orange : colors.text.tertiary} />
           <Text style={styles.checkboxLabel}>Can view pay rates</Text>
         </Pressable>
+
+        {/* ── Compensation ── */}
+        {canViewRates && (
+          <>
+            <SectionDivider label="Compensation" />
+            <FormField label="Pay Type">
+              <View style={styles.payTypeToggle}>
+                <Pressable style={[styles.payTypeOption, formData.pay_type === 'hourly' && styles.payTypeOptionActive]} onPress={() => setFormData({...formData, pay_type: 'hourly'})}>
+                  <Text style={[styles.payTypeText, formData.pay_type === 'hourly' && styles.payTypeTextActive]}>Hourly</Text>
+                </Pressable>
+                <Pressable style={[styles.payTypeOption, formData.pay_type === 'salary' && styles.payTypeOptionActive]} onPress={() => setFormData({...formData, pay_type: 'salary'})}>
+                  <Text style={[styles.payTypeText, formData.pay_type === 'salary' && styles.payTypeTextActive]}>Salary</Text>
+                </Pressable>
+              </View>
+            </FormField>
+            {formData.pay_type === 'hourly' && (
+              <FormField label="Hourly Rate">
+                <View style={styles.rateInputContainer}>
+                  <Text style={styles.ratePrefix}>$</Text>
+                  <TextInput style={[styles.input, styles.rateInput]} value={formData.hourly_rate?.toString() || ''} onChangeText={v => setFormData({...formData, hourly_rate: v})} placeholder="0.00" placeholderTextColor={colors.text.tertiary} keyboardType="decimal-pad" />
+                  <Text style={styles.rateSuffix}>/hr</Text>
+                </View>
+              </FormField>
+            )}
+            {formData.pay_type === 'salary' && (
+              <FormField label="Annual Salary">
+                <View style={styles.rateInputContainer}>
+                  <Text style={styles.ratePrefix}>$</Text>
+                  <TextInput style={[styles.input, styles.rateInput]} value={formData.salary_annual?.toString() || ''} onChangeText={v => setFormData({...formData, salary_annual: v})} placeholder="50,000" placeholderTextColor={colors.text.tertiary} keyboardType="decimal-pad" />
+                  <Text style={styles.rateSuffix}>/yr</Text>
+                </View>
+              </FormField>
+            )}
+          </>
+        )}
+
+        {/* ── PTO & Time Off ── */}
+        {canManagePto && modalMode === 'edit' && (
+          <>
+            <SectionDivider label="PTO & Time Off" />
+            <FormField label="Manual PTO Adjustment" hint="(+ to add, − to deduct)">
+              <View style={styles.rateInputContainer}>
+                <TextInput
+                  style={[styles.input, styles.rateInput]}
+                  value={formData.pto_manual_adjustment?.toString() || ''}
+                  onChangeText={v => setFormData({...formData, pto_manual_adjustment: v})}
+                  placeholder="e.g. 8 or -4"
+                  placeholderTextColor={colors.text.tertiary}
+                  keyboardType="numbers-and-punctuation"
+                />
+                <Text style={styles.rateSuffix}>hrs</Text>
+              </View>
+            </FormField>
+            {formData.pto_manual_adjustment !== '' && (
+              <FormField label="Adjustment Note">
+                <TextInput
+                  style={[styles.input, { minHeight: 60 }]}
+                  value={formData.pto_adjustment_note}
+                  onChangeText={v => setFormData({...formData, pto_adjustment_note: v})}
+                  placeholder="Reason for adjustment..."
+                  placeholderTextColor={colors.text.tertiary}
+                  multiline
+                />
+              </FormField>
+            )}
+          </>
+        )}
+
         <View style={styles.modalFooter}>
           <Pressable style={styles.cancelBtn} onPress={closeModal}><Text style={styles.cancelBtnText}>Cancel</Text></Pressable>
           <Pressable style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
@@ -717,21 +810,17 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 13, color: colors.text.tertiary },
 
-  // Toolbar - matches timecards
   toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: 16, backgroundColor: colors.neutral.white, borderBottomWidth: 1, borderBottomColor: colors.border.light },
   toolbarLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
   toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  
-  // Add button
+
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary.orange, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
   addBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  
-  // Search - matches timecards
+
   searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.neutral.offWhite, borderRadius: 6, paddingHorizontal: 10, height: 34, minWidth: 200, maxWidth: 280, borderWidth: 1, borderColor: 'transparent' },
   searchContainerFocused: { borderColor: colors.primary.orange, backgroundColor: colors.neutral.white },
   searchInput: { flex: 1, fontSize: 13, color: colors.text.primary, outlineStyle: 'none' },
 
-  // Toggle buttons - matches timecards
   viewToggle: { flexDirection: 'row', backgroundColor: colors.neutral.offWhite, borderRadius: 6, padding: 2 },
   viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
   viewBtnActive: { backgroundColor: colors.neutral.white, ...shadows.sm },
@@ -740,11 +829,9 @@ const styles = StyleSheet.create({
   viewBtnCount: { fontSize: 11, fontWeight: '600', color: colors.text.tertiary, minWidth: 16, textAlign: 'center' },
   viewBtnCountActive: { color: colors.primary.orange },
 
-  // Error - matches timecards
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.semantic.errorLight, padding: 12, borderRadius: 8, marginHorizontal: 16, marginTop: 12 },
   errorText: { flex: 1, color: colors.semantic.error, fontSize: 13 },
 
-  // Table - matches timecards
   tableContainer: { flex: 1, marginHorizontal: 16, marginTop: 12, marginBottom: 16, backgroundColor: colors.neutral.white, borderRadius: 8, borderWidth: 1, borderColor: colors.border.light, overflow: 'hidden' },
   tableHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border.light },
   tableTitle: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
@@ -767,24 +854,22 @@ const styles = StyleSheet.create({
   roleText: { fontSize: 12, color: colors.text.secondary, textTransform: 'capitalize' },
   contactText: { fontSize: 12, color: colors.text.secondary },
   rateText: { fontSize: 12, fontWeight: '500', color: colors.text.primary },
-  
-  // Status text without bubble
+  ptoBalanceText: { fontSize: 12, fontWeight: '500', color: colors.text.primary },
+
   statusText: { fontSize: 12, fontWeight: '500' },
   statusActive: { color: activeColor },
   statusInactive: { color: colors.text.tertiary },
 
   actionBtn: { padding: 6, borderRadius: 4 },
   actionBtnHovered: { backgroundColor: colors.neutral.offWhite },
-  deleteBtn: { },
+  deleteBtn: {},
   deleteBtnHovered: { backgroundColor: colors.semantic.error + '15' },
 
-  // Empty state
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.neutral.offWhite, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   emptyTitle: { fontSize: 15, fontWeight: '600', color: colors.text.primary, marginBottom: 4 },
   emptySubtitle: { fontSize: 13, color: colors.text.tertiary },
 
-  // Modal form
   modalError: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.semantic.error + '15', padding: 12, borderRadius: 8, marginBottom: 16 },
   modalErrorText: { fontSize: 13, color: colors.semantic.error, flex: 1 },
   input: { borderWidth: 1, borderColor: colors.border.light, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.text.primary, backgroundColor: colors.neutral.white },
@@ -793,20 +878,18 @@ const styles = StyleSheet.create({
   roleOptionActive: { backgroundColor: colors.primary.orange },
   roleOptionText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary },
   roleOptionTextActive: { color: '#fff' },
-  
-  // Rate input
+
   rateInputContainer: { flexDirection: 'row', alignItems: 'center' },
   ratePrefix: { fontSize: 14, color: colors.text.secondary, marginRight: 4, fontWeight: '500' },
   rateInput: { flex: 1 },
   rateSuffix: { fontSize: 13, color: colors.text.tertiary, marginLeft: 8 },
-  
-  // Pay type toggle
+
   payTypeToggle: { flexDirection: 'row', gap: 8 },
   payTypeOption: { flex: 1, paddingVertical: 10, borderRadius: 6, backgroundColor: colors.neutral.offWhite, alignItems: 'center' },
   payTypeOptionActive: { backgroundColor: colors.primary.orange },
   payTypeText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary },
   payTypeTextActive: { color: '#fff' },
-  
+
   checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   checkboxLabel: { fontSize: 14, color: colors.text.primary },
   modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.light, marginTop: 8 },
@@ -814,8 +897,7 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: 14, fontWeight: '500', color: colors.text.primary },
   saveBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, backgroundColor: colors.primary.orange },
   saveBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  
-  // Delete confirmation
+
   confirmContent: { alignItems: 'center', paddingVertical: 16 },
   confirmIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.semantic.error + '15', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   confirmTitle: { fontSize: 18, fontWeight: '600', color: colors.text.primary, marginBottom: 8 },

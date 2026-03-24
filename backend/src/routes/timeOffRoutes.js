@@ -6,7 +6,11 @@ import {
   createTimeOffRequest,
   cancelTimeOffRequest,
   getTimeOffBalances,
-  
+
+  // Balance management (admin/supervisor)
+  getAllPtoBalances,
+  adjustPtoBalance,
+
   // Manager endpoints (web only)
   getPendingRequests,
   getAllRequests,
@@ -25,8 +29,14 @@ router.use(authMiddleware);
 // SPECIFIC ROUTES MUST COME BEFORE /:id
 // ==========================================
 
-// Get current user's PTO balances
+// Get current user's PTO balance
 router.get('/balances', getTimeOffBalances);
+
+// Get all PTO balances for a company (admin/supervisor)
+router.get('/balances/all', getAllPtoBalances);
+
+// Manual PTO balance adjustment (admin/supervisor)
+router.post('/balances/adjust', adjustPtoBalance);
 
 // Get all pending requests for approval (managers)
 router.get('/pending', getPendingRequests);
