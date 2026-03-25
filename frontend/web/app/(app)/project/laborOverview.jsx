@@ -196,7 +196,7 @@ export default function LaborOverview() {
     load();
   }, [token, projectId, companyId]);
 
-  const HOURS_PER_YEAR = 52 * 40; // 2080
+  const HOURS_PER_YEAR = 52 * 40;
 
 function toNumber(v) {
   if (v === null || v === undefined || v === "") return 0;
@@ -208,7 +208,7 @@ function getEffectiveHourlyRate(entry, employment) {
   const hourly = toNumber(entry.hourly_rate ?? employment?.hourly_rate);
   if (hourly > 0) return hourly;
 
-  // convert salary to 'hourly' basically
+  // Convert salary to 'hourly' basically
   const salaryAnnual = toNumber(
     entry.salary_annual ??
     employment?.salary_annual ??
@@ -291,33 +291,33 @@ const computed = useMemo(() => {
         </Text>
       </View>
 
-      {/* Project Labor Summary */}
-      <View style={styles.summary}>
-        <Text style={styles.summaryTitle}>Project Totals</Text>
-
-        <Text style={styles.summaryLabel}>Labor Hours</Text>
-        <WideBar
-          actual={totals.actualHours}
-          budget={totals.budgetHours}
-          color={colors.semantic.info}
-        />
-        <Text style={styles.summaryValue}>
-          {totals.actualHours.toFixed(1)}h / {totals.budgetHours.toFixed(1)}h
-        </Text>
-
-        <Text style={styles.summaryLabel}>Labor Cost</Text>
-        <WideBar
-          actual={totals.actualCost}
-          budget={totals.budgetCost}
-          color={colors.semantic.success}
-        />
-        <Text style={styles.summaryValue}>
-          {currency(totals.actualCost)} / {currency(totals.budgetCost)}
-        </Text>
-      </View>
-
       {/* Scrollable content with all of the jobs */}
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Project Labor Summary */}
+        <View style={styles.summary}>
+          <Text style={styles.summaryTitle}>Project Totals</Text>
+
+          <Text style={styles.summaryLabel}>Labor Hours</Text>
+          <WideBar
+            actual={totals.actualHours}
+            budget={totals.budgetHours}
+            color={colors.semantic.info}
+          />
+          <Text style={styles.summaryValue}>
+            {totals.actualHours.toFixed(1)}h / {totals.budgetHours.toFixed(1)}h
+          </Text>
+
+          <Text style={styles.summaryLabel}>Labor Cost</Text>
+          <WideBar
+            actual={totals.actualCost}
+            budget={totals.budgetCost}
+            color={colors.semantic.success}
+          />
+          <Text style={styles.summaryValue}>
+            {currency(totals.actualCost)} / {currency(totals.budgetCost)}
+          </Text>
+        </View>
+
         {/* Active jobs */}
         {active.length > 0 && (
           <>

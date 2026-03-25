@@ -506,6 +506,30 @@ export async function deleteDailyProduction(token, id) {
 }
 
 // ============================================
+// COMPANIES
+// ============================================
+
+// Create a new company
+export async function createCompany(token, companyData) {
+  return apiCall('companies', token, 'POST', companyData);
+}
+
+// Delete current user's company (admin only)
+export async function deleteCompany(token) {
+  return apiCall('companies', token, 'DELETE');
+}
+
+// Creates new user, new company, and assign user to that company with an admin role
+export async function signUpWithCompany(email, password, companyName, fullName) {
+  return apiCall('companies/signup-with-company', null, 'POST', {
+    email,
+    password,
+    companyName,
+    fullName,
+  });
+}
+
+// ============================================
 // DEBUG/SEEDING (UNOFFICIAL)
 // ============================================
 export async function seedForms(token) {
