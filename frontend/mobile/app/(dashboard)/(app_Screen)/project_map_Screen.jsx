@@ -10,6 +10,9 @@ import {
   Linking,
   Platform,
   Dimensions,
+  TextInput,
+  ScrollView,
+  Keyboard,
 } from "react-native";
 const WebView = Platform.OS !== 'web' ? require("react-native-webview").WebView : null;
 import * as Location from "expo-location";
@@ -35,6 +38,15 @@ export default function ProjectMapScreen() {
 
   const [selectedProject, setSelectedProject] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Filter projects by search query
+  const filteredProjects = projects.filter(p =>
+    p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.address?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const showDropdown = searchQuery.length > 0 && filteredProjects.length > 0;
 
   // Fetch location + projects on mount
   useEffect(() => {
@@ -100,6 +112,16 @@ export default function ProjectMapScreen() {
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
+
+  // Fly map to a specific location
+  const flyTo = (lat, lng) => {
+    const msg = JSON.stringify({ type: 'FLY_TO', lat, lng, zoom: 15 });
+    if (Platform.OS === 'web') {
+      iframeRef.current?.contentWindow?.postMessage(msg, '*');
+    } else {
+      webViewRef.current?.postMessage(msg);
+    }
+  };
 
   const getMapHTML = () => {
     const userLat = location?.latitude ?? 40.7608;
@@ -229,6 +251,8 @@ export default function ProjectMapScreen() {
           if (msg.projects) {
             placeProjectMarkers(msg.projects);
           }
+        } else if (msg.type === 'FLY_TO') {
+          map.flyTo([msg.lng, msg.lat], msg.zoom || 15);
         }
       } catch (err) {}
     }
@@ -285,6 +309,58 @@ export default function ProjectMapScreen() {
           </View>
           <Text style={styles.badgeLabel}>projects</Text>
         </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputRow}>
+          <Ionicons name="search-outline" size={16} color="#999" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search projects..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => { setSearchQuery(''); Keyboard.dismiss(); }}>
+              <Ionicons name="close-circle" size={18} color="#bbb" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Search Results Dropdown */}
+        {showDropdown && (
+          <View style={styles.searchDropdown}>
+            <ScrollView style={{ maxHeight: 200 }} keyboardShouldPersistTaps="handled">
+              {filteredProjects.map((project, i) => (
+                <Pressable
+                  key={project.id || i}
+                  style={styles.searchResult}
+                  onPress={() => {
+                    flyTo(project.lat, project.lng);
+                    setSelectedProject(project);
+                    setDetailModalVisible(true);
+                    setSearchQuery('');
+                    Keyboard.dismiss();
+                  }}
+                >
+                  <Ionicons name="business-outline" size={16} color="#F67011" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.searchResultName} numberOfLines={1}>{project.name}</Text>
+                    {project.address && (
+                      <Text style={styles.searchResultAddress} numberOfLines={1}>{project.address}</Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color="#ccc" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Map */}
@@ -516,6 +592,60 @@ const styles = StyleSheet.create({
   badgeLabel: {
     fontSize: 13,
     color: "#888",
+  },
+
+  // Search
+  searchContainer: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e8e8e8",
+    zIndex: 100,
+  },
+  searchInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#333",
+    padding: 0,
+  },
+  searchDropdown: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginTop: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: "hidden",
+  },
+  searchResult: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1a1a1a",
+  },
+  searchResultAddress: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 1,
   },
 
   // Map
