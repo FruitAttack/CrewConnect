@@ -1,11 +1,10 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
 // windows command: ipconfig (look for IPv4 Address)
-// In production we use relative URLs. In development default to localhost:3001
-// Allow overriding via environment variable `REACT_APP_API_URL`.
-const API_URL = process.env.NODE_ENV === 'production'
-  ? "" // Use relative URLs in production (same server)
-  : (process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001")
+// In production EXPO_PUBLIC_API_BASE_URL must be set. In development default to localhost:3001
+const API_URL = process.env.EXPO_PUBLIC_ENV === 'production'
+  ? process.env.EXPO_PUBLIC_API_BASE_URL // REQUIRED in production
+  : "http://localhost:3001" // Development default
 import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:3001"
 
