@@ -92,6 +92,8 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
     setSaving(false);
   };
 
+  const selectedCustomer = customers.find((c) => c.id === form.customer_id) || null;
+
   return (
     <>
       <Modal
@@ -138,18 +140,64 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
               <View style={styles.field}>
                 <Label icon="business-outline" text="Customer" />
 
-                {/* Dropdown trigger */}
-                <Pressable
-                  onPress={() => setCustomerOpen((v) => !v)}
-                  style={[
-                    styles.dropdownTrigger,
-                    customerOpen && styles.dropdownTriggerOpen,
-                  ]}
-                >
-                  <Text style={styles.dropdownText}>
-                    {customers.find((c) => c.id === form.customer_id)?.name ||
-                      "No customer"}
-                  </Text>
+                  <Pressable
+                    onPress={() => setCustomerOpen((v) => !v)}
+                    style={[
+                      styles.dropdownTrigger,
+                      customerOpen && styles.dropdownTriggerOpen,
+                      customerOpen && styles.dropdownTriggerExpanded,
+                    ]}
+                  >
+                  {!customerOpen ? (
+                    <Text style={styles.dropdownText}>
+                      {selectedCustomer?.name || "No customer"}
+                    </Text>
+                  ) : (
+                    <View style={styles.dropdownTriggerContent}>
+                      <View style={styles.dropdownTriggerTopRow}>
+                        <Text style={styles.dropdownSelectedName}>
+                          {selectedCustomer?.name || "No customer"}
+                        </Text>
+
+                        {selectedCustomer ? (
+                          <View style={styles.selectedBadge}>
+                            <Text style={styles.selectedBadgeText}>Selected</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {selectedCustomer ? (
+                        <>
+                          <View style={styles.customerMetaRow}>
+                            <Ionicons
+                              name="person-outline"
+                              size={14}
+                              color={colors.text.tertiary}
+                            />
+                            <Text style={styles.customerMetaText}>
+                              {selectedCustomer.contact_name || "No contact name"}
+                            </Text>
+                          </View>
+
+                          <View style={styles.customerMetaRow}>
+                            <Ionicons
+                              name="mail-outline"
+                              size={14}
+                              color={colors.text.tertiary}
+                            />
+                            <Text style={styles.customerMetaText}>
+                              {selectedCustomer.contact_email || "No contact email"}
+                            </Text>
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={styles.dropdownPlaceholderText}>
+                          Select an existing customer or manage customers
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
                   <Ionicons
                     name={customerOpen ? "chevron-up" : "chevron-down"}
                     size={18}
@@ -157,59 +205,110 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                   />
                 </Pressable>
 
-                {/* Dropdown menu */}
                 {customerOpen && (
                   <View style={styles.dropdownMenu}>
                     {loadingCustomers ? (
                       <ActivityIndicator style={{ padding: spacing.md }} />
                     ) : (
-                      <ScrollView style={{ maxHeight: 260 }}>
-                        {/* No customer option */}
+                      <ScrollView
+                        style={styles.dropdownScroll}
+                        contentContainerStyle={styles.dropdownScrollContent}
+                      >
                         <Pressable
                           onPress={() => {
                             setForm((f) => ({ ...f, customer_id: null }));
                             setCustomerOpen(false);
                           }}
-                          style={styles.dropdownItem}
+                          style={[
+                            styles.customerOptionCard,
+                            !form.customer_id && styles.customerOptionCardActive,
+                          ]}
                         >
-                          <Text style={styles.dropdownItemText}>No customer</Text>
+                          <View style={styles.customerOptionHeader}>
+                            <Text style={styles.customerOptionName}>No customer</Text>
+                            {!form.customer_id ? (
+                              <View style={styles.checkBadge}>
+                                <Ionicons
+                                  name="checkmark"
+                                  size={14}
+                                  color={colors.primary.orange}
+                                />
+                              </View>
+                            ) : null}
+                          </View>
+
+                          <Text style={styles.customerOptionEmptyText}>
+                            Leave this project unassigned to a customer
+                          </Text>
                         </Pressable>
 
-                        {customers.map((c) => (
-                          <Pressable
-                            key={c.id}
-                            onPress={() => {
-                              setForm((f) => ({ ...f, customer_id: c.id }));
-                              setCustomerOpen(false);
-                            }}
-                            style={[
-                              styles.dropdownItem,
-                              form.customer_id === c.id &&
-                                styles.dropdownItemActive,
-                            ]}
-                          >
-                            <Text style={styles.dropdownItemText}>{c.name}</Text>
-                          </Pressable>
-                        ))}
+                        {customers.map((c) => {
+                          const isSelected = form.customer_id === c.id;
 
-                        {/* Manage customers option */}
+                          return (
+                            <Pressable
+                              key={c.id}
+                              onPress={() => {
+                                setForm((f) => ({ ...f, customer_id: c.id }));
+                                setCustomerOpen(false);
+                              }}
+                              style={[
+                                styles.customerOptionCard,
+                                isSelected && styles.customerOptionCardActive,
+                              ]}
+                            >
+                              <View style={styles.customerOptionHeader}>
+                                <Text style={styles.customerOptionName}>{c.name}</Text>
+
+                                {isSelected ? (
+                                  <View style={styles.checkBadge}>
+                                    <Ionicons
+                                      name="checkmark"
+                                      size={14}
+                                      color={colors.primary.orange}
+                                    />
+                                  </View>
+                                ) : null}
+                              </View>
+
+                              <View style={styles.customerMetaRow}>
+                                <Ionicons
+                                  name="person-outline"
+                                  size={14}
+                                  color={colors.text.tertiary}
+                                />
+                                <Text style={styles.customerMetaText}>
+                                  {c.contact_name || "No contact name"}
+                                </Text>
+                              </View>
+
+                              <View style={styles.customerMetaRow}>
+                                <Ionicons
+                                  name="mail-outline"
+                                  size={14}
+                                  color={colors.text.tertiary}
+                                />
+                                <Text style={styles.customerMetaText}>
+                                  {c.contact_email || "No contact email"}
+                                </Text>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+
                         <Pressable
                           onPress={() => {
                             setCustomerOpen(false);
                             setCustomerModalVisible(true);
                           }}
-                          style={[styles.dropdownItem, styles.dropdownAddItem]}
+                          style={styles.manageCustomersButton}
                         >
-                          <View style={styles.dropdownAddRow}>
-                            <Ionicons
-                              name="people-outline"
-                              size={16}
-                              color={colors.primary.orange}
-                            />
-                            <Text style={styles.dropdownAddText}>
-                              Manage customers
-                            </Text>
-                          </View>
+                          <Ionicons
+                            name="people-outline"
+                            size={16}
+                            color={colors.primary.orange}
+                          />
+                          <Text style={styles.manageCustomersText}>Manage customers</Text>
                         </Pressable>
                       </ScrollView>
                     )}
@@ -467,4 +566,160 @@ const styles = StyleSheet.create({
     color: colors.primary.orange,
     fontWeight: typography.fontWeight.semibold,
   },
+
+dropdownTrigger: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+  padding: spacing.md,
+  borderWidth: 1,
+  borderColor: colors.border.dark,
+  borderRadius: borderRadius.lg,
+  backgroundColor: colors.neutral.white,
+},
+
+dropdownTriggerOpen: {
+  borderColor: colors.primary.orange,
+  ...shadows.sm,
+},
+
+dropdownTriggerExpanded: {
+  alignItems: "flex-start",
+},
+
+dropdownText: {
+  fontSize: typography.fontSize.md,
+  color: colors.text.primary,
+},
+
+dropdownTriggerContent: {
+  flex: 1,
+  gap: spacing.xs,
+},
+
+dropdownTriggerTopRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+},
+
+dropdownSelectedName: {
+  flex: 1,
+  fontSize: typography.fontSize.md,
+  fontWeight: typography.fontWeight.semibold,
+  color: colors.text.primary,
+},
+
+dropdownPlaceholderText: {
+  fontSize: typography.fontSize.sm,
+  color: colors.text.tertiary,
+},
+
+selectedBadge: {
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 4,
+  borderRadius: borderRadius.full,
+  backgroundColor: colors.primary.orangeSubtle,
+},
+
+selectedBadgeText: {
+  fontSize: typography.fontSize.xs,
+  fontWeight: typography.fontWeight.semibold,
+  color: colors.primary.orange,
+},
+
+dropdownMenu: {
+  marginTop: spacing.xs,
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  borderRadius: borderRadius.lg,
+  backgroundColor: colors.surface.card,
+  ...shadows.md,
+},
+
+dropdownScroll: {
+  maxHeight: 320,
+},
+
+dropdownScrollContent: {
+  padding: spacing.sm,
+  gap: spacing.sm,
+},
+
+customerOptionCard: {
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  borderRadius: borderRadius.lg,
+  padding: spacing.md,
+  backgroundColor: colors.neutral.white,
+  gap: spacing.xs,
+},
+
+customerOptionCardActive: {
+  borderColor: colors.primary.orange,
+  backgroundColor: colors.primary.orangeSubtle,
+},
+
+customerOptionHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+},
+
+customerOptionName: {
+  flex: 1,
+  fontSize: typography.fontSize.md,
+  fontWeight: typography.fontWeight.semibold,
+  color: colors.text.primary,
+},
+
+customerMetaRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+},
+
+customerMetaText: {
+  flex: 1,
+  fontSize: typography.fontSize.sm,
+  color: colors.text.secondary,
+},
+
+customerOptionEmptyText: {
+  fontSize: typography.fontSize.sm,
+  color: colors.text.secondary,
+},
+
+checkBadge: {
+  width: 22,
+  height: 22,
+  borderRadius: 11,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.neutral.white,
+  borderWidth: 1,
+  borderColor: colors.primary.orange,
+},
+
+manageCustomersButton: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: spacing.xs,
+  paddingVertical: spacing.md,
+  paddingHorizontal: spacing.md,
+  borderRadius: borderRadius.lg,
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  backgroundColor: colors.surface.card,
+},
+
+manageCustomersText: {
+  fontSize: typography.fontSize.sm,
+  fontWeight: typography.fontWeight.semibold,
+  color: colors.primary.orange,
+},
 });
