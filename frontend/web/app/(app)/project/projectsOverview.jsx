@@ -6,7 +6,7 @@ import { useProject } from '../../components/projectComponents/projectContext';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
 import { getProject, updateProject, getCustomers, deleteProject,} from '../../../utils/api';
-import customerModal from '../../components/projectComponents/customerModal';
+import CustomerModal from '../../components/projectComponents/customerModal';
 
 function FieldRow({ icon, label, value, editing, onChangeText, placeholder, keyboardType = 'default', multiline = false,}) {
   return (
@@ -66,6 +66,7 @@ export default function ProjectOverview() {
 
   const [deleteError, setDeleteError] = useState(null);
 
+  // Load project
   useEffect(() => {
     let mounted = true;
 
@@ -114,6 +115,7 @@ export default function ProjectOverview() {
     }
   }, [isEditing]);
 
+  // When project changes (or when entering edit mode), prep draft
   const canSave = useMemo(() => {
     if (!project || !draft) return false;
     const nameOk = (draft.name || '').trim().length > 0;
@@ -229,6 +231,7 @@ export default function ProjectOverview() {
   if (loading || !project) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        {/* Header */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.pageTitle}>Project Overview</Text>
@@ -258,6 +261,7 @@ export default function ProjectOverview() {
             </Text>
           </View>
 
+          {/* Right-side actions */}
           {!isEditing ? (
             <Pressable
               onPress={startEditing}
@@ -304,6 +308,7 @@ export default function ProjectOverview() {
           )}
         </View>
 
+        {/* Status strip */}
         <View style={styles.statusStrip}>
           <View style={styles.statusPill}>
             <View style={[styles.statusDot, { backgroundColor: project.active ? colors.semantic.success : colors.text.tertiary }]} />
@@ -325,6 +330,7 @@ export default function ProjectOverview() {
           )}
         </View>
 
+        {/* Core details */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderIcon}>
@@ -353,6 +359,7 @@ export default function ProjectOverview() {
           />
         </View>
 
+        {/* Customer Details */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderIcon}>
@@ -484,6 +491,7 @@ export default function ProjectOverview() {
           />
         </View>
 
+        {/* Location Details */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderIcon}>
@@ -523,6 +531,7 @@ export default function ProjectOverview() {
           />
         </View>
 
+        {/* Status */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderIcon}>
@@ -560,6 +569,7 @@ export default function ProjectOverview() {
           </View>
         </View>
 
+        {/* Delete Project Button */}
         {isEditing && (
           <View style={{ marginTop: spacing.xl }}>
             <Pressable
@@ -576,7 +586,7 @@ export default function ProjectOverview() {
         )}
       </ScrollView>
 
-      <customerModal
+      <CustomerModal
         visible={customerModalVisible}
         onClose={() => setCustomerModalVisible(false)}
         token={token}

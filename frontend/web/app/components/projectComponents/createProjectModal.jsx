@@ -24,6 +24,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
     lng: "",
   });
 
+  // Fetch customers when modal opens
   const loadCustomers = async () => {
     if (!token || !companyId) return;
 
@@ -113,6 +114,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
+              {/* Project Name */}
               <Field
                 label="Project Name"
                 icon="pricetag-outline"
@@ -122,6 +124,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                 required
               />
 
+              {/* Address */}
               <Field
                 label="Address"
                 icon="location-outline"
@@ -131,9 +134,11 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                 multiline
               />
 
+              {/* Customer */}
               <View style={styles.field}>
                 <Label icon="business-outline" text="Customer" />
 
+                {/* Dropdown trigger */}
                 <Pressable
                   onPress={() => setCustomerOpen((v) => !v)}
                   style={[
@@ -152,12 +157,14 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                   />
                 </Pressable>
 
+                {/* Dropdown menu */}
                 {customerOpen && (
                   <View style={styles.dropdownMenu}>
                     {loadingCustomers ? (
                       <ActivityIndicator style={{ padding: spacing.md }} />
                     ) : (
                       <ScrollView style={{ maxHeight: 260 }}>
+                        {/* No customer option */}
                         <Pressable
                           onPress={() => {
                             setForm((f) => ({ ...f, customer_id: null }));
@@ -185,6 +192,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                           </Pressable>
                         ))}
 
+                        {/* Manage customers option */}
                         <Pressable
                           onPress={() => {
                             setCustomerOpen(false);
@@ -209,6 +217,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                 )}
               </View>
 
+              {/* Geofence radius */}
               <Field
                 label="Geofence (meters)"
                 icon="radio-outline"
@@ -220,6 +229,7 @@ export default function CreateProjectModal({ visible, onClose, token, companyId,
                 placeholder="e.g. 150"
               />
 
+              {/* Lat / Lng */}
               <View style={styles.row}>
                 <Field
                   label="Latitude"
