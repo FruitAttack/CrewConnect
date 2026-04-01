@@ -1,9 +1,11 @@
 // MUST BE THE NODE BACKEND'S IP ADDRESS USUALLY YOUR MACHINES IP ADDRESS FOR TESTING
 // mac terminal command: ipconfig getifaddr en0
 // windows command: ipconfig (look for IPv4 Address)
-const API_URL = process.env.NODE_ENV === 'production' 
+// In production we use relative URLs. In development default to localhost:3001
+// Allow overriding via environment variable `REACT_APP_API_URL`.
+const API_URL = process.env.NODE_ENV === 'production'
   ? "" // Use relative URLs in production (same server)
-  : "http://localhost:3001" // Use localhost in development
+  : (process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001")
 import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:3001"
 
@@ -560,6 +562,30 @@ export async function denyTimeOffRequest(token, requestId, notes) {
 // Manual PTO balance adjustment (admin only)
 export async function adjustPtoBalance(token, data) {
   return apiCall('time-off/balances/adjust', token, 'POST', data)
+}
+
+// ============================================
+// COMPANIES
+// ============================================
+
+// Create a new company
+export async function createCompany(token, companyData) {
+  return apiCall('companies', token, 'POST', companyData);
+}
+
+// Delete current user's company (admin only)
+export async function deleteCompany(token) {
+  return apiCall('companies', token, 'DELETE');
+}
+
+// Creates new user, new company, and assign user to that company with an admin role
+export async function signUpWithCompany(email, password, companyName, fullName) {
+  return apiCall('companies/signup-with-company', null, 'POST', {
+    email,
+    password,
+    companyName,
+    fullName,
+  });
 }
 
 // ============================================

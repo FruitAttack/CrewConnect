@@ -29,6 +29,13 @@ export default function MapPage() {
     equipment: [],
   });
   const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter projects by search query
+  const filteredProjects = (mapData.projects || []).filter(p =>
+    p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.address?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const token = session?.access_token;
   const isLargeScreen = width >= 1024;
@@ -563,6 +570,76 @@ export default function MapPage() {
           <Pressable style={styles.refreshBtn} onPress={fetchMapData}>
             <Ionicons name="refresh-outline" size={18} color={colors.text.secondary} />
           </Pressable>
+
+          {/* Divider */}
+          <View style={{ width: 1, height: 24, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 4 }} />
+
+          {/* Inline Search with Dropdown */}
+          <View style={{ position: 'relative' }}>
+            <View style={styles.inlineSearch}>
+              <Ionicons name="search-outline" size={14} color={colors.text.tertiary} />
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  fontSize: 13,
+                  color: '#333',
+                  width: 140,
+                  fontFamily: 'inherit',
+                }}
+              />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={14} color={colors.text.tertiary} />
+                </Pressable>
+              )}
+            </View>
+
+            {/* Search Results Dropdown */}
+            {searchQuery.length > 0 && filteredProjects.length > 0 && (
+              <View style={styles.searchDropdown}>
+                <ScrollView style={{ maxHeight: 240 }}>
+                  {filteredProjects.map((project, i) => (
+                    <Pressable
+                      key={project.id || i}
+                      style={({ hovered }) => [styles.searchResult, hovered && { backgroundColor: colors.neutral.offWhite }]}
+                      onPress={() => {
+                        flyTo(project.lat, project.lng);
+                        setSearchQuery('');
+                      }}
+                    >
+                      <Ionicons
+                        name="business-outline"
+                        size={16}
+                        color={project.active ? markerColors.project : markerColors.projectInactive}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '500', color: colors.text.primary }}>{project.name}</Text>
+                        {project.address && (
+                          <Text style={{ fontSize: 11, color: colors.text.tertiary }} numberOfLines={1}>{project.address}</Text>
+                        )}
+                      </View>
+                      <View style={{
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                        backgroundColor: project.active ? 'rgba(16,185,129,0.1)' : 'rgba(0,0,0,0.05)',
+                      }}>
+                        <Text style={{ fontSize: 10, color: project.active ? '#10B981' : colors.text.tertiary }}>
+                          {project.active ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Map iframe */}
@@ -806,6 +883,39 @@ const styles = StyleSheet.create({
     padding: 10,
     marginLeft: 4,
     borderRadius: 8,
+  },
+  inlineSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  searchDropdown: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: 4,
+    zIndex: 1001,
+    width: 320,
+    backgroundColor: colors.neutral.white,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  searchResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
 
   // Legend

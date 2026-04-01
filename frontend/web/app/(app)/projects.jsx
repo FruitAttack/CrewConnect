@@ -13,7 +13,7 @@ export default function Projects() {
   const router = useRouter();
   const { session } = useSession();
   const isLargeScreen = width >= 1024;
-  const { setSelectedProject, setSelectedProjectID } = useProject();
+  const { setSelectedProject, setSelectedProjectId } = useProject();
   
   const { create } = useLocalSearchParams();
   
@@ -142,7 +142,7 @@ export default function Projects() {
   const handleProjectPress = (project) => {
     try {
       setSelectedProject(project);
-      setSelectedProjectID(project.id);
+      setSelectedProjectId(project.id);
     }
     catch (err) {
       console.warn("Failed to set project context: ", err);
@@ -307,7 +307,7 @@ export default function Projects() {
         companyId={companyId}
         onCreated={(project) => {
           setSelectedProject(project);
-          setSelectedProjectID(project.id);
+          setSelectedProjectId(project.id);
           router.push(`/(app)/project/projectsOverview?projectId=${project.id}`);
         }}
       />

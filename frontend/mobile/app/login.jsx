@@ -20,12 +20,11 @@ const LoginPage = () => {
 
   // Setup username and password for ease of testing
   useEffect(() => {
-  if (process.env.EXPO_PUBLIC_DEBUG_MODE === "true") {
-    setEmail(process.env.EXPO_PUBLIC_USER ?? "");
-    setPassword(process.env.EXPO_PUBLIC_PASSWORD ?? "");
-  }
-}, []);
-
+    if (process.NODE_ENV = "development" && process.env.EXPO_PUBLIC_DEBUG_MODE === "true") {
+      setEmail(process.env.EXPO_PUBLIC_USER ?? "");
+      setPassword(process.env.EXPO_PUBLIC_PASSWORD ?? "");
+    }
+  }, []);
 
   const handleLogin = async () => {
     console.log("Email:", email);
