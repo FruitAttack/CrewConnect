@@ -231,6 +231,7 @@ export const cancelTimeOffRequest = async (req, res) => {
 
 /**
  * GET /api/time-off/balances
+ * Returns the current user's PTO balance for the given year
  */
 export const getTimeOffBalances = async (req, res) => {
   try {
@@ -252,6 +253,144 @@ export const getTimeOffBalances = async (req, res) => {
   } catch (error) {
     console.error('Error fetching PTO balance:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to fetch PTO balance' });
+  }
+};
+
+/**
+ * GET /api/time-off/balances/all
+ * Returns PTO balances for all active users in a company (admin/supervisor only).
+ * Users are scoped to a company via the default_company_id column on the users table.
+ */
+export const getAllPtoBalances = async (req, res) => {
+  try {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+    }
+
+    const { company_id, year } = req.query;
+    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+
+    if (!company_id) {
+      return res.status(400).json({ success: false, error: 'company_id is required' });
+    }
+
+    // Look up all active users belonging to this company
+    const { data: userRows, error: userError } = await supabase
+      .schema('app')
+      .from('users')
+      .select('id')
+      .eq('default_company_id', company_id)
+      .eq('is_active', true);
+
+    if (userError) throw userError;
+
+    const userIds = (userRows || []).map(u => u.id);
+
+    if (userIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const { data: balances, error: balancesError } = await supabase
+      .schema('app')
+      .from('pto_balances')
+      .select('*')
+      .in('user_id', userIds)
+      .eq('year', targetYear);
+
+    if (balancesError) throw balancesError;
+
+    // Compute available_hours for each balance row
+    const enriched = (balances || []).map(b => ({
+      ...b,
+      available_hours: b.allocated_hours - b.used_hours - b.pending_hours,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    console.error('Error fetching all PTO balances:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch balances' });
+  }
+};
+
+/**
+ * POST /api/time-off/balances/adjust
+ * Manually adjust a user's PTO allocated_hours balance (admin/supervisor only)
+ * Positive adjustment_hours adds hours; negative deducts hours (floor at 0).
+ */
+export const adjustPtoBalance = async (req, res) => {
+  try {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+    }
+
+    const { user_id, year, adjustment_hours, note } = req.body;
+    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+
+    if (!user_id || adjustment_hours === undefined || adjustment_hours === null) {
+      return res.status(400).json({ success: false, error: 'user_id and adjustment_hours are required' });
+    }
+
+    const hours = parseFloat(adjustment_hours);
+    if (isNaN(hours) || hours === 0) {
+      return res.status(400).json({ success: false, error: 'adjustment_hours must be a non-zero number' });
+    }
+
+    // Fetch existing balance row
+    const { data: existing } = await supabase
+      .schema('app')
+      .from('pto_balances')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('year', targetYear)
+      .single();
+
+    if (existing) {
+      const newAllocated = Math.max(0, existing.allocated_hours + hours);
+      const { data: updated, error: updateError } = await supabase
+        .schema('app')
+        .from('pto_balances')
+        .update({ allocated_hours: newAllocated })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      return res.json({
+        success: true,
+        data: {
+          ...updated,
+          available_hours: updated.allocated_hours - updated.used_hours - updated.pending_hours,
+        },
+        message: `PTO balance adjusted by ${hours} hours`,
+      });
+    } else {
+      // No existing record — create one seeded with the adjustment
+      const newAllocated = Math.max(0, hours);
+      const { data: created, error: insertError } = await supabase
+        .schema('app')
+        .from('pto_balances')
+        .insert({
+          user_id,
+          year: targetYear,
+          allocated_hours: newAllocated,
+          used_hours: 0,
+          pending_hours: 0,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      return res.json({
+        success: true,
+        data: { ...created, available_hours: created.allocated_hours },
+        message: `PTO balance created with ${newAllocated} hours`,
+      });
+    }
+  } catch (error) {
+    console.error('Error adjusting PTO balance:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to adjust balance' });
   }
 };
 

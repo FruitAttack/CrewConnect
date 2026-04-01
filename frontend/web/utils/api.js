@@ -506,6 +506,65 @@ export async function deleteDailyProduction(token, id) {
 }
 
 // ============================================
+// PTO / TIME OFF
+// ============================================
+
+// Get all PTO balances for all users in a company (admin/supervisor)
+export async function getAllPtoBalances(token, companyId, year) {
+  const params = new URLSearchParams({ company_id: companyId, year })
+  return apiCall(`time-off/balances/all?${params}`, token)
+}
+
+// Get current user's PTO balance
+export async function getMyPtoBalance(token, year) {
+  const params = new URLSearchParams()
+  if (year) params.append('year', year)
+  return apiCall(`time-off/balances?${params}`, token)
+}
+
+// Get time-off requests (current user)
+export async function getTimeOffRequests(token, filters = {}) {
+  const params = new URLSearchParams(filters)
+  return apiCall(`time-off?${params}`, token)
+}
+
+// Submit a time-off request
+export async function createTimeOffRequest(token, data) {
+  return apiCall('time-off', token, 'POST', data)
+}
+
+// Cancel a pending time-off request
+export async function cancelTimeOffRequest(token, requestId) {
+  return apiCall(`time-off/${requestId}`, token, 'DELETE')
+}
+
+// Get all pending requests (managers)
+export async function getPendingTimeOffRequests(token) {
+  return apiCall('time-off/pending', token)
+}
+
+// Get all requests with filters (managers)
+export async function getAllTimeOffRequests(token, filters = {}) {
+  const params = new URLSearchParams(filters)
+  return apiCall(`time-off/all?${params}`, token)
+}
+
+// Approve a time-off request (managers)
+export async function approveTimeOffRequest(token, requestId, notes) {
+  return apiCall(`time-off/${requestId}/approve`, token, 'PATCH', { notes })
+}
+
+// Deny a time-off request (managers)
+export async function denyTimeOffRequest(token, requestId, notes) {
+  return apiCall(`time-off/${requestId}/deny`, token, 'PATCH', { notes })
+}
+
+// Manual PTO balance adjustment (admin only)
+export async function adjustPtoBalance(token, data) {
+  return apiCall('time-off/balances/adjust', token, 'POST', data)
+}
+
+// ============================================
 // COMPANIES
 // ============================================
 
