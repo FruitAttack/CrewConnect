@@ -42,7 +42,7 @@ test_mobile:
   script:
     - cd frontend/mobile
     - npm ci
-    - npm test -- --watch=false
+    - CI=true npx jest --ci --watchAll=false --runInBand
 
 deploy_production:
   stage: deploy
