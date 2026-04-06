@@ -61,9 +61,9 @@ deploy_production:
     - set -eo pipefail
     - export AWS_PAGER=""
     - export AWS_REGION="us-east-1"
-  script:
     - export BUCKET_NAME="crewconnect-web-frontend"
     - export CF_DISTRIBUTION_ID="EKBX6UTNXR4SC"
+  script:
     - cd frontend/web
     - npm ci
     - npx expo export --platform web --clear
