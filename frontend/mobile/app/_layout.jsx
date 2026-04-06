@@ -1,11 +1,16 @@
 import { Stack } from 'expo-router';
 import { SessionProvider, useSession } from '../utils/ctx';
 import { SplashScreenController } from '../utils/splash';
+import { useEffect } from "react";
+import { useOfflineStore } from "../store/offlineStore";
+import { useNetworkStatus } from "../utils/useNetworkStatus";
 
 export default function Root() {
   // Set up the auth context and render your layout inside of it.
   return (
     <SessionProvider>
+      <OfflineBootstrap />
+      <NetworkWatcher /> 
       <SplashScreenController />
       <RootNavigator />
     </SessionProvider>
@@ -29,4 +34,21 @@ function RootNavigator() {
       </Stack.Protected>
     </Stack>
   );
+}
+
+export function OfflineBootstrap() {
+  const loadQueue = useOfflineStore((s) => s.loadQueue);
+  const loadCaches = useOfflineStore((s) => s.loadCaches);
+ 
+  useEffect(() => {
+    loadQueue();
+    loadCaches();
+  }, []);
+ 
+  return null;
+}
+ 
+export function NetworkWatcher() {
+  useNetworkStatus(); 
+  return null;
 }

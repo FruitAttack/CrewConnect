@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiCall } from "../utils/api";
+import { useOfflineStore } from "./offlineStore";
 
 export const useTimeStore = create((set, get) => ({
   isClockedIn: false,
@@ -13,7 +14,7 @@ export const useTimeStore = create((set, get) => ({
   secondsWorkedShift: 0,
 
   lastServerUpdateTimestamp: null,
-  
+
   // Track the current day to detect midnight crossings
   _currentDay: new Date().toDateString(),
   _midnightCheckInterval: null,
@@ -95,7 +96,6 @@ export const useTimeStore = create((set, get) => ({
     if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
       return state.secondsWorkedShift;
 
-    // Timer keeps running even on break (break time is tracked separately)
     const now = Date.now();
     const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
     return state.secondsWorkedShift + delta;
@@ -106,7 +106,6 @@ export const useTimeStore = create((set, get) => ({
     if (!state.isClockedIn || !state.lastServerUpdateTimestamp)
       return state.secondsWorkedToday;
 
-    // Timer keeps running even on break (break time is tracked separately)
     const now = Date.now();
     const delta = Math.floor((now - state.lastServerUpdateTimestamp) / 1000);
     return state.secondsWorkedToday + delta;
@@ -115,76 +114,49 @@ export const useTimeStore = create((set, get) => ({
   getSecondsOnBreak: () => {
     const state = get();
     if (!state.isOnBreak || !state.breakStartTime) return 0;
-    
+
     const now = Date.now();
     return Math.floor((now - state.breakStartTime) / 1000);
   },
 
   // --- Midnight Detection ---
-  
-  /**
-   * Check if we've crossed midnight and need to refresh from server.
-   * The backend splits entries at midnight, so we need to:
-   * 1. Get the new time entry ID (old one was closed at 11:59:59)
-   * 2. Reset shift seconds (new day = new shift for display)
-   * 3. Update today's seconds
-   */
+
   checkMidnightCrossing: async (session) => {
     const state = get();
     const today = new Date().toDateString();
-    
-    // If the day has changed and user is clocked in
+
     if (state._currentDay !== today && state.isClockedIn) {
       console.log("🌙 Midnight crossing detected! Refreshing from server...");
-      console.log("   Previous day:", state._currentDay);
-      console.log("   Current day:", today);
-      
-      // Update the tracked day
       set({ _currentDay: today });
-      
-      // Re-hydrate from server to get the new split entry
       await get().hydrateFromServer(session);
-      
-      return true; // Indicates midnight was crossed
+      return true;
     }
-    
-    // Update tracked day even if not clocked in
+
     if (state._currentDay !== today) {
       set({ _currentDay: today });
     }
-    
+
     return false;
   },
 
-  /**
-   * Start the midnight check interval.
-   * Call this when the app becomes active or user clocks in.
-   */
   startMidnightWatch: (session) => {
     const state = get();
-    
-    // Clear any existing interval
+
     if (state._midnightCheckInterval) {
       clearInterval(state._midnightCheckInterval);
     }
-    
-    // Check every minute for midnight crossing
+
     const interval = setInterval(() => {
       get().checkMidnightCrossing(session);
-    }, 60000); // Check every 60 seconds
-    
+    }, 60000);
+
     set({ _midnightCheckInterval: interval });
-    
     console.log("🌙 Midnight watch started");
   },
 
-  /**
-   * Stop the midnight check interval.
-   * Call this when user clocks out or app goes to background.
-   */
   stopMidnightWatch: () => {
     const state = get();
-    
+
     if (state._midnightCheckInterval) {
       clearInterval(state._midnightCheckInterval);
       set({ _midnightCheckInterval: null });
@@ -194,11 +166,9 @@ export const useTimeStore = create((set, get) => ({
 
   // --- API / ASYNC Actions ---
 
-  // 1. Initial hydration for both clock-in and break status
   hydrateFromServer: async (session) => {
     if (!session?.access_token) return;
 
-    // Get current time entry
     const entryResp = await apiCall(
       session.access_token,
       "time-entries/current",
@@ -212,16 +182,16 @@ export const useTimeStore = create((set, get) => ({
 
     const isClockedIn = !!entryResp.data;
     const newEntryId = entryResp.data?.id || null;
-    
-    // Check if the entry ID changed (indicates a midnight split occurred)
+
     const state = get();
-    if (state.currentTimeEntryId && newEntryId && state.currentTimeEntryId !== newEntryId) {
+    if (
+      state.currentTimeEntryId &&
+      newEntryId &&
+      state.currentTimeEntryId !== newEntryId
+    ) {
       console.log("🌙 Time entry ID changed (midnight split detected)");
-      console.log("   Old ID:", state.currentTimeEntryId);
-      console.log("   New ID:", newEntryId);
     }
 
-    // API returns the entry/break directly in data, not nested
     set({
       isClockedIn: isClockedIn,
       currentTimeEntryId: newEntryId,
@@ -230,15 +200,43 @@ export const useTimeStore = create((set, get) => ({
       _currentDay: new Date().toDateString(),
     });
 
-    // Fetch authoritative worked seconds
     await get()._fetchWorkedSeconds(session);
   },
 
-  // 2. Clock In Action
+  // 2. Clock In — offline-aware
   doClockIn: async (session, body) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
 
+    const offlineStore = useOfflineStore.getState();
+
+    // ── OFFLINE PATH ─────────────────────────────────────────────────
+    if (offlineStore.isOffline) {
+      const entry = await offlineStore.enqueue("CLOCK_IN", {
+        ...body,
+        // Record the local time so the server gets an accurate clock_in
+        // when it supports a `clock_in` override (your backend already does
+        // for the manage endpoint; you can optionally add it to the regular
+        // clock-in endpoint too, or let the server use its own time on sync).
+        _localTimestamp: new Date().toISOString(),
+      });
+
+      // Optimistically update UI with a local "fake" entry ID
+      get()._setClockInState(entry.id);
+
+      // Seed the shift timer from local time
+      set({
+        secondsWorkedShift: 0,
+        secondsWorkedToday: 0,
+        lastServerUpdateTimestamp: Date.now(),
+      });
+
+      get().startMidnightWatch(session);
+
+      return { success: true, data: { id: entry.id }, offline: true };
+    }
+
+    // ── ONLINE PATH ──────────────────────────────────────────────────
     const response = await apiCall(
       session.access_token,
       "time-entries/clock-in",
@@ -246,27 +244,41 @@ export const useTimeStore = create((set, get) => ({
       body
     );
 
-    console.log("Clock-in response:", response);
-
     if (response.success) {
-      // API returns the time entry directly with 'id' field
       get()._setClockInState(response.data.id);
-      // Fetch fresh seconds from server
       await get()._fetchWorkedSeconds(session);
-      // Start watching for midnight
       get().startMidnightWatch(session);
     }
     return response;
   },
 
-  // 3. Clock Out Action
+  // 3. Clock Out — offline-aware
   doClockOut: async (session, body = {}) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
 
-    // If on break, end it first before clocking out
+    const offlineStore = useOfflineStore.getState();
+
+    // ── OFFLINE PATH ─────────────────────────────────────────────────
+    if (offlineStore.isOffline) {
+      // End break first if needed
+      if (get().isOnBreak) {
+        await offlineStore.enqueue("END_BREAK", {});
+        get()._setBreakEndState();
+      }
+
+      await offlineStore.enqueue("CLOCK_OUT", {
+        ...body,
+        _localTimestamp: new Date().toISOString(),
+      });
+
+      get()._setClockOutState();
+      get().stopMidnightWatch();
+      return { success: true, offline: true };
+    }
+
+    // ── ONLINE PATH ──────────────────────────────────────────────────
     if (get().isOnBreak) {
-      console.log("⏰ Ending break before clock out...");
       await get().doEndBreak(session);
     }
 
@@ -277,26 +289,34 @@ export const useTimeStore = create((set, get) => ({
       body
     );
 
-    console.log("Clock-out response:", response);
-
     if (response.success) {
       get()._setClockOutState();
       await get()._fetchWorkedSeconds(session);
-      // Stop watching for midnight
       get().stopMidnightWatch();
-      
-      // Check if the response indicates a split occurred
+
       if (response.data?._split) {
-        console.log("🌙 Clock-out resulted in split entries:", response.data._totalSegments, "segments");
+        console.log(
+          "🌙 Clock-out resulted in split entries:",
+          response.data._totalSegments,
+          "segments"
+        );
       }
     }
     return response;
   },
 
-  // 4. Start Break Action
+  // 4. Start Break — offline-aware
   doStartBreak: async (session) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
+
+    const offlineStore = useOfflineStore.getState();
+
+    if (offlineStore.isOffline) {
+      const entry = await offlineStore.enqueue("START_BREAK", {});
+      get()._setBreakStartState(entry.id);
+      return { success: true, data: { id: entry.id }, offline: true };
+    }
 
     const response = await apiCall(
       session.access_token,
@@ -305,7 +325,6 @@ export const useTimeStore = create((set, get) => ({
       {}
     );
 
-    // API returns the break directly with 'id' field
     if (response.success && response.data?.id) {
       get()._setBreakStartState(response.data.id);
       await get()._fetchWorkedSeconds(session);
@@ -313,10 +332,18 @@ export const useTimeStore = create((set, get) => ({
     return response;
   },
 
-  // 5. End Break Action
+  // 5. End Break — offline-aware
   doEndBreak: async (session) => {
     if (!session?.access_token)
       return { success: false, message: "Not authenticated." };
+
+    const offlineStore = useOfflineStore.getState();
+
+    if (offlineStore.isOffline) {
+      await offlineStore.enqueue("END_BREAK", {});
+      get()._setBreakEndState();
+      return { success: true, offline: true };
+    }
 
     const response = await apiCall(
       session.access_token,
