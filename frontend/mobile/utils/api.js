@@ -23,7 +23,7 @@ export async function apiCall(token, route, method = 'GET', body = null) {
     // In production EXPO_PUBLIC_API_BASE_URL must be set. In development use localhost
     const baseUrl = process.env.EXPO_PUBLIC_ENV === 'production' 
       ? process.env.EXPO_PUBLIC_API_BASE_URL // REQUIRED in production
-      : 'http://localhost:3001';
+      : process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001';
     const url = `${baseUrl}/api/${route}`
     console.log(`API Call: ${method} ${url}`)
     
