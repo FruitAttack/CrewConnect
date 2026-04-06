@@ -24,7 +24,7 @@ export default function Projects() {
   const [error, setError] = useState(null);
   const [companyId, setCompanyId] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewMode] = useState('list');
 
   const params = useLocalSearchParams();
   const [toast, setToast] = useState(null);
@@ -192,16 +192,16 @@ export default function Projects() {
     <View style={styles.headerRight}>
       <View style={styles.viewToggle}>
         <Pressable
-          style={[styles.viewToggleBtn, viewMode === 'grid' && styles.viewToggleBtnActive]}
-          onPress={() => setViewMode('grid')}
-        >
-          <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? colors.primary.orange : colors.text.tertiary} />
-        </Pressable>
-        <Pressable
           style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
           onPress={() => setViewMode('list')}
         >
           <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? colors.primary.orange : colors.text.tertiary} />
+        </Pressable>
+        <Pressable
+          style={[styles.viewToggleBtn, viewMode === 'grid' && styles.viewToggleBtnActive]}
+          onPress={() => setViewMode('grid')}
+        >
+          <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? colors.primary.orange : colors.text.tertiary} />
         </Pressable>
       </View>
 
