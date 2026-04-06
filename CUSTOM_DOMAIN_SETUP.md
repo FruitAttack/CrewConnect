@@ -1,4 +1,4 @@
-# CrewConnect Custom Domain Setup (crewconnectname.com)
+# CrewConnect Custom Domain Setup (crewconnect.site)
 
 Complete guide to add a custom domain to your CloudFront distribution using AWS Certificate Manager and external domain registrar (no Route 53 needed).
 
@@ -191,10 +191,10 @@ curl -I "https://$WWW_DOMAIN/login"
 All should return **HTTP 200** with content-type `text/html`.
 
 Open in browser (fresh/private window):
-- `https://crewconnectname.com`
-- `https://crewconnectname.com/login`
-- `https://crewconnectname.com/mobile/login`
-- `https://www.crewconnectname.com`
+- `https://crewconnect.site`
+- `https://crewconnect.site/login`
+- `https://crewconnect.site/mobile/login`
+- `https://www.crewconnect.site`
 
 Hard refresh (`Cmd+Shift+R` on Mac) if needed.
 
@@ -238,13 +238,13 @@ echo "=== CloudFront Status ==="
 aws cloudfront get-distribution --id "$CF_DISTRIBUTION_ID" --query 'Distribution.Status' --output text
 
 echo "=== DNS Resolution ==="
-nslookup crewconnectname.com | grep -A2 "Non-authoritative"
+nslookup crewconnect.site | grep -A2 "Non-authoritative"
 
 echo "=== HTTPS Check ==="
-curl -I https://crewconnectname.com/ 2>&1 | head -3
+curl -I https://crewconnect.site/ 2>&1 | head -3
 
 echo "=== Certificate ==="
-echo | openssl s_client -servername crewconnectname.com -connect crewconnectname.com:443 2>/dev/null | grep "Issuer\|Subject"
+echo | openssl s_client -servername crewconnect.site -connect crewconnect.site:443 2>/dev/null | grep "Issuer\|Subject"
 ```
 
 ## Rollback

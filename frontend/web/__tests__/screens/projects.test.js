@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView } from 'react-native';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react-native';
 
-import Projects from '../../app/(app)/Projects';
+import Projects from '../../app/(app)/projects';
 import CreateProjectModal from '../../app/components/projectComponents/createProjectModal';
 
 import { getUserProfile, getProjects } from '../../utils/api';
@@ -30,7 +30,7 @@ jest.mock('@expo/vector-icons', () => ({
 describe('Projects screen', () => {
   let pushMock;
   let setSelectedProjectMock;
-  let setSelectedProjectIDMock;
+  let setSelectedProjectIdMock;
 
   beforeAll(() => {
     //silence logs in test output
@@ -50,13 +50,13 @@ describe('Projects screen', () => {
 
     pushMock = jest.fn();
     setSelectedProjectMock = jest.fn();
-    setSelectedProjectIDMock = jest.fn();
+    setSelectedProjectIdMock = jest.fn();
 
     useRouter.mockReturnValue({ push: pushMock });
 
     useProject.mockReturnValue({
       setSelectedProject: setSelectedProjectMock,
-      setSelectedProjectID: setSelectedProjectIDMock,
+      setSelectedProjectId: setSelectedProjectIdMock,
     });
 
     useLocalSearchParams.mockReturnValue({});
@@ -147,7 +147,7 @@ describe('Projects screen', () => {
     fireEvent.press(screen.getByText('Encoded Project'));
 
     expect(setSelectedProjectMock).toHaveBeenCalledWith(project);
-    expect(setSelectedProjectIDMock).toHaveBeenCalledWith('abc 123');
+    expect(setSelectedProjectIdMock).toHaveBeenCalledWith('abc 123');
 
     // handleProjectPress uses encodeURIComponent
     expect(pushMock).toHaveBeenCalledWith(
@@ -243,7 +243,7 @@ describe('Projects screen', () => {
     });
 
     expect(setSelectedProjectMock).toHaveBeenCalledWith(newProject);
-    expect(setSelectedProjectIDMock).toHaveBeenCalledWith(99);
+    expect(setSelectedProjectIdMock).toHaveBeenCalledWith(99);
 
     expect(pushMock).toHaveBeenCalledWith(
       '/(app)/project/projectsOverview?projectId=99'

@@ -211,7 +211,7 @@ set -eo pipefail
 export AWS_PAGER=""
 export AWS_REGION="us-east-1"
 export BUCKET_NAME="crewconnect-web-frontend"
-export CF_DISTRIBUTION_ID="REPLACE_ME"
+export CF_DISTRIBUTION_ID="EKBX6UTNXR4SC"
 
 cd /Users/joelmoffatt/VSCode/crewconnect/frontend/web
 npx expo export --platform web --clear
