@@ -13,6 +13,7 @@ export default function Support() {
   const [hoveredCard, setHoveredCard] = useState(null);
   const [hoveredFaq, setHoveredFaq] = useState(null);
   const [expandedFaq, setExpandedFaq] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({ name: '', email: '', company: '', message: '' });
 
   const supportOptions = [
@@ -57,6 +58,8 @@ export default function Support() {
               style={styles.searchInput}
               placeholder="Search for answers..."
               placeholderTextColor={colors.text.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
           </View>
         </View>
