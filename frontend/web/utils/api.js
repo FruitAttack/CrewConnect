@@ -3,9 +3,9 @@
 // windows command: ipconfig (look for IPv4 Address)
 // In production we use relative URLs. In development default to localhost:3001
 // Allow overriding via environment variable `REACT_APP_API_URL`.
-const API_URL = process.env.NODE_ENV === 'production'
-  ? "" // Use relative URLs in production (same server)
-  : (process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001")
+// Prefer explicit EXPO_PUBLIC_API_BASE_URL or EXPO_PUBLIC_API_URL, otherwise
+// default to the local backend at port 3001 for development.
+const API_URL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001"
 import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:3001"
 
@@ -248,6 +248,11 @@ export async function getTimecard(token, userId, startDate, endDate) {
   return apiCall(`reports/timecard?${params}`, token)
 }
 
+export async function getPayrollSummary(token, startDate, endDate) {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  return apiCall(`reports/payroll-summary?${params}`, token);
+}
+
 export async function getBudgetVsActual(token, projectId, costCodeId) {
   const params = new URLSearchParams()
   if (projectId) params.append('project_id', projectId)
@@ -380,8 +385,9 @@ export async function updateEquipment(token, equipmentId, updates) {
   return apiCall(`equipment/${equipmentId}`, token, 'PUT', updates)
 }
 
-export async function deleteEquipment(token, equipmentId) {
-  return apiCall(`equipment/${equipmentId}`, token, 'DELETE')
+export async function deleteEquipment(token, equipmentId, hardDelete = false) {
+  const params = hardDelete ? '?hard_delete=true' : ''
+  return apiCall(`equipment/${equipmentId}${params}`, token, 'DELETE')
 }
 
 // ============================================
@@ -586,6 +592,13 @@ export async function signUpWithCompany(email, password, companyName, fullName) 
     companyName,
     fullName,
   });
+}
+
+// ============================================
+// BUDGET PREDICTION (ML)
+// ============================================
+export async function getBudgetPrediction(token, projectId) {
+  return apiCall(`projects/${projectId}/budget-prediction`, token)
 }
 
 // ============================================

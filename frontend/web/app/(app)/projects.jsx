@@ -24,6 +24,7 @@ export default function Projects() {
   const [error, setError] = useState(null);
   const [companyId, setCompanyId] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('grid');
 
   const params = useLocalSearchParams();
   const [toast, setToast] = useState(null);
@@ -188,23 +189,40 @@ export default function Projects() {
         </Text>
     </View>
 
-    <Pressable
-        onPress={handleCreateProjectPress}
-        style={({ pressed, hovered }) => [
-        styles.createButton,
-        hovered && styles.createButtonHovered,
-        pressed && styles.createButtonPressed,
-        ]}
-    >
-        <View style={styles.createButtonContent}>
-        <Ionicons name="add" size={18} color={colors.text.inverse} />
-        {isLargeScreen ? (
-            <Text style={styles.createButtonText}>Create New Project</Text>
-        ) : (
-            <Text style={styles.createButtonText}>New</Text>
-        )}
-        </View>
-    </Pressable>
+    <View style={styles.headerRight}>
+      <View style={styles.viewToggle}>
+        <Pressable
+          style={[styles.viewToggleBtn, viewMode === 'grid' && styles.viewToggleBtnActive]}
+          onPress={() => setViewMode('grid')}
+        >
+          <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? colors.primary.orange : colors.text.tertiary} />
+        </Pressable>
+        <Pressable
+          style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
+          onPress={() => setViewMode('list')}
+        >
+          <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? colors.primary.orange : colors.text.tertiary} />
+        </Pressable>
+      </View>
+
+      <Pressable
+          onPress={handleCreateProjectPress}
+          style={({ pressed, hovered }) => [
+          styles.createButton,
+          hovered && styles.createButtonHovered,
+          pressed && styles.createButtonPressed,
+          ]}
+      >
+          <View style={styles.createButtonContent}>
+          <Ionicons name="add" size={18} color={colors.text.inverse} />
+          {isLargeScreen ? (
+              <Text style={styles.createButtonText}>Create New Project</Text>
+          ) : (
+              <Text style={styles.createButtonText}>New</Text>
+          )}
+          </View>
+      </Pressable>
+    </View>
     </View>
 
       {/* Stats Summary */}
@@ -266,16 +284,36 @@ export default function Projects() {
       {activeProjects.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Active Projects</Text>
-          <View style={[styles.projectsGrid, isLargeScreen && styles.projectsGridLarge]}>
-            {activeProjects.map((project) => (
-              <ProjectCard 
-                key={project.id} 
-                project={project} 
-                onPress={() => handleProjectPress(project)}
-                formatDate={formatDate}
-              />
-            ))}
-          </View>
+          {viewMode === 'grid' ? (
+            <View style={[styles.projectsGrid, isLargeScreen && styles.projectsGridLarge]}>
+              {activeProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onPress={() => handleProjectPress(project)}
+                  formatDate={formatDate}
+                />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.listContainer}>
+              <View style={styles.listHeader}>
+                <Text style={[styles.listHeaderCell, { flex: 2 }]}>Name</Text>
+                <Text style={[styles.listHeaderCell, { flex: 1 }]}>Customer</Text>
+                <Text style={[styles.listHeaderCell, { flex: 1.5 }]}>Address</Text>
+                <Text style={[styles.listHeaderCell, { width: 80 }]}>Status</Text>
+                <Text style={[styles.listHeaderCell, { width: 110 }]}>Created</Text>
+              </View>
+              {activeProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  onPress={() => handleProjectPress(project)}
+                  formatDate={formatDate}
+                />
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -283,17 +321,38 @@ export default function Projects() {
       {inactiveProjects.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Completed / Inactive</Text>
-          <View style={[styles.projectsGrid, isLargeScreen && styles.projectsGridLarge]}>
-            {inactiveProjects.map((project) => (
-              <ProjectCard 
-                key={project.id} 
-                project={project} 
-                onPress={() => handleProjectPress(project)}
-                formatDate={formatDate}
-                inactive
-              />
-            ))}
-          </View>
+          {viewMode === 'grid' ? (
+            <View style={[styles.projectsGrid, isLargeScreen && styles.projectsGridLarge]}>
+              {inactiveProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onPress={() => handleProjectPress(project)}
+                  formatDate={formatDate}
+                  inactive
+                />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.listContainer}>
+              <View style={styles.listHeader}>
+                <Text style={[styles.listHeaderCell, { flex: 2 }]}>Name</Text>
+                <Text style={[styles.listHeaderCell, { flex: 1 }]}>Customer</Text>
+                <Text style={[styles.listHeaderCell, { flex: 1.5 }]}>Address</Text>
+                <Text style={[styles.listHeaderCell, { width: 80 }]}>Status</Text>
+                <Text style={[styles.listHeaderCell, { width: 110 }]}>Created</Text>
+              </View>
+              {inactiveProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  onPress={() => handleProjectPress(project)}
+                  formatDate={formatDate}
+                  inactive
+                />
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -406,6 +465,37 @@ function ProjectCard({ project, onPress, formatDate, inactive = false }) {
         </View>
       </View>
     </Pressable>    
+  );
+}
+
+// Project Row Component (list view)
+function ProjectRow({ project, onPress, formatDate, inactive = false }) {
+  return (
+    <Pressable
+      style={({ hovered }) => [styles.listRow, hovered && styles.listRowHovered, inactive && styles.listRowInactive]}
+      onPress={onPress}
+    >
+      <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={[styles.rowIcon, inactive && styles.rowIconInactive]}>
+          <Ionicons name="folder" size={14} color={inactive ? colors.text.tertiary : colors.primary.orange} />
+        </View>
+        <Text style={[styles.rowName, inactive && styles.textInactive]} numberOfLines={1}>{project.name}</Text>
+      </View>
+      <Text style={[styles.rowCell, { flex: 1 }]} numberOfLines={1}>{project.customers?.name || '—'}</Text>
+      <Text style={[styles.rowCell, { flex: 1.5 }]} numberOfLines={1}>{project.address || '—'}</Text>
+      <View style={{ width: 80 }}>
+        <View style={[styles.statusBadge, inactive ? styles.statusBadgeInactive : styles.statusBadgeActive]}>
+          <View style={[styles.statusDot, { backgroundColor: inactive ? colors.text.tertiary : colors.semantic.success }]} />
+          <Text style={[styles.statusText, { color: inactive ? colors.text.tertiary : colors.semantic.success }]}>
+            {inactive ? 'Inactive' : 'Active'}
+          </Text>
+        </View>
+      </View>
+      <View style={{ width: 110, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.rowCell}>{formatDate(project.created_at)}</Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.primary.orange} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -730,4 +820,84 @@ toastText: {
   fontSize: typography.fontSize.sm,
   fontWeight: typography.fontWeight.medium,
 },
+
+  // Header right cluster
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+
+  // View toggle
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.md,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  viewToggleBtn: {
+    padding: 6,
+    borderRadius: borderRadius.sm,
+  },
+  viewToggleBtnActive: {
+    backgroundColor: colors.neutral.white,
+    ...shadows.sm,
+  },
+
+  // List view
+  listContainer: {
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    overflow: 'hidden',
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.neutral.offWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  listHeaderCell: {
+    fontSize: 10,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+    gap: spacing.sm,
+  },
+  listRowHovered: { backgroundColor: colors.neutral.offWhite },
+  listRowInactive: { opacity: 0.65 },
+  rowIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.primary.orangeSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowIconInactive: { backgroundColor: colors.neutral.offWhite },
+  rowName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  rowCell: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
 });

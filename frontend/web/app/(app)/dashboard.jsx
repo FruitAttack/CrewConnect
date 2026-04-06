@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, useWindowDimensions, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useSession } from '../../utils/ctx';
 import { useRouter } from 'expo-router';
 import { getProjects, getDashboard, getAllUsers, getUserProfile, getTimeEntries, getActiveRoster } from '../../utils/api';
@@ -431,29 +432,22 @@ export default function Dashboard() {
               </View>
             </View>
             <View style={styles.chartContainer}>
-              <View style={styles.barChart}>
-                {WEEKDAY_LABELS.map((day, i) => {
-                  const h = weekdayHours[i] || 0;
-                  const pct = maxWeekday > 0 ? (h / maxWeekday) * 100 : 0;
-
-                  return (
-                    <View key={i} style={styles.barColumn}>
-                      <View
-                        style={[
-                          styles.bar,
-                          {
-                            height: `${pct}%`,
-                            minHeight: h > 0 ? 4 : 0,
-                            backgroundColor: i < 5 ? colors.primary.orange : colors.neutral.lightGray,
-                            opacity: i < 5 ? 1 : 0.5,
-                          },
-                        ]}
-                      />
-                      <Text style={styles.barLabel}>{day}</Text>
-                    </View>
-                  );
-                })}
-              </View>
+              <ResponsiveContainer width="100%" height={110}>
+                <BarChart
+                  data={WEEKDAY_LABELS.map((day, i) => ({ day, hours: parseFloat((weekdayHours[i] || 0).toFixed(1)), weekend: i >= 5 }))}
+                  margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                  barCategoryGap="25%"
+                >
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: colors.text.tertiary }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: colors.text.tertiary }} axisLine={false} tickLine={false} tickFormatter={v => `${v}h`} />
+                  <Tooltip formatter={v => [`${v}h`, 'Hours']} contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${colors.border.light}` }} cursor={{ fill: colors.neutral.offWhite }} />
+                  <Bar dataKey="hours" radius={[3, 3, 0, 0]}>
+                    {WEEKDAY_LABELS.map((_, i) => (
+                      <Cell key={i} fill={i < 5 ? colors.primary.orange : colors.neutral.lightGray} opacity={i < 5 ? 1 : 0.5} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </View>
           </View>
         </View>
@@ -760,34 +754,11 @@ const styles = StyleSheet.create({
   },
 
   // Chart
-  chartContainer: { 
-    height: 120, 
-    backgroundColor: colors.neutral.offWhite, 
-    borderRadius: borderRadius.md, 
-    padding: spacing.md 
-  },
-  barChart: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
-    justifyContent: 'space-between',
-    gap: spacing.xs,
-  },
-  barColumn: { 
-    flex: 1, 
-    alignItems: 'center', 
-    height: '100%', 
-    justifyContent: 'flex-end' 
-  },
-  bar: { 
-    width: '70%', 
-    borderRadius: borderRadius.xs, 
-    marginBottom: spacing.xs 
-  },
-  barLabel: { 
-    fontSize: 10, 
-    color: colors.text.tertiary,
-    fontWeight: typography.fontWeight.medium,
+  chartContainer: {
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
 
   // Actions Grid
