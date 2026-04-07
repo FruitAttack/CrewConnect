@@ -76,26 +76,17 @@ deployFrontend:
     - aws cloudfront create-invalidation --distribution-id "$CF_DISTRIBUTION_ID" --paths "/index.html" "/mobile/index.html" "/_expo/*" "/mobile/_expo/*"
     - echo "Deploy complete"
 
-deployBackend:
+buildBackendImage:
   stage: deploy
-  image: docker:27.0.3
-  services:
-    - name: docker:27.0.3-dind
-      alias: docker
-      command: ["--tls=false"]
-  variables:
-    DOCKER_HOST: "tcp://docker:2375"
-    DOCKER_TLS_CERTDIR: ""
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   needs:
     - test_backend
-  environment:
-    name: production/backend
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
   before_script:
-    - apk add --no-cache aws-cli jq
     - set -eo pipefail
-    - export AWS_PAGER=""
     - export AWS_REGION="us-east-2"
     - export ECR_REPOSITORY_URI="613426352709.dkr.ecr.us-east-2.amazonaws.com/crewconnect/backend"
     - export ECR_REPOSITORY_NAME="crewconnect/backend"
@@ -107,10 +98,37 @@ deployBackend:
     - APP_VERSION="${CI_COMMIT_SHORT_SHA}-${CI_PIPELINE_ID}"
     - IMAGE_URI="$ECR_REPOSITORY_URI:$APP_VERSION"
     - ECR_REGISTRY="${ECR_REPOSITORY_URI%/*}"
+    - mkdir -p /kaniko/.docker
+    - echo "{\"credHelpers\":{\"$ECR_REGISTRY\":\"ecr-login\"}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context "$CI_PROJECT_DIR/backend" --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile" --destination "$IMAGE_URI" --cache=true
+    - printf 'IMAGE_URI=%s\nECS_CONTAINER_NAME=%s\nECS_CLUSTER=%s\nECS_SERVICE=%s\nECS_TASK_FAMILY=%s\nAWS_REGION=%s\n' "$IMAGE_URI" "$ECS_CONTAINER_NAME" "$ECS_CLUSTER" "$ECS_SERVICE" "$ECS_TASK_FAMILY" "$AWS_REGION" > build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
+deployBackend:
+  stage: deploy
+  image: node:20
+  needs:
+    - job: buildBackendImage
+      artifacts: true
+  environment:
+    name: production/backend
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - apt-get update
+    - apt-get install -y awscli jq
+    - set -eo pipefail
+    - export AWS_PAGER=""
+    - export AWS_REGION="${AWS_REGION:-us-east-2}"
+    - export ECS_CLUSTER="${ECS_CLUSTER:-default}"
+    - export ECS_SERVICE="${ECS_SERVICE:-backend-5676}"
+    - export ECS_TASK_FAMILY="${ECS_TASK_FAMILY:-default-backend-5676}"
+    - export ECS_CONTAINER_NAME="${ECS_CONTAINER_NAME:-Main}"
+  script:
+    - test -n "$IMAGE_URI" || (echo "Missing IMAGE_URI from buildBackendImage" && exit 1)
     - CONTAINER_NAME="${ECS_CONTAINER_NAME:-backend}"
-    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    - docker build -t "$IMAGE_URI" backend
-    - docker push "$IMAGE_URI"
     - TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" --query 'taskDefinition' --output json)
     - MATCH_COUNT=$(echo "$TASK_DEF_JSON" | jq --arg CONTAINER_NAME "$CONTAINER_NAME" '[.containerDefinitions[] | select(.name == $CONTAINER_NAME)] | length')
     - if [ "$MATCH_COUNT" -eq 0 ]; then echo "Container name '$CONTAINER_NAME' not found in task definition '$ECS_TASK_FAMILY'"; exit 1; fi
