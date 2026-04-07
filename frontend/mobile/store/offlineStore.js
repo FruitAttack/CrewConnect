@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { offlineClockIn, offlineClockOut, offlineStartBreak, offlineEndBreak } from "../utils/api";
 
 const OFFLINE_QUEUE_KEY = "crewconnect_offline_queue";
 const CACHED_PROJECTS_KEY = "crewconnect_cached_projects";
@@ -132,86 +133,87 @@ export const useOfflineStore = create((set, get) => ({
    * Process the queue in order, calling apiCall for each entry.
    * Pass in the apiCall function and session to avoid circular imports.
    */
-  syncQueue: async (session, apiCall, onSyncComplete) => {
-    const state = get();
-    if (state.isSyncing) return;
-    if (!session?.access_token) return;
+  syncQueue: async (session, onSyncComplete) => {
+  const state = get();
+  if (state.isSyncing) return;
+  if (!session?.access_token) return;
 
-    const pending = state.queue.filter((e) => e.status === "pending");
-    if (pending.length === 0) return;
+  const pending = state.queue.filter((e) => e.status === "pending");
+  if (pending.length === 0) return;
 
-    set({ isSyncing: true, lastSyncAttempt: Date.now() });
-    console.log(`[Offline] Starting sync of ${pending.length} entries...`);
+  set({ isSyncing: true, lastSyncAttempt: Date.now() });
+  console.log(`[Offline] Starting sync of ${pending.length} entries...`);
 
-    for (const entry of pending) {
-      // Mark as syncing
-      set((s) => ({
-        queue: s.queue.map((e) =>
-          e.id === entry.id ? { ...e, status: "syncing" } : e
-        ),
-      }));
+  for (const entry of pending) {
+    set((s) => ({
+      queue: s.queue.map((e) =>
+        e.id === entry.id ? { ...e, status: "syncing" } : e
+      ),
+    }));
 
-      try {
-        let route, method, body;
+    try {
+      let response;
 
-        switch (entry.type) {
-          case "CLOCK_IN":
-            route = "time-entries/clock-in";
-            method = "POST";
-            body = entry.payload;
-            break;
-          case "CLOCK_OUT":
-            route = "time-entries/clock-out";
-            method = "POST";
-            body = entry.payload;
-            break;
-          case "START_BREAK":
-            route = "time-entries/break/start";
-            method = "POST";
-            body = {};
-            break;
-          case "END_BREAK":
-            route = "time-entries/break/end";
-            method = "POST";
-            body = {};
-            break;
-          default:
-            console.warn("[Offline] Unknown queue entry type:", entry.type);
-            await get().dequeue(entry.id);
-            continue;
-        }
+      const payload = {
+        ...entry.payload,
+        client_action_id: entry.id,
+      };
 
-        const response = await apiCall(session.access_token, route, method, body);
+      switch (entry.type) {
+        case "CLOCK_IN":
+          response = await offlineClockIn(session.access_token, payload);
+          break;
 
-        if (response.success) {
-          console.log(`[Offline] Synced ${entry.type}:`, entry.id);
+        case "CLOCK_OUT":
+          response = await offlineClockOut(session.access_token, payload);
+          break;
+
+        case "START_BREAK":
+          response = await offlineStartBreak(session.access_token, payload);
+          break;
+
+        case "END_BREAK":
+          response = await offlineEndBreak(session.access_token, payload);
+          break;
+
+        default:
+          console.warn("[Offline] Unknown queue entry type:", entry.type);
+          await get().dequeue(entry.id);
+          continue;
+      }
+
+      if (response.success) {
+        console.log(`[Offline] Synced ${entry.type}:`, entry.id);
+        await get().dequeue(entry.id);
+      } else {
+        console.warn(`[Offline] Failed to sync ${entry.type}:`, response.message);
+
+        const msg = response.message?.toLowerCase() || "";
+
+        if (
+          msg.includes("already clocked in") ||
+          msg.includes("already clocked out") ||
+          msg.includes("no open time entry") ||
+          msg.includes("already on break") ||
+          msg.includes("no active break")
+        ) {
+          console.warn("[Offline] Discarding stale entry:", entry.id);
           await get().dequeue(entry.id);
         } else {
-          console.warn(`[Offline] Failed to sync ${entry.type}:`, response.message);
-          // If the server says "already clocked in", the entry is stale — discard it
-          if (
-            response.message?.toLowerCase().includes("already clocked in") ||
-            response.message?.toLowerCase().includes("already clocked out") ||
-            response.message?.toLowerCase().includes("no open time entry")
-          ) {
-            console.warn("[Offline] Discarding stale entry:", entry.id);
-            await get().dequeue(entry.id);
-          } else {
-            await get().markFailed(entry.id);
-          }
+          await get().markFailed(entry.id);
         }
-      } catch (err) {
-        console.error(`[Offline] Exception syncing ${entry.type}:`, err);
-        await get().markFailed(entry.id);
       }
+    } catch (err) {
+      console.error(`[Offline] Exception syncing ${entry.type}:`, err);
+      await get().markFailed(entry.id);
     }
+  }
 
-    set({ isSyncing: false });
-    console.log("[Offline] Sync complete.");
+  set({ isSyncing: false });
+  console.log("[Offline] Sync complete.");
 
-    // Let the caller refresh server state after sync
-    if (onSyncComplete) await onSyncComplete();
-  },
+  if (onSyncComplete) await onSyncComplete();
+},
 
   // ─── Cache Lookups ───────────────────────────────────────────────
 

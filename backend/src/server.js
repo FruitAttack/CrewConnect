@@ -22,6 +22,7 @@ import formsRoutes from './routes/formsRoutes.js';
 import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
+import offlineTimeEntryRoute from "./routes/offlineTimeEntriesRoute.js"
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use("/api/forms", formsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
 app.use("/api/map", mapRoutes);
 app.use("/api/companies", companyRoutes)
+app.use("/api/offline-time-entries", offlineTimeEntryRoute)
 
 // Check if we have the built frontend
 const indexPath = path.join(__dirname, '../public/index.html');

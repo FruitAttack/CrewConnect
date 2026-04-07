@@ -44,7 +44,10 @@ export async function apiCall(token, route, method = 'GET', body = null) {
       console.error(`API Error: ${response.status} - ${response.statusText}`, data);
       return {
         success: false,
-        message: data.message || `HTTP error ${response.status}: ${response.statusText}`,
+        message:
+          data.error ||
+          data.message ||
+          `HTTP error ${response.status}: ${response.statusText}`,
       };
     }
 
@@ -177,4 +180,23 @@ export async function approveTimeOff(token, requestId) {
 }
 export async function denyTimeOff(token, requestId, reason) {
   return apiCall(token, `time-off/${requestId}/deny`, 'PATCH', { notes: reason });
+}
+
+// ============================================
+// OFFLINE TIME ENTRY SYNCRONIZATION
+// ============================================
+export async function offlineClockIn(token, body) {
+  return apiCall(token, "offline-time-entries/clock-in", "POST", body);
+}
+
+export async function offlineClockOut(token, body) {
+  return apiCall(token, "offline-time-entries/clock-out", "POST", body);
+}
+
+export async function offlineStartBreak(token, body) {
+  return apiCall(token, "offline-time-entries/break/start", "POST", body);
+}
+
+export async function offlineEndBreak(token, body) {
+  return apiCall(token, "offline-time-entries/break/end", "POST", body);
 }
