@@ -44,15 +44,14 @@ test_mobile:
     - npm ci
     - CI=true npx jest --ci --watchAll=false --runInBand
 
-deploy_production:
+deployFrontend:
   stage: deploy
   image: node:20
   needs:
-    - test_backend
     - test_web
     - test_mobile
   environment:
-    name: production
+    name: production/frontend
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
   before_script:
@@ -76,3 +75,42 @@ deploy_production:
     - aws s3 sync dist/ "s3://$BUCKET_NAME/mobile/" --exclude "*" --include "index.html" --include "*.json" --cache-control "no-cache,no-store,must-revalidate,max-age=0"
     - aws cloudfront create-invalidation --distribution-id "$CF_DISTRIBUTION_ID" --paths "/index.html" "/mobile/index.html" "/_expo/*" "/mobile/_expo/*"
     - echo "Deploy complete"
+
+deployBackend:
+  stage: deploy
+  image: docker:27.0.3
+  services:
+    - docker:27.0.3-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  needs:
+    - test_backend
+  environment:
+    name: production/backend
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - apk add --no-cache aws-cli jq
+    - set -eo pipefail
+    - export AWS_PAGER=""
+    - export AWS_REGION="${AWS_REGION:-us-east-1}"
+    - test -n "$ECR_REPOSITORY_URI" || (echo "Missing ECR_REPOSITORY_URI" && exit 1)
+    - test -n "$ECS_CLUSTER" || (echo "Missing ECS_CLUSTER" && exit 1)
+    - test -n "$ECS_SERVICE" || (echo "Missing ECS_SERVICE" && exit 1)
+    - test -n "$ECS_TASK_FAMILY" || (echo "Missing ECS_TASK_FAMILY" && exit 1)
+  script:
+    - APP_VERSION="${CI_COMMIT_SHORT_SHA}-${CI_PIPELINE_ID}"
+    - IMAGE_URI="$ECR_REPOSITORY_URI:$APP_VERSION"
+    - ECR_REGISTRY="${ECR_REPOSITORY_URI%/*}"
+    - CONTAINER_NAME="${ECS_CONTAINER_NAME:-backend}"
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - docker build -t "$IMAGE_URI" backend
+    - docker push "$IMAGE_URI"
+    - TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" --query 'taskDefinition' --output json)
+    - MATCH_COUNT=$(echo "$TASK_DEF_JSON" | jq --arg CONTAINER_NAME "$CONTAINER_NAME" '[.containerDefinitions[] | select(.name == $CONTAINER_NAME)] | length')
+    - if [ "$MATCH_COUNT" -eq 0 ]; then echo "Container name '$CONTAINER_NAME' not found in task definition '$ECS_TASK_FAMILY'"; exit 1; fi
+    - echo "$TASK_DEF_JSON" | jq --arg IMAGE_URI "$IMAGE_URI" --arg CONTAINER_NAME "$CONTAINER_NAME" 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions |= map(if .name == $CONTAINER_NAME then .image = $IMAGE_URI else . end)' > new-task-def.json
+    - NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
+    - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_DEF_ARN" --force-new-deployment
+    - aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+    - echo "Backend deploy complete"
