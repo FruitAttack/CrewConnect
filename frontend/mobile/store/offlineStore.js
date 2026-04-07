@@ -25,18 +25,15 @@ function generateLocalId() {
 
 export const useOfflineStore = create((set, get) => ({
   isOffline: false,
-  queue: [],           // pending actions to sync
+  queue: [],           
   isSyncing: false,
   lastSyncAttempt: null,
   isBootstrapped: false,
 
-
-  // Cached lookup data (loaded from AsyncStorage on app start)
   cachedProjects: [],
   cachedEquipment: [],
-  cachedCostCodes: {}, // { [project_id]: [...] }
-
-  // Bootstrap State
+  cachedCostCodes: {}, 
+  
 
   setBootstrapped: (value) => set({ isBootstrapped: value }),
 

@@ -6,11 +6,8 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useOfflineStore } from "../../store/offlineStore";
-import { useTimeStore } from "../../store/timeStore";
 
-/**
- * Renders a tab icon with an optional lock badge for offline-locked tabs.
- */
+
 function LockedTabIcon({ children, locked }) {
   if (!locked) return children;
   return (
@@ -41,21 +38,7 @@ const lockStyles = StyleSheet.create({
 const DashboardLayout = () => {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme] || Colors.light;
-
-  const isOffline = useOfflineStore((s) => s.isOffline);
-  const hasOfflineClockIn = useOfflineStore((s) => s.hasOfflineClockIn);
-  const isClockedIn = useTimeStore((s) => s.isClockedIn);
-
-  /**
-   * Lock non-Clock tabs when:
-   * - The device is offline AND
-   * - The user is clocked in (either server-confirmed or via offline queue)
-   *
-   * This prevents them from navigating to Timecard / Apps / Profile where
-   * data can't load and actions would fail silently.
-   */
-  const offlineAndClocked = isOffline && (isClockedIn || hasOfflineClockIn());
-  const nonClockTabsLocked = offlineAndClocked;
+  const nonClockTabsLocked = useOfflineStore((s) => s.isOffline);
 
   return (
     <Tabs
@@ -105,16 +88,11 @@ const DashboardLayout = () => {
               Apps
             </Text>
           ),
-          // Disable the tab press listener when locked
           tabBarButton: nonClockTabsLocked
             ? (props) => (
                 <View
                   {...props}
                   onStartShouldSetResponder={() => true}
-                  onResponderGrant={() => {
-                    // Optionally show a toast/alert explaining why it's locked
-                    // Toast.show("Go online or clock out to access this tab");
-                  }}
                   style={[props.style, { opacity: 0.45 }]}
                 />
               )
