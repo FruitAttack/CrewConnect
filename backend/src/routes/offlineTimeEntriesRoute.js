@@ -5,7 +5,7 @@ import {
   offlineClockOut,
   offlineStartBreak,
   offlineEndBreak,
-} from '../controllers/offlineTimeEntryController.js';
+} from '../controllers/offlineTimeEntriesController.js';
 
 const router = express.Router();
 
