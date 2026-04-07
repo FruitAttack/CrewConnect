@@ -136,6 +136,5 @@ deployBackend:
     - if [ "$MATCH_COUNT" -eq 0 ]; then echo "Container name '$CONTAINER_NAME' not found in task definition '$ECS_TASK_FAMILY'"; exit 1; fi
     - echo "$TASK_DEF_JSON" | jq --arg IMAGE_URI "$IMAGE_URI" --arg CONTAINER_NAME "$CONTAINER_NAME" 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions |= map(if .name == $CONTAINER_NAME then .image = $IMAGE_URI else . end)' > new-task-def.json
     - NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
-    - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_DEF_ARN" --force-new-deployment
-    - aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+    - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_DEF_ARN" --force-new-deployment --deployment-configuration minimumHealthyPercent=0,maximumPercent=200
     - echo "Backend deploy complete"
