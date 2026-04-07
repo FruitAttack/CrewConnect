@@ -83,8 +83,6 @@ deployBackend:
     - docker:27.0.3-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-    AWS_REGION: "us-east-2"
-    ECR_REPOSITORY_URI: "613426352709.dkr.ecr.us-east-2.amazonaws.com/crewconnect/backend"
   needs:
     - test_backend
   environment:
@@ -95,11 +93,13 @@ deployBackend:
     - apk add --no-cache aws-cli jq
     - set -eo pipefail
     - export AWS_PAGER=""
-    - export AWS_REGION="${AWS_REGION:-us-east-1}"
-    - test -n "$ECR_REPOSITORY_URI" || (echo "Missing ECR_REPOSITORY_URI" && exit 1)
-    - test -n "$ECS_CLUSTER" || (echo "Missing ECS_CLUSTER" && exit 1)
-    - test -n "$ECS_SERVICE" || (echo "Missing ECS_SERVICE" && exit 1)
-    - test -n "$ECS_TASK_FAMILY" || (echo "Missing ECS_TASK_FAMILY" && exit 1)
+    - export AWS_REGION="us-east-2"
+    - export ECR_REPOSITORY_URI="613426352709.dkr.ecr.us-east-2.amazonaws.com/crewconnect/backend"
+    - export ECR_REPOSITORY_NAME="crewconnect/backend"
+    - export ECS_CLUSTER="default"
+    - export ECS_SERVICE="backend-5676"
+    - export ECS_TASK_FAMILY="default-backend-5676"
+    - export ECS_CONTAINER_NAME="Main"
   script:
     - APP_VERSION="${CI_COMMIT_SHORT_SHA}-${CI_PIPELINE_ID}"
     - IMAGE_URI="$ECR_REPOSITORY_URI:$APP_VERSION"
