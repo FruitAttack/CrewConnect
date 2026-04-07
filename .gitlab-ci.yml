@@ -146,6 +146,35 @@ deployBackend:
     - REGISTERED_IMAGE=$(aws ecs describe-task-definition --task-definition "$NEW_TASK_DEF_ARN" --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME'].image | [0]" --output text)
     - 'if [ "$REGISTERED_IMAGE" != "$IMAGE_URI_DIGEST" ]; then echo "Registered task definition image mismatch: expected ''$IMAGE_URI_DIGEST'' got ''$REGISTERED_IMAGE''"; exit 1; fi'
     - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_DEF_ARN" --force-new-deployment --deployment-configuration minimumHealthyPercent=0,maximumPercent=200
-    - aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+    - |
+      MAX_SECONDS=1800
+      SLEEP_SECONDS=15
+      ELAPSED=0
+
+      while [ "$ELAPSED" -lt "$MAX_SECONDS" ]; do
+        DEPLOYMENTS_JSON=$(aws ecs describe-services \
+          --cluster "$ECS_CLUSTER" \
+          --services "$ECS_SERVICE" \
+          --query "services[0].deployments[?status=='PRIMARY' || status=='ACTIVE'].{status:status,taskDefinition:taskDefinition,rolloutState:rolloutState}" \
+          --output json)
+
+        echo "$DEPLOYMENTS_JSON" | jq -r '.[] | [.rolloutState, .status, .taskDefinition] | @tsv'
+
+        MATCHED=$(echo "$DEPLOYMENTS_JSON" | jq --arg NEW_TD_ARN "$NEW_TASK_DEF_ARN" 'length == 1 and .[0].status == "PRIMARY" and .[0].rolloutState == "IN_PROGRESS" and .[0].taskDefinition == $NEW_TD_ARN')
+
+        if [ "$MATCHED" = "true" ]; then
+          echo "Reached target deployment state: only new PRIMARY deployment in IN_PROGRESS."
+          break
+        fi
+
+        sleep "$SLEEP_SECONDS"
+        ELAPSED=$((ELAPSED + SLEEP_SECONDS))
+      done
+
+      if [ "$ELAPSED" -ge "$MAX_SECONDS" ]; then
+        echo "Timed out waiting for target deployment state."
+        exit 1
+      fi
+
     - aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query "services[0].deployments[?status=='PRIMARY' || status=='ACTIVE'].{status:status,taskDefinition:taskDefinition,rolloutState:rolloutState}" --output table
     - echo "Backend deploy complete"
