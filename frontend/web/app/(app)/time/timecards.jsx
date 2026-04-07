@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, RefreshControl, ActivityIndicator, TextInput, Platform, Modal, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '../../../utils/ctx';
-import { getTimeEntries, getUserProfile, getTimecardApprovals, bulkUpdateTimecardApprovals } from '../../../utils/api';
+import { getTimeEntries, getUserProfile, getTimecardApprovals, bulkUpdateTimecardApprovals, updateTimeEntry } from '../../../utils/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../../constants/theme';
 
 // Fixed widths for alignment - all columns use exact pixel widths
@@ -85,7 +85,6 @@ const DatePickerDropdown = ({ selectedDate, onSelectDate, onClose, view }) => {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   
-  // Update viewDate when selectedDate changes from outside
   useEffect(() => {
     setViewDate(new Date(selectedDate));
   }, [selectedDate]);
@@ -207,9 +206,333 @@ const badgeStyles = StyleSheet.create({
   text: { fontSize: 11, fontWeight: '500' },
 });
 
+// ─── Edit Entry Modal ─────────────────────────────────────────────────────────
+const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
+  const [clockIn, setClockIn] = useState('');
+  const [clockOut, setClockOut] = useState('');
+  const [breakMin, setBreakMin] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Convert ISO string to datetime-local format "YYYY-MM-DDTHH:MM"
+  const toLocalInput = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  useEffect(() => {
+    if (entry) {
+      setClockIn(toLocalInput(entry.clock_in));
+      setClockOut(toLocalInput(entry.clock_out));
+      setBreakMin(String(entry.break_minutes || 0));
+      setNotes(entry.notes || '');
+      setError(null);
+    }
+  }, [entry]);
+
+  const computedHours = useMemo(() => {
+    if (!clockIn || !clockOut) return null;
+    const diff = (new Date(clockOut) - new Date(clockIn)) / 3600000 - (parseInt(breakMin) || 0) / 60;
+    return diff > 0 ? diff.toFixed(2) : null;
+  }, [clockIn, clockOut, breakMin]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updates = {
+        clock_in: clockIn ? new Date(clockIn).toISOString() : undefined,
+        clock_out: clockOut ? new Date(clockOut).toISOString() : null,
+        break_minutes: parseInt(breakMin) || 0,
+        notes,
+      };
+      await onSave(entry.id, updates);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Failed to save changes');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!entry) return null;
+
+  const displayDate = new Date(entry.clock_in).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  const webInputStyle = {
+    border: `1px solid ${colors.border.light}`,
+    borderRadius: 8,
+    padding: '10px 12px',
+    fontSize: 14,
+    color: colors.text.primary,
+    width: '100%',
+    outline: 'none',
+    fontFamily: 'inherit',
+    backgroundColor: colors.neutral.white,
+    boxSizing: 'border-box',
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={editStyles.overlay}>
+        <Pressable style={editStyles.backdrop} onPress={!saving ? onClose : undefined} />
+        <View style={editStyles.modal}>
+          {/* Header */}
+          <View style={editStyles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={editStyles.title}>Edit Time Entry</Text>
+              <Text style={editStyles.subtitle}>
+                {entry.project?.name || 'No project'} · {displayDate}
+              </Text>
+            </View>
+            <Pressable onPress={onClose} disabled={saving} style={editStyles.closeBtn}>
+              <Ionicons name="close" size={20} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+
+          {/* Form Body */}
+          <ScrollView style={editStyles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            {/* Clock In */}
+            <View style={editStyles.fieldGroup}>
+              <Text style={editStyles.label}>Clock In</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="datetime-local"
+                  value={clockIn}
+                  onChange={e => setClockIn(e.target.value)}
+                  style={webInputStyle}
+                />
+              ) : (
+                <TextInput
+                  style={editStyles.input}
+                  value={clockIn}
+                  onChangeText={setClockIn}
+                  placeholder="YYYY-MM-DDTHH:MM"
+                  placeholderTextColor={colors.text.tertiary}
+                />
+              )}
+            </View>
+
+            {/* Clock Out */}
+            <View style={editStyles.fieldGroup}>
+              <Text style={editStyles.label}>Clock Out</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="datetime-local"
+                  value={clockOut}
+                  onChange={e => setClockOut(e.target.value)}
+                  style={webInputStyle}
+                />
+              ) : (
+                <TextInput
+                  style={editStyles.input}
+                  value={clockOut}
+                  onChangeText={setClockOut}
+                  placeholder="Leave blank if still active"
+                  placeholderTextColor={colors.text.tertiary}
+                />
+              )}
+              {!entry.clock_out && (
+                <View style={editStyles.activeNote}>
+                  <Ionicons name="radio-button-on" size={12} color={activeColor} />
+                  <Text style={editStyles.activeNoteText}>Currently active — setting a clock out will end this shift</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Break Minutes */}
+            <View style={editStyles.fieldGroup}>
+              <Text style={editStyles.label}>Break (minutes)</Text>
+              <TextInput
+                style={[editStyles.input, editStyles.inputSmall]}
+                value={breakMin}
+                onChangeText={v => setBreakMin(v.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor={colors.text.tertiary}
+              />
+            </View>
+
+            {/* Notes */}
+            <View style={editStyles.fieldGroup}>
+              <Text style={editStyles.label}>Notes</Text>
+              <TextInput
+                style={[editStyles.input, editStyles.inputMultiline]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Optional notes..."
+                placeholderTextColor={colors.text.tertiary}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* Computed Hours Summary */}
+            {computedHours && (
+              <View style={editStyles.summaryRow}>
+                <Ionicons name="time-outline" size={14} color={colors.primary.orange} />
+                <Text style={editStyles.summaryText}>{computedHours}h worked after breaks</Text>
+              </View>
+            )}
+            {clockIn && clockOut && !computedHours && (
+              <View style={[editStyles.summaryRow, editStyles.summaryRowError]}>
+                <Ionicons name="warning-outline" size={14} color={colors.semantic.error} />
+                <Text style={[editStyles.summaryText, { color: colors.semantic.error }]}>Clock out must be after clock in</Text>
+              </View>
+            )}
+
+            {/* Error */}
+            {error && (
+              <View style={editStyles.errorRow}>
+                <Ionicons name="alert-circle" size={14} color={colors.semantic.error} />
+                <Text style={editStyles.errorText}>{error}</Text>
+              </View>
+            )}
+
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={editStyles.footer}>
+            <Pressable style={editStyles.cancelBtn} onPress={onClose} disabled={saving}>
+              <Text style={editStyles.cancelBtnText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[editStyles.saveBtn, (saving || (clockIn && clockOut && !computedHours)) && editStyles.saveBtnDisabled]}
+              onPress={handleSave}
+              disabled={saving || (clockIn && clockOut && !computedHours)}
+            >
+              {saving
+                ? <ActivityIndicator size="small" color="#fff" />
+                : (
+                  <>
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                    <Text style={editStyles.saveBtnText}>Save Changes</Text>
+                  </>
+                )
+              }
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const editStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  modal: {
+    backgroundColor: colors.neutral.white,
+    borderRadius: 14,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '90%',
+    overflow: 'hidden',
+    ...shadows.xl,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  title: { fontSize: 17, fontWeight: '700', color: colors.text.primary },
+  subtitle: { fontSize: 12, color: colors.text.tertiary, marginTop: 3 },
+  closeBtn: { padding: 4, marginLeft: 12 },
+  body: { padding: 20, maxHeight: 440 },
+  fieldGroup: { marginBottom: 18 },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.text.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 7,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.text.primary,
+    backgroundColor: colors.neutral.white,
+    outlineStyle: 'none',
+  },
+  inputSmall: { maxWidth: 140 },
+  inputMultiline: { minHeight: 80, textAlignVertical: 'top', paddingTop: 10 },
+  activeNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  activeNoteText: { fontSize: 11, color: activeColor, fontStyle: 'italic' },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary.orangeSubtle,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  summaryRowError: { backgroundColor: '#FEF2F2' },
+  summaryText: { fontSize: 13, fontWeight: '600', color: colors.primary.orange },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  errorText: { fontSize: 13, color: colors.semantic.error, flex: 1 },
+  footer: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
+  saveBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: colors.primary.orange,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  saveBtnDisabled: { opacity: 0.5 },
+  saveBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+});
+
 // Action Modal Component
 const ActionModal = ({ visible, onClose, selectedCount, onApprove, onReject, onRequestChanges, processing }) => {
-  const [step, setStep] = useState('initial'); // initial, reject, changes, success
+  const [step, setStep] = useState('initial');
   const [note, setNote] = useState('');
   const [successAction, setSuccessAction] = useState('');
 
@@ -335,7 +658,7 @@ const modalStyles = StyleSheet.create({
 });
 
 // Employee Row Component
-const EmployeeRow = ({ employee, weekDays, view, isLargeScreen, isSelected, isExpanded, onToggleSelect, onToggleExpand, getHoursForDay, formatHours, getInitials }) => (
+const EmployeeRow = ({ employee, weekDays, view, isLargeScreen, isSelected, isExpanded, onToggleSelect, onToggleExpand, onEditEntry, getHoursForDay, formatHours, getInitials }) => (
   <View style={styles.employeeRowContainer}>
     <Pressable style={({ hovered }) => [styles.employeeRow, isSelected && styles.employeeRowSelected, hovered && !isSelected && styles.employeeRowHovered]} onPress={onToggleExpand}>
       <View style={styles.checkboxCell}>
@@ -375,19 +698,49 @@ const EmployeeRow = ({ employee, weekDays, view, isLargeScreen, isSelected, isEx
         <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={colors.text.tertiary} />
       </View>
     </Pressable>
+
     {isExpanded && (
       <View style={styles.expandedDetails}>
-        {employee.entries.length === 0 ? <Text style={styles.noEntriesText}>No time entries</Text> : employee.entries.map((entry, idx) => {
-          const clockIn = new Date(entry.clock_in);
-          const clockOut = entry.clock_out ? new Date(entry.clock_out) : null;
-          const hours = clockOut ? ((clockOut - clockIn) / (1000 * 60 * 60) - (entry.break_minutes || 0) / 60).toFixed(1) : 'Active';
-          return (
-            <View key={entry.id || idx} style={styles.entryDetail}>
-              <View style={styles.entryLeft}><Text style={styles.entryDate}>{clockIn.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</Text><Text style={styles.entryProject}>{entry.project?.name || 'No project'}</Text></View>
-              <View style={styles.entryRight}><Text style={styles.entryTime}>{clockIn.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} – {clockOut ? clockOut.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Now'}</Text><Text style={[styles.entryHours, !clockOut && styles.entryHoursActive]}>{hours}{clockOut ? 'h' : ''}</Text></View>
-            </View>
-          );
-        })}
+        {employee.entries.length === 0 ? (
+          <Text style={styles.noEntriesText}>No time entries</Text>
+        ) : (
+          employee.entries.map((entry, idx) => {
+            const clockIn = new Date(entry.clock_in);
+            const clockOut = entry.clock_out ? new Date(entry.clock_out) : null;
+            const hours = clockOut
+              ? ((clockOut - clockIn) / (1000 * 60 * 60) - (entry.break_minutes || 0) / 60).toFixed(1)
+              : 'Active';
+
+            return (
+              <Pressable
+                key={entry.id || idx}
+                style={({ hovered }) => [styles.entryDetail, hovered && styles.entryDetailHovered]}
+                onPress={() => onEditEntry(entry)}
+              >
+                <View style={styles.entryLeft}>
+                  <Text style={styles.entryDate}>
+                    {clockIn.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </Text>
+                  <Text style={styles.entryProject}>{entry.project?.name || 'No project'}</Text>
+                </View>
+                <View style={styles.entryRight}>
+                  <Text style={styles.entryTime}>
+                    {clockIn.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    {' – '}
+                    {clockOut ? clockOut.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Now'}
+                  </Text>
+                  <Text style={[styles.entryHours, !clockOut && styles.entryHoursActive]}>
+                    {hours}{clockOut ? 'h' : ''}
+                  </Text>
+                </View>
+                {/* Edit pencil icon */}
+                <View style={styles.entryEditIcon}>
+                  <Ionicons name="pencil-outline" size={13} color={colors.text.tertiary} />
+                </View>
+              </Pressable>
+            );
+          })
+        )}
       </View>
     )}
   </View>
@@ -414,26 +767,63 @@ export default function Timecards() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [employeeStatuses, setEmployeeStatuses] = useState({});
+
+  // Edit entry state
+  const [editEntry, setEditEntry] = useState(null);
   
   const datePickerRef = useRef(null);
   const token = session?.access_token;
 
-  useEffect(() => { async function fetchUserProfile() { if (!token) return; const response = await getUserProfile(token); if (response.success && response.data?.user?.default_company_id) setCompanyId(response.data.user.default_company_id); } fetchUserProfile(); }, [token]);
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (!token) return;
+      const response = await getUserProfile(token);
+      if (response.success && response.data?.user?.default_company_id) {
+        setCompanyId(response.data.user.default_company_id);
+      }
+    }
+    fetchUserProfile();
+  }, [token]);
 
-  const getWeekRange = useCallback((date) => { const startDate = new Date(date); startDate.setDate(startDate.getDate() - startDate.getDay()); startDate.setHours(0, 0, 0, 0); const endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 6); endDate.setHours(23, 59, 59, 999); return { startDate, endDate }; }, []);
+  const getWeekRange = useCallback((date) => {
+    const startDate = new Date(date);
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+    return { startDate, endDate };
+  }, []);
 
-  const weekDays = useMemo(() => { const { startDate } = getWeekRange(selectedDate); return Array.from({ length: 7 }, (_, i) => { const day = new Date(startDate); day.setDate(day.getDate() + i); return { date: day, dayName: day.toLocaleDateString('en-US', { weekday: 'short' }), dayNum: day.getDate(), isToday: day.toDateString() === new Date().toDateString() }; }); }, [selectedDate, getWeekRange]);
+  const weekDays = useMemo(() => {
+    const { startDate } = getWeekRange(selectedDate);
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(startDate);
+      day.setDate(day.getDate() + i);
+      return {
+        date: day,
+        dayName: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayNum: day.getDate(),
+        isToday: day.toDateString() === new Date().toDateString(),
+      };
+    });
+  }, [selectedDate, getWeekRange]);
 
   const fetchTimeEntries = useCallback(async () => {
     if (!token || !companyId) { setLoading(false); return; }
     try {
       setError(null);
-      const { startDate, endDate } = view === 'week' ? getWeekRange(selectedDate) : { startDate: selectedDate, endDate: selectedDate };
+      const { startDate, endDate } = view === 'week'
+        ? getWeekRange(selectedDate)
+        : { startDate: selectedDate, endDate: selectedDate };
       const weekStartStr = startDate.toISOString().split('T')[0];
       
-      // Fetch both time entries and approvals in parallel
       const [entriesResponse, approvalsResponse] = await Promise.all([
-        getTimeEntries(token, companyId, { start_date: weekStartStr, end_date: endDate.toISOString().split('T')[0], all_users: 'true' }),
+        getTimeEntries(token, companyId, {
+          start_date: weekStartStr,
+          end_date: endDate.toISOString().split('T')[0],
+          all_users: 'true',
+        }),
         getTimecardApprovals(token, companyId, weekStartStr),
       ]);
       
@@ -443,7 +833,6 @@ export default function Timecards() {
         setError(entriesResponse.message || 'Failed to load time entries');
       }
       
-      // Load approvals into state
       if (approvalsResponse.success && Array.isArray(approvalsResponse.data)) {
         const statusMap = {};
         approvalsResponse.data.forEach(approval => {
@@ -452,11 +841,17 @@ export default function Timecards() {
         });
         setEmployeeStatuses(prev => ({ ...prev, ...statusMap }));
       }
-    } catch (err) { setError('Failed to load time entries'); }
-    finally { setLoading(false); setRefreshing(false); }
+    } catch (err) {
+      setError('Failed to load time entries');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [token, companyId, selectedDate, view, getWeekRange]);
 
-  useEffect(() => { if (companyId) { setLoading(true); fetchTimeEntries(); } }, [companyId, selectedDate, view, fetchTimeEntries]);
+  useEffect(() => {
+    if (companyId) { setLoading(true); fetchTimeEntries(); }
+  }, [companyId, selectedDate, view, fetchTimeEntries]);
 
   const onRefresh = () => { setRefreshing(true); fetchTimeEntries(); };
 
@@ -493,7 +888,6 @@ export default function Timecards() {
         const clockOut = new Date(e.clock_out);
         return sum + ((clockOut - clockIn) / (1000 * 60 * 60) - (e.break_minutes || 0) / 60);
       }, 0);
-      // Look up status by employee ID + current week
       const statusKey = `${emp.id}_${currentWeekKey}`;
       return { ...emp, totalHours, status: employeeStatuses[statusKey] || 'pending' };
     });
@@ -534,16 +928,6 @@ export default function Timecards() {
     const weekStart = startDate.toISOString().split('T')[0];
     const weekEnd = endDate.toISOString().split('T')[0];
     
-    console.log('Updating timecard approvals:', {
-      company_id: companyId,
-      week_start: weekStart,
-      week_end: weekEnd,
-      user_ids: Array.from(selectedEmployees),
-      status,
-      notes,
-    });
-    
-    // Save to database
     const response = await bulkUpdateTimecardApprovals(token, {
       company_id: companyId,
       week_start: weekStart,
@@ -553,10 +937,7 @@ export default function Timecards() {
       notes,
     });
     
-    console.log('Approval response:', response);
-    
     if (response.success) {
-      // Update local state
       const newStatuses = { ...employeeStatuses };
       selectedEmployees.forEach(id => { 
         const statusKey = `${id}_${currentWeekKey}`;
@@ -565,7 +946,6 @@ export default function Timecards() {
       setEmployeeStatuses(newStatuses);
       return true;
     } else {
-      console.error('Failed to update approvals:', response.message);
       alert('Failed to save approval: ' + (response.message || 'Unknown error'));
       return false;
     }
@@ -573,42 +953,42 @@ export default function Timecards() {
 
   const handleApprove = async () => { 
     setProcessing(true); 
-    const success = await updateStatuses('approved');
+    await updateStatuses('approved');
     setProcessing(false);
-    if (!success) {
-      // Show error - could add an alert here
-      console.error('Failed to approve timecards');
-    }
   };
   
   const handleReject = async (note) => { 
     setProcessing(true); 
     const success = await updateStatuses('rejected', note);
     setProcessing(false); 
-    if (success) {
-      setShowActionModal(false); 
-      setSelectedEmployees(new Set()); 
-    }
+    if (success) { setShowActionModal(false); setSelectedEmployees(new Set()); }
   };
   
   const handleRequestChanges = async (note) => { 
     setProcessing(true); 
     const success = await updateStatuses('pending_changes', note);
     setProcessing(false); 
-    if (success) {
-      setShowActionModal(false); 
-      setSelectedEmployees(new Set()); 
-    }
+    if (success) { setShowActionModal(false); setSelectedEmployees(new Set()); }
   };
   
   const handleModalClose = () => { 
-    if (!processing) { 
-      setShowActionModal(false); 
-      setSelectedEmployees(new Set()); 
-    } 
+    if (!processing) { setShowActionModal(false); setSelectedEmployees(new Set()); }
   };
 
-  // Click outside handler for date picker - includes the dropdown in the ref
+  // ─── Handle save from edit modal ───────────────────────────────────────────
+  const handleSaveEntry = async (entryId, updates) => {
+    const response = await updateTimeEntry(token, entryId, updates);
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to update time entry');
+    }
+    // Update local state optimistically so the UI refreshes immediately
+    setTimeEntries(prev =>
+      prev.map(e => e.id === entryId ? { ...e, ...updates } : e)
+    );
+    // Then re-fetch to get fully populated relational data
+    fetchTimeEntries();
+  };
+
   useEffect(() => { 
     const handleClick = (e) => { 
       if (datePickerRef.current && !datePickerRef.current.contains(e.target)) {
@@ -621,7 +1001,12 @@ export default function Timecards() {
     } 
   }, [showDatePicker]);
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary.orange} /><Text style={styles.loadingText}>Loading timecards...</Text></View>;
+  if (loading) return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary.orange} />
+      <Text style={styles.loadingText}>Loading timecards...</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -629,46 +1014,97 @@ export default function Timecards() {
         <View style={styles.toolbarLeft}>
           <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
             <Ionicons name="search" size={16} color={searchFocused ? colors.primary.orange : colors.text.tertiary} />
-            <TextInput style={styles.searchInput} placeholder="Search employees..." placeholderTextColor={colors.text.tertiary} value={searchQuery} onChangeText={setSearchQuery} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} />
-            {searchQuery.length > 0 && <Pressable onPress={() => setSearchQuery('')}><Ionicons name="close-circle" size={16} color={colors.text.tertiary} /></Pressable>}
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search employees..."
+              placeholderTextColor={colors.text.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={16} color={colors.text.tertiary} />
+              </Pressable>
+            )}
           </View>
           <View style={styles.viewToggle}>
-            <Pressable style={[styles.viewBtn, view === 'day' && styles.viewBtnActive]} onPress={() => setView('day')}><Text style={[styles.viewText, view === 'day' && styles.viewTextActive]}>Day</Text></Pressable>
-            <Pressable style={[styles.viewBtn, view === 'week' && styles.viewBtnActive]} onPress={() => setView('week')}><Text style={[styles.viewText, view === 'week' && styles.viewTextActive]}>Week</Text></Pressable>
+            <Pressable style={[styles.viewBtn, view === 'day' && styles.viewBtnActive]} onPress={() => setView('day')}>
+              <Text style={[styles.viewText, view === 'day' && styles.viewTextActive]}>Day</Text>
+            </Pressable>
+            <Pressable style={[styles.viewBtn, view === 'week' && styles.viewBtnActive]} onPress={() => setView('week')}>
+              <Text style={[styles.viewText, view === 'week' && styles.viewTextActive]}>Week</Text>
+            </Pressable>
           </View>
-          {/* Date picker with dropdown inside the same ref container */}
           <View style={styles.datePickerContainer} ref={datePickerRef}>
             <View style={styles.dateNav}>
-              <Pressable style={styles.navArrow} onPress={() => navigateDate(-1)}><Ionicons name="chevron-back" size={16} color={colors.text.secondary} /></Pressable>
+              <Pressable style={styles.navArrow} onPress={() => navigateDate(-1)}>
+                <Ionicons name="chevron-back" size={16} color={colors.text.secondary} />
+              </Pressable>
               <Pressable style={styles.dateBtn} onPress={() => setShowDatePicker(!showDatePicker)}>
                 <Ionicons name="calendar-outline" size={14} color={colors.primary.orange} />
                 <Text style={styles.dateText}>{formatDateHeader()}</Text>
                 <Ionicons name="chevron-down" size={12} color={colors.text.tertiary} />
               </Pressable>
-              <Pressable style={styles.navArrow} onPress={() => navigateDate(1)}><Ionicons name="chevron-forward" size={16} color={colors.text.secondary} /></Pressable>
+              <Pressable style={styles.navArrow} onPress={() => navigateDate(1)}>
+                <Ionicons name="chevron-forward" size={16} color={colors.text.secondary} />
+              </Pressable>
             </View>
             {showDatePicker && (
               <View style={styles.datePickerDropdown}>
-                <DatePickerDropdown selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={() => setShowDatePicker(false)} view={view} />
+                <DatePickerDropdown
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  onClose={() => setShowDatePicker(false)}
+                  view={view}
+                />
               </View>
             )}
           </View>
-          <Pressable style={styles.todayBtn} onPress={() => setSelectedDate(new Date())}><Text style={styles.todayBtnText}>Today</Text></Pressable>
+          <Pressable style={styles.todayBtn} onPress={() => setSelectedDate(new Date())}>
+            <Text style={styles.todayBtnText}>Today</Text>
+          </Pressable>
         </View>
         <View style={styles.toolbarRight}>
-          <Pressable style={({ hovered }) => [styles.exportBtn, hovered && styles.exportBtnHovered]}><Ionicons name="download-outline" size={16} color={colors.text.primary} /><Text style={styles.exportBtnText}>Export</Text></Pressable>
-          <Pressable style={[styles.approveBtn, selectedEmployees.size === 0 && styles.approveBtnDisabled]} disabled={selectedEmployees.size === 0} onPress={() => setShowActionModal(true)}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={selectedEmployees.size > 0 ? '#fff' : colors.text.tertiary} /><Text style={[styles.approveBtnText, selectedEmployees.size === 0 && styles.approveBtnTextDisabled]}>Review{selectedEmployees.size > 0 ? ` (${selectedEmployees.size})` : ''}</Text>
+          <Pressable style={({ hovered }) => [styles.exportBtn, hovered && styles.exportBtnHovered]}>
+            <Ionicons name="download-outline" size={16} color={colors.text.primary} />
+            <Text style={styles.exportBtnText}>Export</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.approveBtn, selectedEmployees.size === 0 && styles.approveBtnDisabled]}
+            disabled={selectedEmployees.size === 0}
+            onPress={() => setShowActionModal(true)}
+          >
+            <Ionicons name="checkmark-circle-outline" size={16} color={selectedEmployees.size > 0 ? '#fff' : colors.text.tertiary} />
+            <Text style={[styles.approveBtnText, selectedEmployees.size === 0 && styles.approveBtnTextDisabled]}>
+              Review{selectedEmployees.size > 0 ? ` (${selectedEmployees.size})` : ''}
+            </Text>
           </Pressable>
         </View>
       </View>
 
-      {error && <View style={styles.errorContainer}><Ionicons name="alert-circle" size={20} color={colors.semantic.error} /><Text style={styles.errorText}>{error}</Text><Pressable style={styles.retryBtn} onPress={fetchTimeEntries}><Text style={styles.retryBtnText}>Retry</Text></Pressable></View>}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={20} color={colors.semantic.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable style={styles.retryBtn} onPress={fetchTimeEntries}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
 
       {!error && filteredEmployees.length > 0 && (
         <View style={styles.tableContainer}>
           <View style={styles.tableHeader}>
-            <Pressable style={styles.selectAllBtn} onPress={selectAllEmployees}><Ionicons name={selectedEmployees.size === filteredEmployees.length ? "checkbox" : "square-outline"} size={18} color={selectedEmployees.size === filteredEmployees.length ? colors.primary.orange : colors.text.tertiary} /><Text style={styles.selectAllText}>Select All</Text></Pressable>
+            <Pressable style={styles.selectAllBtn} onPress={selectAllEmployees}>
+              <Ionicons
+                name={selectedEmployees.size === filteredEmployees.length ? "checkbox" : "square-outline"}
+                size={18}
+                color={selectedEmployees.size === filteredEmployees.length ? colors.primary.orange : colors.text.tertiary}
+              />
+              <Text style={styles.selectAllText}>Select All</Text>
+            </Pressable>
             <Text style={styles.employeeCount}>{filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''}</Text>
           </View>
           <ScrollView 
@@ -693,14 +1129,58 @@ export default function Timecards() {
                 <View style={styles.chevronHeaderCell} />
               </View>
             )}
-            {filteredEmployees.map(emp => <EmployeeRow key={emp.id} employee={emp} weekDays={weekDays} view={view} isLargeScreen={isLargeScreen} isSelected={selectedEmployees.has(emp.id)} isExpanded={expandedEmployee === emp.id} onToggleSelect={() => toggleEmployeeSelection(emp.id)} onToggleExpand={() => setExpandedEmployee(expandedEmployee === emp.id ? null : emp.id)} getHoursForDay={getHoursForDay} formatHours={formatHours} getInitials={getInitials} />)}
+            {filteredEmployees.map(emp => (
+              <EmployeeRow
+                key={emp.id}
+                employee={emp}
+                weekDays={weekDays}
+                view={view}
+                isLargeScreen={isLargeScreen}
+                isSelected={selectedEmployees.has(emp.id)}
+                isExpanded={expandedEmployee === emp.id}
+                onToggleSelect={() => toggleEmployeeSelection(emp.id)}
+                onToggleExpand={() => setExpandedEmployee(expandedEmployee === emp.id ? null : emp.id)}
+                onEditEntry={setEditEntry}
+                getHoursForDay={getHoursForDay}
+                formatHours={formatHours}
+                getInitials={getInitials}
+              />
+            ))}
           </ScrollView>
         </View>
       )}
 
-      {!error && filteredEmployees.length === 0 && <View style={styles.emptyStateContainer}><View style={styles.emptyState}><View style={styles.emptyIcon}><Ionicons name="time-outline" size={32} color={colors.text.tertiary} /></View><Text style={styles.emptyTitle}>No timecards found</Text><Text style={styles.emptySubtitle}>{searchQuery ? 'No employees match your search' : `No time entries for this ${view}`}</Text></View></View>}
+      {!error && filteredEmployees.length === 0 && (
+        <View style={styles.emptyStateContainer}>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="time-outline" size={32} color={colors.text.tertiary} />
+            </View>
+            <Text style={styles.emptyTitle}>No timecards found</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery ? 'No employees match your search' : `No time entries for this ${view}`}
+            </Text>
+          </View>
+        </View>
+      )}
 
-      <ActionModal visible={showActionModal} onClose={handleModalClose} selectedCount={selectedEmployees.size} onApprove={handleApprove} onReject={handleReject} onRequestChanges={handleRequestChanges} processing={processing} />
+      <ActionModal
+        visible={showActionModal}
+        onClose={handleModalClose}
+        selectedCount={selectedEmployees.size}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onRequestChanges={handleRequestChanges}
+        processing={processing}
+      />
+
+      {/* Edit Entry Modal */}
+      <EditEntryModal
+        visible={!!editEntry}
+        onClose={() => setEditEntry(null)}
+        entry={editEntry}
+        onSave={handleSaveEntry}
+      />
     </View>
   );
 }
@@ -720,15 +1200,12 @@ const styles = StyleSheet.create({
   viewBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
   viewText: { fontSize: 13, fontWeight: '500', color: colors.text.tertiary },
   viewTextActive: { color: colors.text.primary },
-  
-  // Date picker container - holds both button and dropdown
   datePickerContainer: { position: 'relative', zIndex: 1000 },
   dateNav: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   navArrow: { padding: 6, borderRadius: 4 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.neutral.offWhite },
   dateText: { fontSize: 13, fontWeight: '600', color: colors.text.primary },
   datePickerDropdown: { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1001 },
-  
   todayBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.primary.orange },
   todayBtnText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.neutral.white },
@@ -747,8 +1224,6 @@ const styles = StyleSheet.create({
   selectAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   selectAllText: { fontSize: 12, fontWeight: '500', color: colors.text.secondary },
   employeeCount: { fontSize: 12, color: colors.text.tertiary },
-  
-  // Column headers - inside ScrollView so it aligns with content
   columnHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.neutral.offWhite, borderBottomWidth: 1, borderBottomColor: colors.border.light },
   checkboxHeaderCell: { width: CHECKBOX_WIDTH },
   employeeHeaderCell: { flex: 1 },
@@ -761,12 +1236,8 @@ const styles = StyleSheet.create({
   dayLabel: { fontSize: 10, fontWeight: '500', color: colors.text.tertiary },
   dayNum: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
   todayLabel: { color: colors.primary.orange },
-  
-  // Table body
   tableBody: { flex: 1 },
   tableBodyContent: { paddingBottom: 16 },
-  
-  // Row cells - must match header cells exactly
   employeeRowContainer: { borderBottomWidth: 1, borderBottomColor: colors.border.light },
   employeeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 12, paddingRight: 12 },
   employeeRowSelected: { backgroundColor: colors.primary.orangeSubtle },
@@ -778,7 +1249,6 @@ const styles = StyleSheet.create({
   todayCellBg: { backgroundColor: colors.primary.orangeSubtle, borderRadius: 4 },
   totalCell: { width: TOTAL_COLUMN_WIDTH, alignItems: 'flex-end' },
   chevronCell: { width: CHEVRON_WIDTH, alignItems: 'center' },
-  
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary.orangeSubtle, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   avatarText: { fontSize: 11, fontWeight: '600', color: colors.primary.orange },
   employeeDetails: { flex: 1 },
@@ -792,14 +1262,16 @@ const styles = StyleSheet.create({
   totalHoursOvertime: { color: colors.semantic.error },
   expandedDetails: { padding: 12, paddingLeft: CHECKBOX_WIDTH + 20, backgroundColor: colors.neutral.offWhite, gap: 6 },
   noEntriesText: { fontSize: 12, color: colors.text.tertiary, fontStyle: 'italic' },
-  entryDetail: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.neutral.white, padding: 10, borderRadius: 6 },
+  entryDetail: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.neutral.white, padding: 10, borderRadius: 6 },
+  entryDetailHovered: { backgroundColor: '#FFF8F5' },
   entryLeft: { flex: 1 },
   entryDate: { fontSize: 12, fontWeight: '500', color: colors.text.primary },
   entryProject: { fontSize: 11, color: colors.text.tertiary, marginTop: 2 },
-  entryRight: { alignItems: 'flex-end' },
+  entryRight: { alignItems: 'flex-end', marginRight: 8 },
   entryTime: { fontSize: 11, color: colors.text.secondary },
   entryHours: { fontSize: 12, fontWeight: '600', color: colors.text.primary, marginTop: 2 },
   entryHoursActive: { color: activeColor },
+  entryEditIcon: { paddingLeft: 4, opacity: 0.5 },
   emptyStateContainer: { flex: 1, padding: 16 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.neutral.white, borderRadius: 8, borderWidth: 1, borderColor: colors.border.light },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.neutral.offWhite, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
