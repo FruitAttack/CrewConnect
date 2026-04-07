@@ -3,6 +3,7 @@ import { SessionProvider, useSession } from '../utils/ctx';
 import { SplashScreenController } from '../utils/splash';
 import { useEffect } from "react";
 import { useOfflineStore } from "../store/offlineStore";
+import { useTimeStore } from "../store/timeStore";
 import { useNetworkStatus } from "../utils/useNetworkStatus";
 
 export default function Root() {
@@ -39,12 +40,33 @@ function RootNavigator() {
 export function OfflineBootstrap() {
   const loadQueue = useOfflineStore((s) => s.loadQueue);
   const loadCaches = useOfflineStore((s) => s.loadCaches);
- 
+  const setBootstrapped = useOfflineStore((s) => s.setBootstrapped);
+
   useEffect(() => {
-    loadQueue();
-    loadCaches();
-  }, []);
- 
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await Promise.all([loadQueue(), loadCaches()]);
+
+        if (cancelled) return;
+
+        const queue = useOfflineStore.getState().queue;
+        useTimeStore.getState().restoreFromOfflineQueue(queue);
+      } catch (error) {
+        console.error("[OfflineBootstrap] Failed to initialize offline state:", error);
+      } finally {
+        if (!cancelled) {
+          setBootstrapped(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadQueue, loadCaches, setBootstrapped]);
+
   return null;
 }
  

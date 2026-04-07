@@ -130,31 +130,45 @@ export const useTimeStore = create((set, get) => ({
    * 2. Reset shift seconds (new day = new shift for display)
    * 3. Update today's seconds
    */
-  checkMidnightCrossing: async (session) => {
+  checkMidnightCrossing: async (session, { isOffline = false } = {}) => {
     const state = get();
-    const today = new Date().toDateString();
-    
-    // If the day has changed and user is clocked in
-    if (state._currentDay !== today && state.isClockedIn) {
-      console.log("🌙 Midnight crossing detected! Refreshing from server...");
-      console.log("   Previous day:", state._currentDay);
-      console.log("   Current day:", today);
-      
-      // Update the tracked day
-      set({ _currentDay: today });
-      
-      // Re-hydrate from server to get the new split entry
-      await get().hydrateFromServer(session);
-      
-      return true; // Indicates midnight was crossed
+    const now = new Date();
+    const today = now.toDateString();
+
+    if (state._currentDay === today) {
+      return false;
     }
-    
-    // Update tracked day even if not clocked in
-    if (state._currentDay !== today) {
-      set({ _currentDay: today });
+
+    console.log("🌙 Midnight crossing detected!");
+    console.log("   Previous day:", state._currentDay);
+    console.log("   Current day:", today);
+
+    // Always advance the tracked day
+    set({ _currentDay: today });
+
+    // If not clocked in, we're done
+    if (!state.isClockedIn) {
+      return true;
     }
-    
-    return false;
+
+    // Offline: do a local rollover only
+    if (isOffline) {
+      const midnight = new Date(now);
+      midnight.setHours(0, 0, 0, 0);
+
+      set({
+        pendingMidnightHydration: true,
+        secondsWorkedToday: 0,
+        secondsWorkedShift: 0,
+        lastServerUpdateTimestamp: midnight.getTime(),
+      });
+
+      return true;
+    }
+
+    // Online: re-hydrate from server to get the split entry / new entry ID
+    await get().hydrateFromServer(session);
+    return true;
   },
 
   /**
@@ -163,19 +177,18 @@ export const useTimeStore = create((set, get) => ({
    */
   startMidnightWatch: (session) => {
     const state = get();
-    
-    // Clear any existing interval
+
     if (state._midnightCheckInterval) {
       clearInterval(state._midnightCheckInterval);
     }
-    
-    // Check every minute for midnight crossing
+
     const interval = setInterval(() => {
-      get().checkMidnightCrossing(session);
-    }, 60000); // Check every 60 seconds
-    
+      const isOffline = useOfflineStore.getState().isOffline;
+      get().checkMidnightCrossing(session, { isOffline });
+    }, 60000);
+
     set({ _midnightCheckInterval: interval });
-    
+
     console.log("🌙 Midnight watch started");
   },
 
@@ -192,6 +205,76 @@ export const useTimeStore = create((set, get) => ({
       console.log("🌙 Midnight watch stopped");
     }
   },
+
+  // For when we have a cold start and need to restore our states
+  restoreFromOfflineQueue: (queue) => {
+  const entries = [...queue]
+    .filter((e) => e.status !== "failed")
+    .sort((a, b) => a.localTimestamp - b.localTimestamp);
+
+  let activeClockIn = null;
+  let activeBreak = null;
+
+  for (const entry of entries) {
+    switch (entry.type) {
+      case "CLOCK_IN":
+        activeClockIn = entry;
+        activeBreak = null;
+        break;
+
+      case "START_BREAK":
+        if (activeClockIn) activeBreak = entry;
+        break;
+
+      case "END_BREAK":
+        activeBreak = null;
+        break;
+
+      case "CLOCK_OUT":
+        activeClockIn = null;
+        activeBreak = null;
+        break;
+    }
+  }
+
+  if (!activeClockIn) {
+    set({
+      isClockedIn: false,
+      currentTimeEntryId: null,
+      isOnBreak: false,
+      currentBreakId: null,
+      breakStartTime: null,
+      secondsWorkedShift: 0,
+      lastServerUpdateTimestamp: null,
+      _currentDay: new Date().toDateString(),
+    });
+    return;
+  }
+
+  const clockInMs =
+    Date.parse(activeClockIn.payload?.clock_in) || activeClockIn.localTimestamp;
+
+  const breakStartMs = activeBreak
+    ? Date.parse(activeBreak.payload?.break_start) || activeBreak.localTimestamp
+    : null;
+
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - clockInMs) / 1000)
+  );
+
+  set({
+    isClockedIn: true,
+    currentTimeEntryId: activeClockIn.id,
+    isOnBreak: !!activeBreak,
+    currentBreakId: activeBreak?.id || null,
+    breakStartTime: breakStartMs,
+    secondsWorkedShift: elapsedSeconds,
+    secondsWorkedToday: elapsedSeconds,
+    lastServerUpdateTimestamp: Date.now(),
+    _currentDay: new Date().toDateString(),
+  });
+},
 
   // --- API / ASYNC Actions ---
 
@@ -229,6 +312,7 @@ export const useTimeStore = create((set, get) => ({
       isOnBreak: !!breakResp.data,
       currentBreakId: breakResp.data?.id || null,
       _currentDay: new Date().toDateString(),
+      pendingMidnightHydration: false,
     });
 
     // Fetch authoritative worked seconds

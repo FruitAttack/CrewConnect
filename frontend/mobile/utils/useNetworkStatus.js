@@ -30,7 +30,7 @@ export function useNetworkStatus() {
       if (!offline && wasOffline.current) {
         // We just came back online
         console.log("[Network] Back online — syncing offline queue...");
-        await syncQueue(session, apiCall, () => hydrateFromServer(session));
+        await syncQueue(session, () => hydrateFromServer(session));
       }
 
       wasOffline.current = offline;
