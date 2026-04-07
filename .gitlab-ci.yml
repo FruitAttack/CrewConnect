@@ -80,9 +80,12 @@ deployBackend:
   stage: deploy
   image: docker:27.0.3
   services:
-    - docker:27.0.3-dind
+    - name: docker:27.0.3-dind
+      alias: docker
+      command: ["--tls=false"]
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
   needs:
     - test_backend
   environment:
