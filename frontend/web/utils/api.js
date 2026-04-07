@@ -5,7 +5,10 @@
 // Allow overriding via environment variable `REACT_APP_API_URL`.
 // Prefer explicit EXPO_PUBLIC_API_BASE_URL or EXPO_PUBLIC_API_URL, otherwise
 // default to the local backend at port 3001 for development.
-const API_URL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001"
+// In production EXPO_PUBLIC_API_BASE_URL must be set. In development default to localhost:3001
+const API_URL = process.env.EXPO_PUBLIC_ENV === 'production'
+  ? process.env.EXPO_PUBLIC_API_BASE_URL || "" // REQUIRED in production
+  : process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'; 
 import { SAMPLE_FORMS } from "./sampleForms"
 //const API_URL = "http://192.168.86.22:3001"
 

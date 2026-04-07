@@ -1,0 +1,78 @@
+stages:
+  - test
+  - deploy
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - when: never
+
+default:
+  interruptible: true
+
+test_backend:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd backend
+    - npm ci
+    - npm test
+
+test_web:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd frontend/web
+    - npm ci
+    - npm test -- --watch=false
+
+test_mobile:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd frontend/mobile
+    - npm ci
+    - CI=true npx jest --ci --watchAll=false --runInBand
+
+deploy_production:
+  stage: deploy
+  image: node:20
+  needs:
+    - test_backend
+    - test_web
+    - test_mobile
+  environment:
+    name: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - apt-get update
+    - apt-get install -y awscli
+    - set -eo pipefail
+    - export AWS_PAGER=""
+    - export AWS_REGION="us-east-1"
+    - export BUCKET_NAME="crewconnect-web-frontend"
+    - export CF_DISTRIBUTION_ID="EKBX6UTNXR4SC"
+  script:
+    - cd frontend/web
+    - npm ci
+    - npx expo export --platform web --clear
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete --exclude "index.html" --exclude "*.json" --cache-control "public,max-age=31536000,immutable"
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/" --exclude "*" --include "index.html" --include "*.json" --cache-control "no-cache,no-store,must-revalidate,max-age=0"
+    - cd ../mobile
+    - npm ci
+    - EXPO_PUBLIC_ENV=production npx expo export --platform web --clear
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/mobile/" --delete --exclude "index.html" --exclude "*.json" --cache-control "public,max-age=31536000,immutable"
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/mobile/" --exclude "*" --include "index.html" --include "*.json" --cache-control "no-cache,no-store,must-revalidate,max-age=0"
+    - aws cloudfront create-invalidation --distribution-id "$CF_DISTRIBUTION_ID" --paths "/index.html" "/mobile/index.html" "/_expo/*" "/mobile/_expo/*"
+    - echo "Deploy complete"

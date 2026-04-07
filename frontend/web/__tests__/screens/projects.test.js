@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView } from 'react-native';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react-native';
 
-import Projects from '../../app/(app)/Projects';
+import Projects from '../../app/(app)/projects';
 import CreateProjectModal from '../../app/components/projectComponents/createProjectModal';
 
 import { getUserProfile, getProjects } from '../../utils/api';
