@@ -8,7 +8,7 @@ import { colors, spacing, borderRadius, typography } from "../../../constants/th
 
 const TABS = [
   { key: "project", label: "Project", icon: "folder-outline", route: "/(app)/project/projectsOverview", matchPath: "/project/projectsOverview" },
-  { key: "labor", label: "Labor", icon: "people-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
+  { key: "labor", label: "Project Health", icon: "pulse-outline", route: "/(app)/project/laborOverview", matchPath: "/project/laborOverview" },
   { key: "costCodes", label: "Cost Codes", icon: "cube-outline", route: "/(app)/project/costCodesOverview", matchPath: "/project/costCodesOverview" },
   { key: "forms", label: "Forms", icon: "document-text-outline", route: "/(app)/project/formsOverview", matchPath: "/project/formsOverview" },
 ];
