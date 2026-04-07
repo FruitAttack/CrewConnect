@@ -177,13 +177,13 @@ describe('Time Entries Routes', () => {
       expect(response.status).toBe(204);
     });
 
-    it('PUT /:id/cost-code should call updateCostCode', async () => {
+    it('PUT /update-cost-code should call updateCostCode', async () => {
       controller.updateCostCode.mockImplementation((req, res) => {
         res.status(200).json({ id: '1', cost_code_id: 'cc-2' });
       });
 
       const response = await request(app)
-        .put('/api/time-entries/1/cost-code')
+        .put('/api/time-entries/update-cost-code')
         .send({ cost_code_id: 'cc-2' });
 
       expect(controller.updateCostCode).toHaveBeenCalled();
