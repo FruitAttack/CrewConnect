@@ -73,12 +73,6 @@ router.get('/', getTimeEntries);
 router.get('/nearby-projects', getNearbyProjects);
 router.post('/validate-geofence', validateGeofence);
 
-// CRUD operations
-router.put('/:id', updateTimeEntry);
-router.delete('/:id', deleteTimeEntry);
-router.put('/:id/cost-code', updateCostCode);
-router.put('/:id/notes', updateNotes);
-
 // Time calculations
 router.get('/seconds-worked/shift', getSecondsWorkedShift);
 router.get('/seconds-worked/today', getSecondsWorkedToday);
@@ -106,11 +100,6 @@ router.post('/manage/:user_id/switch-task', switchTaskForUser);
 router.post('/manage/:user_id/break/start', startBreakForUser);
 router.post('/manage/:user_id/break/end', endBreakForUser);
 
-// Break management
-router.post('/break/start', startBreak);
-router.post('/break/end', endBreak);
-router.get('/break/current', getCurrentBreak);
-
 // Cost code management - MUST BE BEFORE /:id routes!
 router.put('/update-cost-code', updateCostCode);
 
@@ -119,7 +108,6 @@ router.get('/nearby-projects', getNearbyProjects);
 router.post('/validate-geofence', validateGeofence);
 
 // CRUD operations - parameterized routes go LAST
-router.get('/', getTimeEntries);
 router.patch('/:id/notes', updateNotes);
 router.put('/:id', updateTimeEntry);
 router.delete('/:id', deleteTimeEntry);

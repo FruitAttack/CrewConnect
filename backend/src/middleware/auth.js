@@ -71,10 +71,11 @@ export const authenticate = async (req, res, next) => {
       id: user.id,
       email: user.email,
       full_name: user.full_name,
+      company_id: user.default_company_id,         // alias used by controllers
       default_company_id: user.default_company_id,
       can_view_rates: user.can_view_rates,
       role_key: role_key,
-      roles: [] // Empty for now - can add role lookup separately if needed
+      roles: []
     };
 
     console.log('req.user set:', req.user);

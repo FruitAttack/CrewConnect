@@ -1,6 +1,6 @@
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import { Slot, usePathname, useRouter } from "expo-router";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, shadows } from '../../../constants/theme';
 
 const tabs = [
@@ -8,6 +8,7 @@ const tabs = [
   { key: 'employees', label: 'Employees', icon: 'person-outline', path: '/workforce/employees' },
   { key: 'crews', label: 'Crews', icon: 'people-circle-outline', path: '/workforce/crews' },
   { key: 'costCodes', label: 'Cost Codes', icon: 'pricetag-outline', path: '/workforce/costCodes' },
+  { key: 'equipment', label: 'Equipment', icon: 'excavator', path: '/workforce/equipment', iconSet: 'mci' },
 ];
 
 export default function WorkforceLayout() {
@@ -19,6 +20,7 @@ export default function WorkforceLayout() {
     if (pathname.includes('/employees')) return 'employees';
     if (pathname.includes('/crews')) return 'crews';
     if (pathname.includes('/costCodes')) return 'costCodes';
+    if (pathname.includes('/equipment')) return 'equipment';
     return 'index';
   };
 
@@ -40,11 +42,19 @@ export default function WorkforceLayout() {
               ]}
               onPress={() => router.push(tab.path)}
             >
-              <Ionicons 
-                name={tab.icon} 
-                size={18} 
-                color={isActive ? colors.primary.orange : colors.text.tertiary} 
-              />
+              {tab.iconSet === 'mci' ? (
+                <MaterialCommunityIcons
+                  name={tab.icon}
+                  size={18}
+                  color={isActive ? colors.primary.orange : colors.text.tertiary}
+                />
+              ) : (
+                <Ionicons
+                  name={tab.icon}
+                  size={18}
+                  color={isActive ? colors.primary.orange : colors.text.tertiary}
+                />
+              )}
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                 {tab.label}
               </Text>

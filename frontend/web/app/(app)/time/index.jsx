@@ -312,7 +312,7 @@ export default function TimeOverview() {
 
   const getInitials = (n) => n?.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase() || '??';
 
-  if (loading) return <View style={s.loading}><ActivityIndicator color={colors.primary.orange} /><Text style={s.loadingText}>Loading...</Text></View>;
+  if (loading) return <View style={s.loading}><ActivityIndicator size="large" color={colors.primary.orange} /><Text style={s.loadingText}>Loading...</Text></View>;
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.orange} />}>

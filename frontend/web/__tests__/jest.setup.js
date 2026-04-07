@@ -4,6 +4,22 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('recharts', () => {
+  const { View } = require('react-native');
+
+  return {
+    BarChart: View,
+    Bar: View,
+    XAxis: View,
+    YAxis: View,
+    Tooltip: View,
+    ResponsiveContainer: View,
+    Cell: View,
+    CartesianGrid: View,
+    Legend: View,
+  };
+});
+
 jest.mock('../utils/supabase.js', () => ({
   supabase: {
     auth: {

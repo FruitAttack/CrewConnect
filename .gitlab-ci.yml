@@ -1,0 +1,180 @@
+stages:
+  - test
+  - deploy
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - when: never
+
+default:
+  interruptible: true
+
+test_backend:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd backend
+    - npm ci
+    - npm test
+
+test_web:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd frontend/web
+    - npm ci
+    - npm test -- --watch=false
+
+test_mobile:
+  stage: test
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - cd frontend/mobile
+    - npm ci
+    - CI=true npx jest --ci --watchAll=false --runInBand
+
+deployFrontend:
+  stage: deploy
+  image: node:20
+  needs:
+    - test_web
+    - test_mobile
+  environment:
+    name: production/frontend
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - apt-get update
+    - apt-get install -y awscli
+    - set -eo pipefail
+    - export AWS_PAGER=""
+    - export AWS_REGION="us-east-1"
+    - export BUCKET_NAME="crewconnect-web-frontend"
+    - export CF_DISTRIBUTION_ID="EKBX6UTNXR4SC"
+  script:
+    - cd frontend/web
+    - npm ci
+    - npx expo export --platform web --clear
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete --exclude "index.html" --exclude "*.json" --cache-control "public,max-age=31536000,immutable"
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/" --exclude "*" --include "index.html" --include "*.json" --cache-control "no-cache,no-store,must-revalidate,max-age=0"
+    - cd ../mobile
+    - npm ci
+    - EXPO_PUBLIC_ENV=production npx expo export --platform web --clear
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/mobile/" --delete --exclude "index.html" --exclude "*.json" --cache-control "public,max-age=31536000,immutable"
+    - aws s3 sync dist/ "s3://$BUCKET_NAME/mobile/" --exclude "*" --include "index.html" --include "*.json" --cache-control "no-cache,no-store,must-revalidate,max-age=0"
+    - aws cloudfront create-invalidation --distribution-id "$CF_DISTRIBUTION_ID" --paths "/index.html" "/mobile/index.html" "/_expo/*" "/mobile/_expo/*"
+    - echo "Deploy complete"
+
+buildBackendImage:
+  stage: deploy
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  needs:
+    - test_backend
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - set -eo pipefail
+    - export AWS_REGION="us-east-2"
+    - export ECR_REPOSITORY_URI="613426352709.dkr.ecr.us-east-2.amazonaws.com/crewconnect/backend"
+    - export ECR_REPOSITORY_NAME="crewconnect/backend"
+    - export ECS_CLUSTER="default"
+    - export ECS_SERVICE="backend-5676"
+    - export ECS_TASK_FAMILY="default-backend-5676"
+    - export ECS_CONTAINER_NAME="Main"
+  script:
+    - APP_VERSION="${CI_COMMIT_SHORT_SHA}-${CI_PIPELINE_ID}"
+    - IMAGE_URI="$ECR_REPOSITORY_URI:$APP_VERSION"
+    - ECR_REGISTRY="${ECR_REPOSITORY_URI%/*}"
+    - mkdir -p /kaniko/.docker
+    - echo "{\"credHelpers\":{\"$ECR_REGISTRY\":\"ecr-login\"}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context "$CI_PROJECT_DIR/backend" --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile" --destination "$IMAGE_URI" --cache=true --custom-platform=linux/amd64
+    - printf 'APP_VERSION=%s\nIMAGE_URI=%s\nECR_REPOSITORY_URI=%s\nECR_REPOSITORY_NAME=%s\nECS_CONTAINER_NAME=%s\nECS_CLUSTER=%s\nECS_SERVICE=%s\nECS_TASK_FAMILY=%s\nAWS_REGION=%s\n' "$APP_VERSION" "$IMAGE_URI" "$ECR_REPOSITORY_URI" "$ECR_REPOSITORY_NAME" "$ECS_CONTAINER_NAME" "$ECS_CLUSTER" "$ECS_SERVICE" "$ECS_TASK_FAMILY" "$AWS_REGION" > build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
+deployBackend:
+  stage: deploy
+  image: node:20
+  needs:
+    - job: buildBackendImage
+      artifacts: true
+  environment:
+    name: production/backend
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  before_script:
+    - apt-get update
+    - apt-get install -y awscli jq
+    - set -eo pipefail
+    - export AWS_PAGER=""
+    - export AWS_REGION="us-east-2"
+    - export ECS_CLUSTER="default"
+    - export ECS_SERVICE="backend-5676"
+    - export ECS_TASK_FAMILY="default-backend-5676"
+    - export ECS_CONTAINER_NAME="Main"
+    - 'echo "Deploy target: region=$AWS_REGION cluster=$ECS_CLUSTER service=$ECS_SERVICE task_family=$ECS_TASK_FAMILY container=$ECS_CONTAINER_NAME"'
+    - aws sts get-caller-identity --query 'Arn' --output text
+  script:
+    - test -n "$IMAGE_URI" || (echo "Missing IMAGE_URI from buildBackendImage" && exit 1)
+    - test -n "$APP_VERSION" || (echo "Missing APP_VERSION from buildBackendImage" && exit 1)
+    - test -n "$ECR_REPOSITORY_NAME" || (echo "Missing ECR_REPOSITORY_NAME from buildBackendImage" && exit 1)
+    - test -n "$ECR_REPOSITORY_URI" || (echo "Missing ECR_REPOSITORY_URI from buildBackendImage" && exit 1)
+    - CONTAINER_NAME="${ECS_CONTAINER_NAME:-backend}"
+    - IMAGE_DIGEST=$(aws ecr describe-images --region "$AWS_REGION" --repository-name "$ECR_REPOSITORY_NAME" --image-ids imageTag="$APP_VERSION" --query 'imageDetails[0].imageDigest' --output text)
+    - if [ -z "$IMAGE_DIGEST" ] || [ "$IMAGE_DIGEST" = "None" ]; then echo "Unable to resolve image digest for tag '$APP_VERSION'"; exit 1; fi
+    - IMAGE_URI_DIGEST="$ECR_REPOSITORY_URI@$IMAGE_DIGEST"
+    - 'echo "Deploying digest-pinned image: $IMAGE_URI_DIGEST"'
+    - TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" --query 'taskDefinition' --output json)
+    - MATCH_COUNT=$(echo "$TASK_DEF_JSON" | jq --arg CONTAINER_NAME "$CONTAINER_NAME" '[.containerDefinitions[] | select(.name == $CONTAINER_NAME)] | length')
+    - if [ "$MATCH_COUNT" -eq 0 ]; then echo "Container name '$CONTAINER_NAME' not found in task definition '$ECS_TASK_FAMILY'"; exit 1; fi
+    - echo "$TASK_DEF_JSON" | jq --arg IMAGE_URI_DIGEST "$IMAGE_URI_DIGEST" --arg CONTAINER_NAME "$CONTAINER_NAME" 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt) | .containerDefinitions |= map(if .name == $CONTAINER_NAME then .image = $IMAGE_URI_DIGEST else . end)' > new-task-def.json
+    - NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
+    - REGISTERED_IMAGE=$(aws ecs describe-task-definition --task-definition "$NEW_TASK_DEF_ARN" --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME'].image | [0]" --output text)
+    - 'if [ "$REGISTERED_IMAGE" != "$IMAGE_URI_DIGEST" ]; then echo "Registered task definition image mismatch: expected ''$IMAGE_URI_DIGEST'' got ''$REGISTERED_IMAGE''"; exit 1; fi'
+    - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_DEF_ARN" --force-new-deployment --deployment-configuration minimumHealthyPercent=0,maximumPercent=200
+    - |
+      MAX_SECONDS=1800
+      SLEEP_SECONDS=15
+      ELAPSED=0
+
+      while [ "$ELAPSED" -lt "$MAX_SECONDS" ]; do
+        DEPLOYMENTS_JSON=$(aws ecs describe-services \
+          --cluster "$ECS_CLUSTER" \
+          --services "$ECS_SERVICE" \
+          --query "services[0].deployments[?status=='PRIMARY' || status=='ACTIVE'].{status:status,taskDefinition:taskDefinition,rolloutState:rolloutState}" \
+          --output json)
+
+        echo "$DEPLOYMENTS_JSON" | jq -r '.[] | [.rolloutState, .status, .taskDefinition] | @tsv'
+
+        MATCHED=$(echo "$DEPLOYMENTS_JSON" | jq --arg NEW_TD_ARN "$NEW_TASK_DEF_ARN" 'length == 1 and .[0].status == "PRIMARY" and .[0].rolloutState == "IN_PROGRESS" and .[0].taskDefinition == $NEW_TD_ARN')
+
+        if [ "$MATCHED" = "true" ]; then
+          echo "Reached target deployment state: only new PRIMARY deployment in IN_PROGRESS."
+          break
+        fi
+
+        sleep "$SLEEP_SECONDS"
+        ELAPSED=$((ELAPSED + SLEEP_SECONDS))
+      done
+
+      if [ "$ELAPSED" -ge "$MAX_SECONDS" ]; then
+        echo "Timed out waiting for target deployment state."
+        exit 1
+      fi
+
+    - aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query "services[0].deployments[?status=='PRIMARY' || status=='ACTIVE'].{status:status,taskDefinition:taskDefinition,rolloutState:rolloutState}" --output table
+    - echo "Backend deploy complete"

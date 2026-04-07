@@ -23,6 +23,8 @@ import formSubmissionsRoutes from './routes/formSubmissionsRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
 import offlineTimeEntryRoute from "./routes/offlineTimeEntriesRoute.js"
+import predictionRoutes from './routes/predictionRoutes.js';
+import { initModel } from './ml/budgetPredictor.js';
 
 const app = express();
 
@@ -64,6 +66,7 @@ app.use("/api/form-submissions", formSubmissionsRoutes);
 app.use("/api/map", mapRoutes);
 app.use("/api/companies", companyRoutes)
 app.use("/api/offline-time-entries", offlineTimeEntryRoute)
+app.use("/api/projects", predictionRoutes)
 
 // Check if we have the built frontend
 const indexPath = path.join(__dirname, '../public/index.html');
@@ -138,6 +141,9 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Train the budget prediction model on startup
+initModel().catch(err => console.error('[BudgetPredictor] Failed to initialize model:', err.message));
 
 app.listen(PORT, '0.0.0.0', () => {
   const networkInterfaces = os.networkInterfaces();

@@ -8,7 +8,8 @@ import {
   getWageHistory,
   getBudgetVsActual,
   getProductionReport,
-  getLaborCostReport
+  getLaborCostReport,
+  getPayrollSummary,
 } from '../controllers/reportsController.js';
 
 import { authenticate } from '../middleware/auth.js';
@@ -18,6 +19,7 @@ router.use(authenticate);
 
 // Budget vs Actual reports (NEW)
 router.get('/budget-vs-actual', getBudgetVsActual);
+router.get('/payroll-summary', getPayrollSummary);
 router.get('/production', getProductionReport);
 router.get('/labor-costs', getLaborCostReport);
 
