@@ -194,12 +194,16 @@ export default function Projects() {
         <Pressable
           style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
           onPress={() => setViewMode('list')}
+          accessibilityRole="button"
+          accessibilityLabel="List view"
         >
           <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? colors.primary.orange : colors.text.tertiary} />
         </Pressable>
         <Pressable
           style={[styles.viewToggleBtn, viewMode === 'grid' && styles.viewToggleBtnActive]}
           onPress={() => setViewMode('grid')}
+          accessibilityRole="button"
+          accessibilityLabel="Grid view"
         >
           <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? colors.primary.orange : colors.text.tertiary} />
         </Pressable>

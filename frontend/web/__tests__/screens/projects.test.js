@@ -103,6 +103,10 @@ describe('Projects screen', () => {
 
     await waitFor(() => expect(screen.getByText('Active Job')).toBeTruthy());
 
+    fireEvent.press(screen.getByLabelText('Grid view'));
+
+    await waitFor(() => expect(screen.getByText('Sub-project of Parent Project')).toBeTruthy());
+
     // Header counts
     expect(screen.getByText('1 active · 1 inactive')).toBeTruthy();
 

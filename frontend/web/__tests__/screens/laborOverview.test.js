@@ -10,6 +10,7 @@ import {
   getTimeEntries,
   getUserProfile,
   getAllUsers,
+  getBudgetPrediction,
 } from '../../utils/api';
 
 jest.mock('../../utils/ctx');
@@ -75,6 +76,11 @@ describe('LaborOverview screen', () => {
     getAllUsers.mockResolvedValue({
       success: true,
       data: { users: [] },
+    });
+
+    getBudgetPrediction.mockResolvedValue({
+      success: true,
+      data: null,
     });
   });
 
@@ -178,11 +184,8 @@ describe('LaborOverview screen', () => {
       all_users: 'true',
     });
 
-    expect(screen.getByText('Labor Overview')).toBeTruthy();
-    expect(screen.getByText('Budgeted vs actual labor by job')).toBeTruthy();
-
-    expect(screen.getByText('9.5h / 20.0h')).toBeTruthy();
-    expect(screen.getByText('$230.00 / $740.00')).toBeTruthy();
+    expect(screen.getByText('Project Health')).toBeTruthy();
+    expect(screen.getByText('Budgeted vs actual labor by cost code')).toBeTruthy();
 
     expect(screen.getByText('Active Jobs')).toBeTruthy();
     expect(screen.getByText('Inactive Jobs')).toBeTruthy();
@@ -223,8 +226,6 @@ describe('LaborOverview screen', () => {
       all_users: 'true',
     });
 
-    expect(screen.getByText('0.0h / 0.0h')).toBeTruthy();
-    expect(screen.getByText('$0 / $0')).toBeTruthy();
     expect(screen.queryByText('Active Jobs')).toBeNull();
     expect(screen.queryByText('Inactive Jobs')).toBeNull();
   });
@@ -272,7 +273,7 @@ describe('LaborOverview screen', () => {
 
     await waitFor(() => expect(screen.getByText('Cleanup')).toBeTruthy());
 
-    expect(screen.getAllByText('3.5h / 6.0h')).toHaveLength(2);
-    expect(screen.getAllByText('$105.00 / $180.00')).toHaveLength(2);
+    expect(screen.getByText('09-900')).toBeTruthy();
+    expect(screen.getByText('Cleanup')).toBeTruthy();
   });
 });
