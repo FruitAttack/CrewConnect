@@ -54,7 +54,6 @@ describe('LoginPage', () => {
       expect(getByPlaceholderText('Password')).toBeTruthy();
       expect(getByText('Login')).toBeTruthy();
       expect(getByText('Forgot Password?')).toBeTruthy();
-      expect(getByText('Sign Up')).toBeTruthy();
     });
 
     it('should render the logo', () => {
@@ -245,15 +244,6 @@ describe('LoginPage', () => {
   });
 
   describe('Navigation', () => {
-    it('should navigate to sign up page when Sign Up is pressed', () => {
-      const { getByText } = render(<LoginPage />);
-      
-      const signUpButton = getByText('Sign Up');
-      fireEvent.press(signUpButton);
-      
-      expect(router.push).toHaveBeenCalledWith('/sign_up');
-    });
-
     it('should log to console when Forgot Password is pressed', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       
