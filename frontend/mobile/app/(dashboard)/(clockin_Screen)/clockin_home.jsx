@@ -5,6 +5,7 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { router, useFocusEffect } from "expo-router";
 import { apiCall } from "../../../utils/api";
 import { useTimeStore } from "../../../store/timeStore";
+import { useOfflineStore } from "../../../store/offlineStore";
 import { useSession } from "../../../utils/ctx";
 
 const Clockin_Home = () => {
@@ -28,52 +29,59 @@ const Clockin_Home = () => {
   const [isHydrating, setIsHydrating] = useState(true);
   const intervalRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
+  const isOffline = useOfflineStore((s) => s.isOffline);
 
   // Hydrate from server on focus to catch any state changes
   useFocusEffect(
     useCallback(() => {
-      console.log("Clock screen focused - hydrating from server");
-      if (session?.access_token) {
-        setIsHydrating(true);
-        hydrateFromServer(session).finally(() => {
-          setIsHydrating(false);
-          // Start midnight watch if clocked in (check after hydration)
-          if (useTimeStore.getState().isClockedIn) {
-            startMidnightWatch(session);
-          }
-        });
-      } else {
+      if (!session?.access_token) {
         setIsHydrating(false);
+        return;
       }
 
-      return () => {
-        // Stop midnight watch when screen loses focus
-        stopMidnightWatch();
-      };
-    }, [session])
+      if (isOffline) {
+        setIsHydrating(false);
+
+        if (useTimeStore.getState().isClockedIn) {
+          startMidnightWatch(session);
+        }
+
+        return () => stopMidnightWatch();
+      }
+
+      setIsHydrating(true);
+      hydrateFromServer(session).finally(() => {
+        setIsHydrating(false);
+        if (useTimeStore.getState().isClockedIn) {
+          startMidnightWatch(session);
+        }
+      });
+
+      return () => stopMidnightWatch();
+    }, [session, isOffline])
   );
 
   // Handle app state changes (background/foreground)
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active'
+        nextAppState === "active"
       ) {
-        // App has come to the foreground
-        console.log('App came to foreground - checking for midnight crossing');
+        console.log("App came to foreground - checking for midnight crossing");
+
         if (session?.access_token) {
-          // Check if midnight passed while app was in background
-          checkMidnightCrossing(session);
+          checkMidnightCrossing(session, { isOffline });
         }
       }
+
       appStateRef.current = nextAppState;
     });
 
     return () => {
       subscription?.remove();
     };
-  }, [session]);
+  }, [session, isOffline]);
 
   // Timer keeps running when clocked in (even during breaks)
   useEffect(() => {

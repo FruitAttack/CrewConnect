@@ -21,24 +21,35 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiCall } from "../../../utils/api";
 import { useSession } from "../../../utils/ctx";
 import { useTimeStore } from "../../../store/timeStore";
+import { useOfflineStore } from "../../../store/offlineStore";
 import * as Location from "expo-location";
 
 const LAST_CLOCKIN_KEY = "crewconnect_last_clockin";
 
 function getDistanceMiles(lat1, lng1, lat2, lng2) {
-  const R = 3958.8; // Earth radius in miles
+  const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
       Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Reusable Modal Picker Component
-function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, loading }) {
+// ─── Modal Picker ────────────────────────────────────────────────────────────
+
+function ModalPicker({
+  visible,
+  onClose,
+  title,
+  items,
+  selectedValue,
+  onSelect,
+  loading,
+}) {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredItems = items.filter((item) =>
@@ -48,7 +59,6 @@ function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
       <SafeAreaView style={pickerStyles.container}>
-        {/* Header */}
         <View style={pickerStyles.header}>
           <Pressable onPress={onClose} style={pickerStyles.closeButton}>
             <Ionicons name="close" size={24} color="#000" />
@@ -57,9 +67,13 @@ function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, 
           <View style={pickerStyles.closeButton} />
         </View>
 
-        {/* Search */}
         <View style={pickerStyles.searchContainer}>
-          <Ionicons name="search" size={20} color="#999" style={pickerStyles.searchIcon} />
+          <Ionicons
+            name="search"
+            size={20}
+            color="#999"
+            style={pickerStyles.searchIcon}
+          />
           <TextInput
             style={pickerStyles.searchInput}
             placeholder="Search..."
@@ -74,7 +88,6 @@ function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, 
           )}
         </View>
 
-        {/* List */}
         {loading ? (
           <View style={pickerStyles.loadingContainer}>
             <ActivityIndicator size="large" color="#000" />
@@ -97,7 +110,8 @@ function ModalPicker({ visible, onClose, title, items, selectedValue, onSelect, 
                 <Text
                   style={[
                     pickerStyles.itemText,
-                    selectedValue === item.value && pickerStyles.itemTextSelected,
+                    selectedValue === item.value &&
+                      pickerStyles.itemTextSelected,
                   ]}
                 >
                   {item.label}
@@ -130,7 +144,12 @@ const pickerStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E5E5",
   },
-  closeButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: { fontSize: 17, fontWeight: "600", color: "#000" },
   searchContainer: {
     flexDirection: "row",
@@ -160,32 +179,39 @@ const pickerStyles = StyleSheet.create({
   emptyText: { fontSize: 16, color: "#999" },
 });
 
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function ClockInDetail() {
   const { session } = useSession();
   const doClockIn = useTimeStore((s) => s.doClockIn);
 
+  // Offline state
+  const isOffline = useOfflineStore((s) => s.isOffline);
+  const cacheProjects = useOfflineStore((s) => s.cacheProjects);
+  const cacheEquipment = useOfflineStore((s) => s.cacheEquipment);
+  const cacheCostCodes = useOfflineStore((s) => s.cacheCostCodes);
+  const cachedProjects = useOfflineStore((s) => s.cachedProjects);
+  const cachedEquipment = useOfflineStore((s) => s.cachedEquipment);
+  const cachedCostCodesMap = useOfflineStore((s) => s.cachedCostCodes);
+
   const [location, setLocation] = useState(null);
-
-  // Last clock-in
   const [lastClockIn, setLastClockIn] = useState(null);
-
-  // Nearest jobs
   const [nearestJobs, setNearestJobs] = useState([]);
   const [projectsRaw, setProjectsRaw] = useState([]);
 
-  // Project
+  // Job picker
   const [jobPickerVisible, setJobPickerVisible] = useState(false);
   const [job, setJob] = useState(null);
   const [jobItems, setJobItems] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
 
-  // Cost Code
+  // Cost Code picker
   const [costPickerVisible, setCostPickerVisible] = useState(false);
   const [costCode, setCostCode] = useState(null);
   const [costItems, setCostItems] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
 
-  // Equipment
+  // Equipment picker
   const [equipPickerVisible, setEquipPickerVisible] = useState(false);
   const [equipment, setEquipment] = useState(null);
   const [equipmentItems, setEquipmentItems] = useState([]);
@@ -199,7 +225,7 @@ export default function ClockInDetail() {
     return item ? item.label : "";
   };
 
-  // Load last clock-in from storage
+  // ── Load last clock-in from storage ──────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -209,86 +235,167 @@ export default function ClockInDetail() {
     })();
   }, []);
 
-  // Get location silently in background
+  // ── Get location ─────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       setLocation(loc.coords);
     })();
   }, []);
 
-  // Load Projects
+  // ── Load Projects (online → cache; offline → cache) ──────────────
   useEffect(() => {
     if (!session?.access_token) return;
+
     (async () => {
       setLoadingJobs(true);
+
+      if (isOffline) {
+        // Use cache
+        const projects = cachedProjects;
+        setProjectsRaw(projects);
+        setJobItems(projects.map((p) => ({ label: p.name, value: p.id })));
+        setLoadingJobs(false);
+        return;
+      }
+
       try {
         const res = await apiCall(session.access_token, "projects", "GET");
         if (res.success && res.data) {
-          const projectsData = Array.isArray(res.data) ? res.data : res.data.projects || [];
+          const projectsData = Array.isArray(res.data)
+            ? res.data
+            : res.data.projects || [];
           setProjectsRaw(projectsData);
           setJobItems(projectsData.map((p) => ({ label: p.name, value: p.id })));
+          // Populate the cache for next offline session
+          await cacheProjects(projectsData);
         } else {
-          Alert.alert("Error", `Unable to load projects: ${res.message}`);
+          // Fallback to cache if API fails unexpectedly
+          const projects = cachedProjects;
+          setProjectsRaw(projects);
+          setJobItems(projects.map((p) => ({ label: p.name, value: p.id })));
+          if (!projects.length) {
+            Alert.alert("Error", `Unable to load projects: ${res.message}`);
+          }
         }
-      } catch (error) {
-        Alert.alert("Error", "Unable to load projects. Please check your connection.");
+      } catch {
+        const projects = cachedProjects;
+        setProjectsRaw(projects);
+        setJobItems(projects.map((p) => ({ label: p.name, value: p.id })));
+        if (!projects.length) {
+          Alert.alert("Error", "Unable to load projects. Please check your connection.");
+        }
       } finally {
         setLoadingJobs(false);
       }
     })();
-  }, [session]);
+  }, [session, isOffline]);
 
-  // Compute nearest jobs whenever location or projects update
+  // ── Nearest jobs ─────────────────────────────────────────────────
   useEffect(() => {
     if (!location || projectsRaw.length === 0) return;
     const withDistance = projectsRaw
       .filter((p) => p.lat && p.lng)
       .map((p) => ({
         ...p,
-        distance: getDistanceMiles(location.latitude, location.longitude, p.lat, p.lng),
+        distance: getDistanceMiles(
+          location.latitude,
+          location.longitude,
+          p.lat,
+          p.lng
+        ),
       }))
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 3);
     setNearestJobs(withDistance);
   }, [location, projectsRaw]);
 
-  // Load Cost Codes by Project
+  // ── Load Cost Codes by Project (online → cache; offline → cache) ─
   useEffect(() => {
     if (!session?.access_token || !job) {
       setCostItems([]);
       return;
     }
+
     setCostCode(null);
     setLoadingCosts(true);
+
     (async () => {
+      if (isOffline) {
+        const cached = cachedCostCodesMap[job] || [];
+        setCostItems(
+          cached.map((c) => ({
+            label: `${c.cost_code?.code || c.code} - ${c.cost_code?.name || c.name}`,
+            value: c.cost_code?.id || c.id,
+          }))
+        );
+        setLoadingCosts(false);
+        return;
+      }
+
       try {
-        const res = await apiCall(session.access_token, `projects/${job}/cost-codes`, "GET");
+        const res = await apiCall(
+          session.access_token,
+          `projects/${job}/cost-codes`,
+          "GET"
+        );
         if (res.success && res.data) {
           const data = Array.isArray(res.data) ? res.data : res.data.cost_codes || [];
+          const active = data.filter((c) => c.cost_code && c.cost_code.active !== false);
           setCostItems(
-            data
-              .filter((c) => c.cost_code && c.cost_code.active !== false)
-              .map((c) => ({ label: `${c.cost_code.code} - ${c.cost_code.name}`, value: c.cost_code.id }))
+            active.map((c) => ({
+              label: `${c.cost_code.code} - ${c.cost_code.name}`,
+              value: c.cost_code.id,
+            }))
           );
+          // Cache raw data for offline use
+          await cacheCostCodes(job, active);
         } else {
           setCostItems([]);
         }
       } catch {
-        setCostItems([]);
+        // Try cache as fallback
+        const cached = cachedCostCodesMap[job] || [];
+        setCostItems(
+          cached.map((c) => ({
+            label: `${c.cost_code?.code || c.code} - ${c.cost_code?.name || c.name}`,
+            value: c.cost_code?.id || c.id,
+          }))
+        );
       } finally {
         setLoadingCosts(false);
       }
     })();
-  }, [job, session]);
+  }, [job, session, isOffline]);
 
-  // Load Equipment
+  // ── Load Equipment (online → cache; offline → cache) ─────────────
   useEffect(() => {
     if (!session?.access_token) return;
+
     (async () => {
       setLoadingEquip(true);
+
+      if (isOffline) {
+        const equipment = cachedEquipment;
+        setEquipmentItems(
+          equipment
+            .filter((e) => e.active !== false)
+            .map((e) => ({
+              label:
+                e.type && e.label
+                  ? `${e.type} - ${e.label}`
+                  : e.label || e.type || "Unknown",
+              value: e.id,
+            }))
+        );
+        setLoadingEquip(false);
+        return;
+      }
+
       try {
         const res = await apiCall(session.access_token, "equipment", "GET");
         if (res.success && res.data) {
@@ -297,19 +404,36 @@ export default function ClockInDetail() {
             data
               .filter((e) => e.active !== false)
               .map((e) => ({
-                label: e.type && e.label ? `${e.type} - ${e.label}` : e.label || e.type || "Unknown",
+                label:
+                  e.type && e.label
+                    ? `${e.type} - ${e.label}`
+                    : e.label || e.type || "Unknown",
                 value: e.id,
               }))
           );
+          await cacheEquipment(data.filter((e) => e.active !== false));
         }
       } catch (error) {
         console.error("Error loading equipment:", error);
+        const equipment = cachedEquipment;
+        setEquipmentItems(
+          equipment
+            .filter((e) => e.active !== false)
+            .map((e) => ({
+              label:
+                e.type && e.label
+                  ? `${e.type} - ${e.label}`
+                  : e.label || e.type || "Unknown",
+              value: e.id,
+            }))
+        );
       } finally {
         setLoadingEquip(false);
       }
     })();
-  }, [session]);
+  }, [session, isOffline]);
 
+  // ── Submit ────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (!job || !costCode) {
       Alert.alert("Validation Error", "Please select a Job and Cost Code.");
@@ -336,15 +460,30 @@ export default function ClockInDetail() {
 
       // Save last clock-in for quick start
       try {
-        await AsyncStorage.setItem(LAST_CLOCKIN_KEY, JSON.stringify({
-          jobId: job,
-          jobLabel: getSelectedLabel(jobItems, job),
-          costCodeId: costCode,
-          costCodeLabel: getSelectedLabel(costItems, costCode),
-          equipmentId: equipment || null,
-          equipmentLabel: equipment ? getSelectedLabel(equipmentItems, equipment) : null,
-        }));
+        await AsyncStorage.setItem(
+          LAST_CLOCKIN_KEY,
+          JSON.stringify({
+            jobId: job,
+            jobLabel: getSelectedLabel(jobItems, job),
+            costCodeId: costCode,
+            costCodeLabel: getSelectedLabel(costItems, costCode),
+            equipmentId: equipment || null,
+            equipmentLabel: equipment
+              ? getSelectedLabel(equipmentItems, equipment)
+              : null,
+          })
+        );
       } catch {}
+
+      // If clocked in offline, stay on this screen and show confirmation
+      if (response.offline) {
+        Alert.alert(
+          "Clocked In (Offline)",
+          "Your clock-in has been saved and will sync automatically when you're back online.",
+          [{ text: "OK", onPress: () => router.back() }]
+        );
+        return;
+      }
 
       router.back();
     } catch (error) {
@@ -354,6 +493,7 @@ export default function ClockInDetail() {
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -371,61 +511,79 @@ export default function ClockInDetail() {
               <View style={{ width: 36 }} />
             </View>
 
-            {/* Form */}
-            <View style={styles.form}>
-
-              {/* Quick Start Banner */}
-            {lastClockIn && !job && (
-              <Pressable
-                style={styles.quickStart}
-                onPress={() => {
-                  setJob(lastClockIn.jobId);
-                  setCostCode(lastClockIn.costCodeId);
-                  if (lastClockIn.equipmentId) setEquipment(lastClockIn.equipmentId);
-                }}
-              >
-                <View style={styles.quickStartLeft}>
-                  <Ionicons name="flash" size={18} color="#F67011" />
-                  <View>
-                    <Text style={styles.quickStartLabel}>Quick Start</Text>
-                    <Text style={styles.quickStartSub} numberOfLines={1}>
-                      {lastClockIn.jobLabel} · {lastClockIn.costCodeLabel}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.quickStartAction}>Use</Text>
-              </Pressable>
-            )}
-
-            {/* Nearest Jobs */}
-            {nearestJobs.length > 0 && !job && (
-              <View style={styles.nearestContainer}>
-                <View style={styles.nearestHeader}>
-                  <Ionicons name="location" size={14} color="#888" />
-                  <Text style={styles.nearestTitle}>Nearest Jobs</Text>
-                </View>
-                {nearestJobs.map((p) => (
-                  <Pressable
-                    key={p.id}
-                    style={styles.nearestRow}
-                    onPress={() => setJob(p.id)}
-                  >
-                    <View style={styles.nearestLeft}>
-                      <View style={styles.nearestDot} />
-                      <Text style={styles.nearestName} numberOfLines={1}>{p.name}</Text>
-                    </View>
-                    <Text style={styles.nearestDistance}>
-                      {p.distance < 0.1
-                        ? "< 0.1 mi"
-                        : `${p.distance.toFixed(1)} mi`}
-                    </Text>
-                  </Pressable>
-                ))}
+            {/* Offline Banner */}
+            {isOffline && (
+              <View style={styles.offlineBanner}>
+                <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
+                <Text style={styles.offlineBannerText}>
+                  Offline — clock-in will sync when you reconnect
+                </Text>
               </View>
             )}
 
-            {/* Job */}
-              <Pressable style={styles.fieldRow} onPress={() => setJobPickerVisible(true)}>
+            {/* Form */}
+            <View style={styles.form}>
+              {/* Quick Start Banner */}
+              {lastClockIn && !job && (
+                <Pressable
+                  style={styles.quickStart}
+                  onPress={() => {
+                    setJob(lastClockIn.jobId);
+                    setCostCode(lastClockIn.costCodeId);
+                    if (lastClockIn.equipmentId)
+                      setEquipment(lastClockIn.equipmentId);
+                  }}
+                >
+                  <View style={styles.quickStartLeft}>
+                    <Ionicons name="flash" size={18} color="#F67011" />
+                    <View>
+                      <Text style={styles.quickStartLabel}>Quick Start</Text>
+                      <Text style={styles.quickStartSub} numberOfLines={1}>
+                        {lastClockIn.jobLabel} · {lastClockIn.costCodeLabel}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.quickStartAction}>Use</Text>
+                </Pressable>
+              )}
+
+              {/* Nearest Jobs */}
+              {nearestJobs.length > 0 && !job && (
+                <View style={styles.nearestContainer}>
+                  <View style={styles.nearestHeader}>
+                    <Ionicons name="location" size={14} color="#888" />
+                    <Text style={styles.nearestTitle}>Nearest Jobs</Text>
+                    {isOffline && (
+                      <Text style={styles.cachedBadge}>cached</Text>
+                    )}
+                  </View>
+                  {nearestJobs.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      style={styles.nearestRow}
+                      onPress={() => setJob(p.id)}
+                    >
+                      <View style={styles.nearestLeft}>
+                        <View style={styles.nearestDot} />
+                        <Text style={styles.nearestName} numberOfLines={1}>
+                          {p.name}
+                        </Text>
+                      </View>
+                      <Text style={styles.nearestDistance}>
+                        {p.distance < 0.1
+                          ? "< 0.1 mi"
+                          : `${p.distance.toFixed(1)} mi`}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {/* Job */}
+              <Pressable
+                style={styles.fieldRow}
+                onPress={() => setJobPickerVisible(true)}
+              >
                 <View style={styles.fieldLeft}>
                   <Ionicons name="briefcase-outline" size={20} color="#F67011" />
                   <Text style={styles.fieldLabel}>Job</Text>
@@ -435,10 +593,20 @@ export default function ClockInDetail() {
                     <ActivityIndicator size="small" color="#999" />
                   ) : (
                     <>
-                      <Text style={[styles.fieldValue, !job && styles.fieldPlaceholder]} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.fieldValue,
+                          !job && styles.fieldPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {job ? getSelectedLabel(jobItems, job) : "Select a job"}
                       </Text>
-                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#ccc"
+                      />
                     </>
                   )}
                 </View>
@@ -459,19 +627,40 @@ export default function ClockInDetail() {
                     <ActivityIndicator size="small" color="#999" />
                   ) : (
                     <>
-                      <Text style={[styles.fieldValue, !costCode && styles.fieldPlaceholder]} numberOfLines={1}>
-                        {costCode ? getSelectedLabel(costItems, costCode) : job ? "Select a cost code" : "Select a job first"}
+                      <Text
+                        style={[
+                          styles.fieldValue,
+                          !costCode && styles.fieldPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {costCode
+                          ? getSelectedLabel(costItems, costCode)
+                          : job
+                          ? "Select a cost code"
+                          : "Select a job first"}
                       </Text>
-                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#ccc"
+                      />
                     </>
                   )}
                 </View>
               </Pressable>
 
               {/* Equipment */}
-              <Pressable style={styles.fieldRow} onPress={() => setEquipPickerVisible(true)}>
+              <Pressable
+                style={styles.fieldRow}
+                onPress={() => setEquipPickerVisible(true)}
+              >
                 <View style={styles.fieldLeft}>
-                  <Ionicons name="construct-outline" size={20} color="#F67011" />
+                  <Ionicons
+                    name="construct-outline"
+                    size={20}
+                    color="#F67011"
+                  />
                   <Text style={styles.fieldLabel}>Equipment</Text>
                 </View>
                 <View style={styles.fieldRight}>
@@ -479,10 +668,22 @@ export default function ClockInDetail() {
                     <ActivityIndicator size="small" color="#999" />
                   ) : (
                     <>
-                      <Text style={[styles.fieldValue, !equipment && styles.fieldPlaceholder]} numberOfLines={1}>
-                        {equipment ? getSelectedLabel(equipmentItems, equipment) : "None (optional)"}
+                      <Text
+                        style={[
+                          styles.fieldValue,
+                          !equipment && styles.fieldPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {equipment
+                          ? getSelectedLabel(equipmentItems, equipment)
+                          : "None (optional)"}
                       </Text>
-                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#ccc"
+                      />
                     </>
                   )}
                 </View>
@@ -503,20 +704,25 @@ export default function ClockInDetail() {
                   multiline={false}
                 />
               </View>
-
             </View>
 
             {/* Start Button */}
             <View style={styles.footer}>
               <Pressable
-                style={[styles.button, (loadingJobs || loadingEquip || isSubmitting) && styles.buttonDisabled]}
+                style={[
+                  styles.button,
+                  (loadingJobs || loadingEquip || isSubmitting) &&
+                    styles.buttonDisabled,
+                ]}
                 onPress={handleStart}
                 disabled={loadingJobs || loadingEquip || isSubmitting}
               >
                 {isSubmitting ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.buttonText}>Start</Text>
+                  <Text style={styles.buttonText}>
+                    {isOffline ? "Start (Offline)" : "Start"}
+                  </Text>
                 )}
               </Pressable>
             </View>
@@ -528,7 +734,7 @@ export default function ClockInDetail() {
       <ModalPicker
         visible={jobPickerVisible}
         onClose={() => setJobPickerVisible(false)}
-        title="Select Job"
+        title={isOffline ? "Select Job (Cached)" : "Select Job"}
         items={jobItems}
         selectedValue={job}
         onSelect={setJob}
@@ -537,7 +743,7 @@ export default function ClockInDetail() {
       <ModalPicker
         visible={costPickerVisible}
         onClose={() => setCostPickerVisible(false)}
-        title="Select Cost Code"
+        title={isOffline ? "Select Cost Code (Cached)" : "Select Cost Code"}
         items={costItems}
         selectedValue={costCode}
         onSelect={setCostCode}
@@ -546,7 +752,7 @@ export default function ClockInDetail() {
       <ModalPicker
         visible={equipPickerVisible}
         onClose={() => setEquipPickerVisible(false)}
-        title="Select Equipment"
+        title={isOffline ? "Select Equipment (Cached)" : "Select Equipment"}
         items={equipmentItems}
         selectedValue={equipment}
         onSelect={setEquipment}
@@ -557,11 +763,22 @@ export default function ClockInDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
+  container: { flex: 1, backgroundColor: "#fff" },
+  flex: { flex: 1 },
+
+  // Offline banner
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  flex: {
+  offlineBannerText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
     flex: 1,
   },
 
@@ -590,6 +807,14 @@ const styles = StyleSheet.create({
     color: "#888",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    flex: 1,
+  },
+  cachedBadge: {
+    fontSize: 10,
+    color: "#FF6B35",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   nearestRow: {
     flexDirection: "row",
@@ -612,16 +837,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#F67011",
   },
-  nearestName: {
-    fontSize: 14,
-    color: "#1a1a1a",
-    flex: 1,
-  },
-  nearestDistance: {
-    fontSize: 13,
-    color: "#888",
-    marginLeft: 8,
-  },
+  nearestName: { fontSize: 14, color: "#1a1a1a", flex: 1 },
+  nearestDistance: { fontSize: 13, color: "#888", marginLeft: 8 },
 
   // Quick Start
   quickStart: {
@@ -643,11 +860,7 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  quickStartLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#F67011",
-  },
+  quickStartLabel: { fontSize: 13, fontWeight: "600", color: "#F67011" },
   quickStartSub: {
     fontSize: 12,
     color: "#888",
@@ -687,10 +900,7 @@ const styles = StyleSheet.create({
   },
 
   // Form
-  form: {
-    flex: 1,
-    paddingTop: 8,
-  },
+  form: { flex: 1, paddingTop: 8 },
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -700,20 +910,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
-  fieldDisabled: {
-    opacity: 0.4,
-  },
+  fieldDisabled: { opacity: 0.4 },
   fieldLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     width: 120,
   },
-  fieldLabel: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1a1a1a",
-  },
+  fieldLabel: { fontSize: 15, fontWeight: "500", color: "#1a1a1a" },
   fieldRight: {
     flex: 1,
     flexDirection: "row",
@@ -727,13 +931,8 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     textAlign: "right",
   },
-  fieldPlaceholder: {
-    color: "#ccc",
-  },
-  notesInput: {
-    textAlign: "right",
-    paddingVertical: 0,
-  },
+  fieldPlaceholder: { color: "#ccc" },
+  notesInput: { textAlign: "right", paddingVertical: 0 },
 
   // Footer
   footer: {
@@ -748,12 +947,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  buttonDisabled: {
-    backgroundColor: "#A0A0A0",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
+  buttonDisabled: { backgroundColor: "#A0A0A0" },
+  buttonText: { color: "#fff", fontSize: 17, fontWeight: "600" },
 });
