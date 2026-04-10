@@ -20,7 +20,7 @@ CrewConnect empowers construction companies to make smarter, data-driven decisio
 - Push notifications for task reminders and alerts.
 
 ### Web
-- Built with React and TypeScript.
+- Built with React.
 - Provides dashboards, reporting tools, and administrative controls.
 - Real-time updates for project managers and supervisors.
 
@@ -31,7 +31,7 @@ CrewConnect empowers construction companies to make smarter, data-driven decisio
 - Secure authentication and role-based access controls.
 
 ## Project Status
-This project is currently in the **Alpha Phase (v1.1)**. Core features are all completed, and many side features are completed or have major work done.
+CrewConnect's features are fully implemented, and the product is available to use at https://crewconnect.site/ for the web version, and https://crewconnect.site/mobile for the mobile version.
 
 ## Contributors
 - Joel Moffatt  
