@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, useWindowDimensions, Animated, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, useWindowDimensions, Animated, Pressable, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -16,7 +16,6 @@ export default function Index() {
   const floatAnim = useRef(new Animated.Value(0)).current;
   const [hoveredFeature, setHoveredFeature] = useState(null);
   const [hoveredStep, setHoveredStep] = useState(null);
-  const [hoveredTestimonial, setHoveredTestimonial] = useState(null);
   const [signUpModalVisible, setSignUpModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
 
@@ -58,11 +57,47 @@ export default function Index() {
     { icon: 'document-text-outline', title: 'Digital Timecards', description: 'Weekly timecards with digital signatures for streamlined payroll processing.' },
   ];
 
-  const testimonials = [
-    { name: 'Cody M.', role: 'Data Analyst', company: 'BuildRight Co.', image: require('../assets/images/cody.png'), quote: 'The analytics are intuitive and comprehensive. Any data analyst would be thrilled using CrewConnect.' },
-    { name: 'Liam K.', role: 'Project Manager', company: 'Apex Construction', image: require('../assets/images/liam.png'), quote: "Of all the apps we've tried, this one is simply the best. Easy to use and genuinely enjoyable." },
-    { name: 'Joel R.', role: 'Field Supervisor', company: 'Summit Builders', image: require('../assets/images/joel.jpg'), quote: "The clock in button is right there, nice and easy. Perfect for crews with real work to do." },
-    { name: 'Spencer T.', role: 'Construction Lead', company: 'Cornerstone Inc.', image: require('../assets/images/spencer.jpg'), quote: 'It just works. Exactly what we needed.' },
+  const teamMembers = [
+     {
+      name: 'Spencer Perry',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/spencer.jpg'),
+      bio: '',
+      interests: ['Computer Networking', 'Embedded Systems', 'Mobile Development', 'HCI & UX Engineering'],
+      projects: 'Capstone Project- "CrewConnect A Data-Driven Approach to Construction Workforce Management" \n Networking Projects: Network proxy using pythons and load balancer using dockercompose \n Mobile App - "Drawing app": A mobile drawing app built with React Native, featuring a custom canvas component, real-time stroke rendering, and support for pressure sensitivity. \n HCI/UX Project - "Smart Home Dashboard": Designed and developed a smart home dashboard interface using Figma for prototyping and React for implementation, focusing on intuitive user interactions and real-time data visualization.',
+      email: 'spencercoleperry@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/spencer-perry-939b87201',
+    },
+    {
+      name: 'Cody M.',
+      degree: 'B.S. Data Science',
+      image: require('../assets/images/cody.png'),
+      bio: 'sjkdk sefkjh dkjfbdk kjdf idjsfk fkj fkdjsbkdgf jbdkjsf bijkd bdfkjbds kjbdsfikj bkjsd jdsfb kdsj fbkjfdbnkjdfb jkdhiidfjhbkd jfskrj',
+      interests: ['Machine Learning', 'Data Visualization', 'Workforce Analytics'],
+      projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management',
+      email: 'cody.m@crewconnect.io',
+      linkedin: 'https://linkedin.com/in/codym',
+    },
+    {
+      name: 'Liam K.',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/liam.png'),
+      bio: 'sjkdk sefkjh dkjfbdk kjdf idjsfk fkj fkdjsbkdgf jbdkjsf bijkd bdfkjbds kjbdsfikj bkjsd jdsfb kdsj fbkjfdbnkjdfb jkdhiidfjhbkd jfskrj',
+      interests: ['Project Scheduling', 'Subcontractor Coordination', 'Field Operations'],
+      projects: 'Digital Workflow System for Subcontractor Coordination',
+      email: 'liam.k@crewconnect.io',
+      linkedin: 'https://linkedin.com/in/liamk',
+    },
+    {
+      name: 'Joel R.',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/joel.jpg'),
+      bio: 'sjkdk sefkjh dkjfbdk kjdf idjsfk fkj fkdjsbkdgf jbdkjsf bijkd bdfkjbds kjbdsfikj bkjsd jdsfb kdsj fbkjfdbnkjdfb jkdhiidfjhbkd jfskrj',
+      interests: ['Geotechnical Engineering', 'GPS & Site Technology', 'Infrastructure Safety'],
+      projects: 'GPS Telemetry Integration for Construction Site Safety',
+      email: 'joel.r@crewconnect.io',
+      linkedin: 'https://linkedin.com/in/joelr',
+    },
   ];
 
   const comparison = [
@@ -140,7 +175,6 @@ export default function Index() {
             </View>
           </View>
 
-          {/* Phone Mockup */}
           {isMediumScreen && (
             <View style={styles.heroPhone}>
               <Animated.View style={[styles.phoneContainer, { transform: [{ translateY: floatTransform }] }]}>
@@ -269,34 +303,77 @@ export default function Index() {
         </View>
       </View>
 
-      {/* Testimonials Section */}
+      {/* About Us Section */}
       <View style={styles.sectionDark}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabelLight}>TESTIMONIALS</Text>
-          <Text style={styles.sectionTitleLight}>Loved by Construction Teams</Text>
+          <Text style={styles.sectionLabelLight}>ABOUT US</Text>
+          <Text style={styles.sectionTitleLight}>Meet the Team</Text>
+          <Text style={styles.sectionSubtitleLight}>The people behind CrewConnect — builders, engineers, and problem solvers.</Text>
         </View>
 
-        <View style={[styles.testimonialsGrid, isLargeScreen && styles.testimonialsGridLarge]}>
-          {testimonials.map((testimonial, index) => (
-            <Pressable
-              key={index}
-              onHoverIn={() => setHoveredTestimonial(index)}
-              onHoverOut={() => setHoveredTestimonial(null)}
-              style={[styles.testimonialCard, hoveredTestimonial === index && styles.testimonialCardHovered]}
-            >
-              <View style={styles.testimonialQuote}>
-                <Ionicons name="chatbubble-outline" size={24} color={colors.primary.orange} style={{ opacity: 0.5 }} />
-              </View>
-              <Text style={styles.testimonialText}>"{testimonial.quote}"</Text>
-              <View style={styles.testimonialAuthor}>
-                <Image source={testimonial.image} style={styles.testimonialAvatar} />
-                <View>
-                  <Text style={styles.testimonialName}>{testimonial.name}</Text>
-                  <Text style={styles.testimonialRole}>{testimonial.role}, {testimonial.company}</Text>
+        <View style={styles.teamList}>
+          {teamMembers.map((member, index) => {
+            const isReversed = isMediumScreen && index % 2 !== 0;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.teamRow,
+                  isReversed && styles.teamRowReversed,
+                  index < teamMembers.length - 1 && styles.teamRowBorder,
+                ]}
+              >
+                {/* Photo */}
+                <View style={styles.teamPhotoCol}>
+                  <Image source={member.image} style={styles.teamPhoto} />
+                </View>
+
+                {/* Info */}
+                <View style={styles.teamInfoCol}>
+                  <Text style={styles.teamName}>{member.name}</Text>
+                  <Text style={styles.teamDegree}>{member.degree}</Text>
+
+                  <Text style={styles.teamBio}>{member.bio}</Text>
+
+                  {/* Projects*/}
+                  <View style={styles.teamMetaItem}>
+                    <Ionicons name="school-outline" size={15} color={colors.primary.orange} style={{ marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.teamMetaLabel}>Projects</Text>
+                      <Text style={styles.teamMetaValue}>{member.projects}</Text>
+                    </View>
+                  </View>
+
+                  {/* Interests */}
+                  <View style={styles.teamInterests}>
+                    {member.interests.map((interest, i) => (
+                      <View key={i} style={styles.interestTag}>
+                        <Text style={styles.interestTagText}>{interest}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Contact */}
+                  <View style={styles.teamContact}>
+                    <Pressable
+                      style={styles.contactLink}
+                      onPress={() => Linking.openURL(`mailto:${member.email}`)}
+                    >
+                      <Ionicons name="mail-outline" size={15} color={colors.primary.orange} />
+                      <Text style={styles.contactLinkText}>{member.email}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.contactLink}
+                      onPress={() => Linking.openURL(member.linkedin)}
+                    >
+                      <Ionicons name="logo-linkedin" size={15} color={colors.primary.orange} />
+                      <Text style={styles.contactLinkText}>LinkedIn</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </Pressable>
-          ))}
+            );
+          })}
         </View>
       </View>
 
@@ -416,6 +493,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 40, fontWeight: '700', color: colors.text.primary, textAlign: 'center', marginBottom: spacing.md, letterSpacing: -0.5 },
   sectionTitleLight: { fontSize: 40, fontWeight: '700', color: colors.neutral.white, textAlign: 'center', marginBottom: spacing.md, letterSpacing: -0.5 },
   sectionSubtitle: { fontSize: 18, color: colors.text.secondary, textAlign: 'center', lineHeight: 28 },
+  sectionSubtitleLight: { fontSize: 17, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 26 },
 
   // Steps
   stepsGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
@@ -455,17 +533,52 @@ const styles = StyleSheet.create({
   outlineButtonHovered: { borderColor: colors.primary.orange, backgroundColor: 'rgba(246, 112, 17, 0.04)' },
   outlineButtonText: { fontSize: 15, fontWeight: '600', color: colors.text.primary },
 
-  // Testimonials
-  testimonialsGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
-  testimonialsGridLarge: { flexDirection: 'row', flexWrap: 'wrap' },
-  testimonialCard: { flex: 1, minWidth: 280, backgroundColor: colors.neutral.darkGray, borderRadius: borderRadius.xl, padding: spacing.xl, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.06)', transitionDuration: '300ms' },
-  testimonialCardHovered: { borderColor: colors.primary.orange, transform: [{ translateY: -4 }] },
-  testimonialQuote: { marginBottom: spacing.md },
-  testimonialText: { fontSize: 16, color: 'rgba(255, 255, 255, 0.8)', lineHeight: 26, marginBottom: spacing.lg },
-  testimonialAuthor: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  testimonialAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.neutral.gray },
-  testimonialName: { fontSize: 15, fontWeight: '600', color: colors.neutral.white },
-  testimonialRole: { fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' },
+  // About Us — stacked alternating rows
+  teamList: { maxWidth: 1100, alignSelf: 'center', width: '100%' },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 56,
+    paddingVertical: 64,
+    flexWrap: 'wrap',
+  },
+  teamRowReversed: { flexDirection: 'row-reverse' },
+  teamRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  teamPhotoCol: { alignItems: 'center' },
+  teamPhoto: {
+    width: 200,
+    height: 200,
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.neutral.darkGray,
+    borderWidth: 2,
+    borderColor: 'rgba(246, 112, 17, 0.3)',
+  },
+  teamInfoCol: { flex: 1, minWidth: 280 },
+  teamName: { fontSize: 26, fontWeight: '700', color: colors.neutral.white, marginBottom: 4 },
+  teamDegree: { fontSize: 14, fontWeight: '600', color: colors.primary.orange, marginBottom: spacing.lg, letterSpacing: 0.3 },
+  teamBio: { fontSize: 15, color: 'rgba(255,255,255,0.7)', lineHeight: 26, marginBottom: spacing.lg },
+
+  teamMetaItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: spacing.lg },
+  teamMetaLabel: { fontSize: 11, fontWeight: '600', color: colors.primary.orange, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  teamMetaValue: { fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 20 },
+
+  teamInterests: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.lg },
+  interestTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(246, 112, 17, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(246, 112, 17, 0.25)',
+  },
+  interestTagText: { fontSize: 12, fontWeight: '600', color: colors.primary.orange },
+
+  teamContact: { flexDirection: 'row', gap: spacing.lg, flexWrap: 'wrap' },
+  contactLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  contactLinkText: { fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecorationLine: 'underline' },
 
   // CTA
   ctaSection: { position: 'relative', paddingVertical: 100, paddingHorizontal: spacing.lg },
