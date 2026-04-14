@@ -53,7 +53,6 @@ describe('LoginPage', () => {
       expect(getByPlaceholderText('johndoe@example.com')).toBeTruthy();
       expect(getByPlaceholderText('Password')).toBeTruthy();
       expect(getByText('Login')).toBeTruthy();
-      expect(getByText('Forgot Password?')).toBeTruthy();
     });
 
     it('should render the logo', () => {
@@ -244,17 +243,10 @@ describe('LoginPage', () => {
   });
 
   describe('Navigation', () => {
-    it('should log to console when Forgot Password is pressed', () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      const { getByText } = render(<LoginPage />);
-      
-      const forgotPasswordButton = getByText('Forgot Password?');
-      fireEvent.press(forgotPasswordButton);
-      
-      expect(consoleSpy).toHaveBeenCalledWith('handleForgotPassword');
-      
-      consoleSpy.mockRestore();
+    it('should not render forgot password action in current login UI', () => {
+      const { queryByText } = render(<LoginPage />);
+
+      expect(queryByText('Forgot Password?')).toBeNull();
     });
   });
 
