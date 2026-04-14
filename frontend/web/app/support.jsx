@@ -67,6 +67,11 @@ const QUICK_START_STEPS = [
   },
   {
     num: 5,
+    title: 'Add cost codes to your project',
+    body: 'Navigate back to the Projects tab and click on the project you created in step 2. \n\nClick on the cost codes tab at the top, then add the cost codes you just created to the project by clicking the Add Cost Codes button in the top right corner and selecting them from the list.',
+  },
+  {
+    num: 6,
     title: 'That is all it takes to get started',
     body: 'Your crew can now clock in and out at the job site using the mobile app, and you can manage everything from the dashboard. \n\n From here, you can explore additional features.',
   },

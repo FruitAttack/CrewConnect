@@ -82,6 +82,12 @@ export default function Index() {
       description:
         'We use Supabase with PostgreSQL to store and manage project, workforce, and application data in a scalable relational database.',
     },
+    {
+      icon: 'cloud-outline',
+      title: 'Deployment',
+      description:
+        'Frontend files are served at the edge through CloudFront for blazing speed, and the backend runs on ECS so it can auto scale at a moment\'s notice.',
+    }
   ];
 
   const teamMembers = [
@@ -91,7 +97,7 @@ export default function Index() {
       image: require('../assets/images/spencer.jpg'),
       bio: 'Hello my name is Spencer Perry I am a senior at the university of utah studying computer science, I have experience in full stack development. I am passionate about networking and embedded systems, and I have a strong interest in mobile development and HCI/UX engineering. I am excited to apply my skills to solve real-world problems. I am a hard worker and a quick learner, and I am always looking for new challenges and opportunities to grow. In my free time, I enjoy mountain biking , surfing , and exploring new technologies. ',
       interests: ['Computer Networking', 'Embedded Systems', 'Mobile Development', 'HCI & UX Engineering'],
-      projects: 'Capstone Project - "CrewConnect: A Data-Driven Approach to Construction Workforce Management": Developed a data-driven solution to optimize construction workforce efficiency; \n\n Networking Projects: Built a Python-based network proxy and a Docker Compose load balancer for scalable, high-availability systems; \n\n Mobile App - "Drawing App": Created a Kotlin-based drawing app with a custom canvas, SQLite database, and custom brush tools such as blur and noise. with a backend server for user authentication and data storage. \n\n Embedded Systems & Networking: Developed a microcontroller-based water quality system using C, integrating various sensors such as pH, turbidity, and temperature sensors, and implemented a Python-based network proxy to securely transmit data to a remote server using a custom tcp protocol.',
+      projects: 'Capstone Project - "CrewConnect: A Data-Driven Approach to Construction Workforce Management": Developed a data-driven solution to optimize construction workforce efficiency; \n\nNetworking Projects: Built a Python-based network proxy and a Docker Compose load balancer for scalable, high-availability systems; \n\nMobile App - "Drawing App": Created a Kotlin-based drawing app with a custom canvas, SQLite database, and custom brush tools such as blur and noise. with a backend server for user authentication and data storage. \n\nEmbedded Systems & Networking: Developed a microcontroller-based water quality system using C, integrating various sensors such as pH, turbidity, and temperature sensors, and implemented a Python-based network proxy to securely transmit data to a remote server using a custom tcp protocol.',
       email: 'spencercoleperry@gmail.com',
       linkedin: 'https://www.linkedin.com/in/spencer-perry-939b87201',
     },
@@ -109,21 +115,21 @@ export default function Index() {
       name: 'Liam Coburn',
       degree: 'B.S. Computer Science',
       image: require('../assets/images/liam.png'),
-      bio: 'Hello, my name is Liam Coburn. I am a soon-to-be graduate with a bachelor’s degree in computer science. I enjoy developing software, with experience working on both independent projects, and collaborative team-based systems through academic work. \n\n Outside of software, I also enjoy exploring technology through hobbies, including PC building, gaming, and creative tools, which have helped to deepen my understanding of systems and user-focused design. I’m excited for the journey of continuing to grow as a developer, while contributing to interesting and meaningful projects. Outside of technology, I also enjoy swimming and tabletop games.',
+      bio: 'Hello, my name is Liam Coburn. I am a soon-to-be graduate with a bachelor’s degree in computer science. I enjoy developing software, with experience working on both independent projects, and collaborative team-based systems through academic work. \n\nOutside of software, I also enjoy exploring technology through hobbies, including PC building, gaming, and creative tools, which have helped to deepen my understanding of systems and user-focused design. I’m excited for the journey of continuing to grow as a developer, while contributing to interesting and meaningful projects. Outside of technology, I also enjoy swimming and tabletop games.',
       interests: ['Web Development', 'Mobile Development', 'Image Processing'],
-      projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management \n\n Drawing App: A kotlin-based drawing app for android, with image processing tools and cloud-based image sharing. \n\n Fish Classifier: A convolutional neural network pipeline to classify fish species',
+      projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management \n\nDrawing App: A kotlin-based drawing app for android, with image processing tools and cloud-based image sharing. \n\nFish Classifier: A convolutional neural network pipeline to classify fish species',
       email: 'liammcoburn@gmail.com',
       linkedin: 'https://www.linkedin.com/in/liam-coburn-511b96233/',
     },
     {
-      name: 'Joel R.',
+      name: 'Joel Moffatt',
       degree: 'B.S. Computer Science',
       image: require('../assets/images/joel.jpg'),
-      bio: 'sjkdk sefkjh dkjfbdk kjdf idjsfk fkj fkdjsbkdgf jbdkjsf bijkd bdfkjbds kjbdsfikj bkjsd jdsfb kdsj fbkjfdbnkjdfb jkdhiidfjhbkd jfskrj',
-      interests: ['Geotechnical Engineering', 'GPS & Site Technology', 'Infrastructure Safety'],
-      projects: 'GPS Telemetry Integration for Construction Site Safety',
-      email: 'joel.r@crewconnect.io',
-      linkedin: 'https://linkedin.com/in/joelr',
+      bio: 'Hey I’m Joel, a Computer Science senior at the University of Utah with experience building full-stack software and business automation tools. I enjoy creating practical applications that solve real problems, from operational systems to user-focused products. I am a dedicated and collaborative team member, always eager to learn and take on new challenges.',
+      interests: ['Full Stack Development', 'Bussiness Automations', 'Development Operations'],
+      projects: 'Survivor OutDraft: Full stack application built for me and my friends to create and play in a survivor fantasy league. It is built with a React frontend, Spring Boot backend and uses a data-wrangling pipeline to seed the game data. \n\nReinforcement Learning with Large Language Model Feedback (RLLLM): Based off of RLHF but replaces human preferences with LLM-generated feedback to train a reward model. This reward model helps train a network that can outperform a policy trained directly on the environment’s true reward.',
+      email: 'joelemoffatt@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/joel-moffatt-574682212/',
     },
   ];
 
