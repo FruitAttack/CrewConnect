@@ -57,6 +57,33 @@ export default function Index() {
     { icon: 'document-text-outline', title: 'Digital Timecards', description: 'Weekly timecards with digital signatures for streamlined payroll processing.' },
   ];
 
+    const techStack = [
+    {
+      icon: 'phone-portrait-outline',
+      title: 'Frontend',
+      description:
+        'We built the user interface using React with Expo and React Native, allowing us to create a responsive cross-platform experience for both web and mobile-focused workflows.',
+    },
+    {
+      icon: 'map-outline',
+      title: 'Mapping',
+      description:
+        'Mapbox GL powers our map features, including location-based job site interactions and GPS-related functionality used throughout the platform.',
+    },
+    {
+      icon: 'server-outline',
+      title: 'Backend',
+      description:
+        'Our backend server is built with Node.js, which handles application logic, data flow, and communication between the frontend and database.',
+    },
+    {
+      icon: 'layers-outline',
+      title: 'Database',
+      description:
+        'We use Supabase with PostgreSQL to store and manage project, workforce, and application data in a scalable relational database.',
+    },
+  ];
+
   const teamMembers = [
      {
       name: 'Spencer Perry',
@@ -206,6 +233,46 @@ export default function Index() {
         </View>
       </View>
 
+      {/* Project Overview Section */}
+      <View style={styles.sectionAlt}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>PROJECT OVERVIEW</Text>
+          <Text style={styles.sectionTitle}>What CrewConnect Is</Text>
+          <Text style={styles.sectionSubtitle}>
+            A high-level overview of the project, the problem it solves, and why it matters.
+          </Text>
+        </View>
+
+        <View style={[styles.overviewGrid, isLargeScreen && styles.overviewGridLarge]}>
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>The Project</Text>
+            <Text style={styles.overviewCardText}>
+              CrewConnect is a construction workforce management platform designed to
+              streamline field operations. It brings together time tracking, crew
+              coordination, safety workflows, and project visibility into a single system.
+            </Text>
+          </View>
+
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>The Problem</Text>
+            <Text style={styles.overviewCardText}>
+              Many construction teams still rely on paper processes, disconnected tools,
+              and manual reporting for tracking labor, safety, and project activity.
+              This creates inefficiencies, delays, and reduced visibility for managers.
+            </Text>
+          </View>
+
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>Our Solution</Text>
+            <Text style={styles.overviewCardText}>
+              CrewConnect centralizes these workflows in one platform, making it easier
+              to manage crews, collect field data, track work in real time, and support
+              more accurate project decision-making.
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* How It Works Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -261,6 +328,41 @@ export default function Index() {
                   <Ionicons name="checkmark" size={16} color={colors.semantic.success} />
                 </View>
                 <Text style={styles.comparisonTextNew}>{item.new}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      {/* Technology Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>TECHNOLOGY</Text>
+          <Text style={styles.sectionTitle}>How We Built CrewConnect</Text>
+          <Text style={styles.sectionSubtitle}>
+            Our project combines a modern frontend, mapping tools, a backend server, and a relational database.
+          </Text>
+        </View>
+
+        <View style={[styles.techSectionContent, isLargeScreen && styles.techSectionContentLarge]}>
+          <View style={styles.techImageWrapper}>
+            <Image
+              source={require('../assets/images/techChart.png')}
+              style={styles.techChartImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          <View style={styles.techCards}>
+            {techStack.map((tech, index) => (
+              <View key={index} style={styles.techCard}>
+                <View style={styles.techIconContainer}>
+                  <Ionicons name={tech.icon} size={22} color={colors.primary.orange} />
+                </View>
+                <View style={styles.techTextContainer}>
+                  <Text style={styles.techCardTitle}>{tech.title}</Text>
+                  <Text style={styles.techCardDescription}>{tech.description}</Text>
+                </View>
               </View>
             ))}
           </View>
@@ -403,33 +505,45 @@ export default function Index() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <View style={[styles.footerContent, isLargeScreen && styles.footerContentLarge]}>
-          <View style={styles.footerBrand}>
-            <Image source={require('../assets/images/CC_logo_nobackground.png')} style={styles.footerLogo} resizeMode="contain" />
-            <Text style={styles.footerTagline}>Built for construction. Built for you.</Text>
+        <View style={styles.footerInner}>
+          <Image
+            source={require('../assets/images/CC_logo_nobackground.png')}
+            style={styles.footerLogo}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.footerTagline}>
+            Built for construction. Built for you.
+          </Text>
+
+          <View style={styles.footerNav}>
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/features')}
+            >
+              <Text style={styles.footerNavText}>Features</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/pricing')}
+            >
+              <Text style={styles.footerNavText}>Pricing</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/support')}
+            >
+              <Text style={styles.footerNavText}>Support</Text>
+            </Pressable>
           </View>
-          <View style={styles.footerLinks}>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Product</Text>
-              <Pressable onPress={() => router.push('/features')}><Text style={styles.footerLink}>Features</Text></Pressable>
-              <Pressable onPress={() => router.push('/pricing')}><Text style={styles.footerLink}>Pricing</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Security</Text></Pressable>
-            </View>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Company</Text>
-              <Pressable><Text style={styles.footerLink}>About</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Careers</Text></Pressable>
-              <Pressable onPress={() => router.push('/support')}><Text style={styles.footerLink}>Contact</Text></Pressable>
-            </View>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Legal</Text>
-              <Pressable><Text style={styles.footerLink}>Privacy</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Terms</Text></Pressable>
-            </View>
-          </View>
-        </View>
-        <View style={styles.footerBottom}>
-          <Text style={styles.footerCopyright}>© 2025 CrewConnect. All rights reserved.</Text>
+
+          <View style={styles.footerDivider} />
+
+          <Text style={styles.footerCopyright}>
+            © 2026 CrewConnect. All rights reserved.
+          </Text>
         </View>
       </View>
     </ScrollView>
@@ -483,6 +597,37 @@ const styles = StyleSheet.create({
   trustedLogo: { paddingHorizontal: spacing.lg },
   trustedLogoText: { fontSize: 15, fontWeight: '600', color: colors.text.tertiary },
 
+    // Project Overview
+  overviewGrid: {
+    gap: spacing.lg,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  overviewGridLarge: {
+    flexDirection: 'row',
+  },
+  overviewCard: {
+    flex: 1,
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    minWidth: 260,
+  },
+  overviewCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+  },
+  overviewCardText: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    lineHeight: 25,
+  },
+
   // Sections
   section: { paddingVertical: 100, paddingHorizontal: spacing.lg, backgroundColor: colors.neutral.white },
   sectionAlt: { paddingVertical: 100, paddingHorizontal: spacing.lg, backgroundColor: '#F8FAFC' },
@@ -518,6 +663,67 @@ const styles = StyleSheet.create({
   comparisonIconGood: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(16, 185, 129, 0.1)', alignItems: 'center', justifyContent: 'center' },
   comparisonTextOld: { fontSize: 15, color: colors.text.tertiary, textDecorationLine: 'line-through' },
   comparisonTextNew: { fontSize: 15, color: colors.text.primary, fontWeight: '500' },
+
+    // Technology Section
+  techSectionContent: {
+    gap: spacing.xl,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  techSectionContentLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  techImageWrapper: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    minWidth: 320,
+  },
+  techChartImage: {
+    width: '100%',
+    height: 320,
+  },
+  techCards: {
+    flex: 1,
+    gap: spacing.md,
+  },
+  techCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  techIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.lg,
+    backgroundColor: 'rgba(246, 112, 17, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  techTextContainer: {
+    flex: 1,
+  },
+  techCardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  techCardDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    lineHeight: 22,
+  },
 
   // Features
   featuresGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
@@ -594,17 +800,67 @@ const styles = StyleSheet.create({
   ctaButtonSecondaryHovered: { borderColor: 'rgba(255, 255, 255, 0.6)', backgroundColor: 'rgba(255, 255, 255, 0.1)' },
   ctaButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: colors.neutral.white },
 
-  // Footer
-  footer: { backgroundColor: colors.neutral.black, paddingTop: 60, paddingHorizontal: spacing.lg },
-  footerContent: { maxWidth: 1200, alignSelf: 'center', width: '100%', marginBottom: 40 },
-  footerContentLarge: { flexDirection: 'row', justifyContent: 'space-between' },
-  footerBrand: { marginBottom: spacing.xl },
-  footerLogo: { width: 140, height: 32, marginBottom: spacing.sm },
-  footerTagline: { fontSize: 14, color: 'rgba(255, 255, 255, 0.5)' },
-  footerLinks: { flexDirection: 'row', gap: 60 },
-  footerColumn: { gap: spacing.sm },
-  footerColumnTitle: { fontSize: 14, fontWeight: '600', color: colors.neutral.white, marginBottom: spacing.sm },
-  footerLink: { fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' },
-  footerBottom: { borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)', paddingVertical: spacing.lg, alignItems: 'center' },
-  footerCopyright: { fontSize: 13, color: 'rgba(255, 255, 255, 0.4)' },
+// Footer
+  footer: {
+    backgroundColor: colors.neutral.black,
+    paddingVertical: 72,
+    paddingHorizontal: spacing.lg,
+  },
+  footerInner: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+    alignItems: 'center',
+  },
+  footerLogo: {
+    width: 150,
+    height: 40,
+    marginBottom: spacing.lg,
+  },
+  footerTagline: {
+    fontSize: 15,
+    lineHeight: 26,
+    color: 'rgba(255, 255, 255, 0.68)',
+    textAlign: 'center',
+    maxWidth: 640,
+    marginBottom: 32,
+  },
+  footerNav: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 36,
+  },
+  footerNavLink: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    transitionDuration: '200ms',
+  },
+  footerNavLinkHovered: {
+    backgroundColor: 'rgba(246, 112, 17, 0.12)',
+    borderColor: 'rgba(246, 112, 17, 0.35)',
+    transform: [{ translateY: -1 }],
+  },
+  footerNavText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.neutral.white,
+  },
+  footerDivider: {
+    width: '100%',
+    maxWidth: 760,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+    marginBottom: 20,
+  },
+  footerCopyright: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.42)',
+    textAlign: 'center',
+  },
 });
