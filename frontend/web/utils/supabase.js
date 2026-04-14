@@ -3,7 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 
 let storage;
 
-if (Platform.OS === "web" && typeof localStorage !== "undefined") {
+const hasBrowserLocalStorage =
+  Platform.OS === "web" &&
+  typeof window !== "undefined" &&
+  typeof localStorage !== "undefined" &&
+  typeof localStorage.getItem === "function" &&
+  typeof localStorage.setItem === "function" &&
+  typeof localStorage.removeItem === "function";
+
+if (hasBrowserLocalStorage) {
   // Use browser localStorage on web when available
   storage = {
     getItem: (key) => Promise.resolve(localStorage.getItem(key)),
