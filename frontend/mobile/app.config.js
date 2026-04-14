@@ -1,4 +1,4 @@
-export default ({ config }) => {
+export default () => {
   const baseConfig = {
     scheme: "Crew_Connect",
     name: "CrewConnect",
@@ -17,6 +17,7 @@ export default ({ config }) => {
       supportsTablet: true
     },
     android: {
+      package: "com.spexzx234.crewconnect",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
@@ -26,11 +27,17 @@ export default ({ config }) => {
     web: {
       favicon: "./assets/CC_logo_nobackground.png",
       bundler: "metro"
+    },
+
+   
+    extra: {
+      eas: {
+        projectId: "0e860b4a-21fc-4782-a5d6-3e0b30e0665b"
+      }
     }
   };
 
-  // Add baseUrl for production builds
-  if (process.env.EXPO_PUBLIC_ENV === 'production') {
+  if (process.env.EXPO_PUBLIC_ENV === "production") {
     baseConfig.experiments = {
       baseUrl: "/mobile"
     };
