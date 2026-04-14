@@ -69,7 +69,7 @@ export default function Index() {
       linkedin: 'https://www.linkedin.com/in/spencer-perry-939b87201',
     },
     {
-      name: 'Cody M.',
+      name: 'Cody Mathews',
       degree: 'B.S. Data Science',
       image: require('../assets/images/cody.png'),
       bio: 'sjkdk sefkjh dkjfbdk kjdf idjsfk fkj fkdjsbkdgf jbdkjsf bijkd bdfkjbds kjbdsfikj bkjsd jdsfb kdsj fbkjfdbnkjdfb jkdhiidfjhbkd jfskrj',
