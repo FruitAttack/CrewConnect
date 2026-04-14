@@ -109,15 +109,6 @@ const LoginPage = () => {
             {isLoading ? "Logging in..." : "Login"}
           </Text>
         </TouchableOpacity>
-
-        {/* Forgot Password */}
-        <TouchableOpacity onPress={handleForgotPassword}>
-          <Text style={styles.linkText}>Forgot Password?</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={handleSignUp}>
-          <Text style={styles.linkText}>Sign Up</Text>
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

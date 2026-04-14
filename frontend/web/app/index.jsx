@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, useWindowDimensions, Animated, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, useWindowDimensions, Animated, Pressable, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -16,7 +16,6 @@ export default function Index() {
   const floatAnim = useRef(new Animated.Value(0)).current;
   const [hoveredFeature, setHoveredFeature] = useState(null);
   const [hoveredStep, setHoveredStep] = useState(null);
-  const [hoveredTestimonial, setHoveredTestimonial] = useState(null);
   const [signUpModalVisible, setSignUpModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
 
@@ -58,11 +57,80 @@ export default function Index() {
     { icon: 'document-text-outline', title: 'Digital Timecards', description: 'Weekly timecards with digital signatures for streamlined payroll processing.' },
   ];
 
-  const testimonials = [
-    { name: 'Cody M.', role: 'Data Analyst', company: 'BuildRight Co.', image: require('../assets/images/cody.png'), quote: 'The analytics are intuitive and comprehensive. Any data analyst would be thrilled using CrewConnect.' },
-    { name: 'Liam K.', role: 'Project Manager', company: 'Apex Construction', image: require('../assets/images/liam.png'), quote: "Of all the apps we've tried, this one is simply the best. Easy to use and genuinely enjoyable." },
-    { name: 'Joel R.', role: 'Field Supervisor', company: 'Summit Builders', image: require('../assets/images/joel.jpg'), quote: "The clock in button is right there, nice and easy. Perfect for crews with real work to do." },
-    { name: 'Spencer T.', role: 'Construction Lead', company: 'Cornerstone Inc.', image: require('../assets/images/spencer.jpg'), quote: 'It just works. Exactly what we needed.' },
+    const techStack = [
+    {
+      icon: 'phone-portrait-outline',
+      title: 'Frontend',
+      description:
+        'We built the user interface using React with Expo and React Native, allowing us to create a responsive cross-platform experience for both web and mobile-focused workflows.',
+    },
+    {
+      icon: 'map-outline',
+      title: 'Mapping',
+      description:
+        'Mapbox GL powers our map features, including location-based job site interactions and GPS-related functionality used throughout the platform.',
+    },
+    {
+      icon: 'server-outline',
+      title: 'Backend',
+      description:
+        'Our backend server is built with Node.js, which handles application logic, data flow, and communication between the frontend and database.',
+    },
+    {
+      icon: 'layers-outline',
+      title: 'Database',
+      description:
+        'We use Supabase with PostgreSQL to store and manage project, workforce, and application data in a scalable relational database.',
+    },
+    {
+      icon: 'cloud-outline',
+      title: 'Deployment',
+      description:
+        'Frontend files are served at the edge through CloudFront for blazing speed, and the backend runs on ECS so it can auto scale at a moment\'s notice.',
+    }
+  ];
+
+  const teamMembers = [
+     {
+      name: 'Spencer Perry',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/spencer.jpg'),
+      bio: 'Hello my name is Spencer Perry I am a senior at the university of utah studying computer science, I have experience in full stack development. I am passionate about networking and embedded systems, and I have a strong interest in mobile development and HCI/UX engineering. I am excited to apply my skills to solve real-world problems. I am a hard worker and a quick learner, and I am always looking for new challenges and opportunities to grow. In my free time, I enjoy mountain biking , surfing , and exploring new technologies. ',
+      interests: ['Computer Networking', 'Embedded Systems', 'Mobile Development', 'HCI & UX Engineering'],
+      projects: 'Capstone Project - "CrewConnect: A Data-Driven Approach to Construction Workforce Management": Developed a data-driven solution to optimize construction workforce efficiency; \n\nNetworking Projects: Built a Python-based network proxy and a Docker Compose load balancer for scalable, high-availability systems; \n\nMobile App - "Drawing App": Created a Kotlin-based drawing app with a custom canvas, SQLite database, and custom brush tools such as blur and noise. with a backend server for user authentication and data storage. \n\nEmbedded Systems & Networking: Developed a microcontroller-based water quality system using C, integrating various sensors such as pH, turbidity, and temperature sensors, and implemented a Python-based network proxy to securely transmit data to a remote server using a custom tcp protocol.',
+      email: 'spencercoleperry@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/spencer-perry-939b87201',
+    },
+    {
+      name: 'Cody Mathews',
+      degree: 'B.S. Data Science',
+      image: require('../assets/images/cody.png'),
+      bio: 'Hi, my name is Cody Mathews, a soon-to-be graduate with a bachelors degree in Data Science. I am passionate about building tools that solve real problems, especially at the intersection of data, software, and construction. My work spans machine learning, data visualization, and full-stack development, with a focus on making complex data accessible and actionable. Outside of school, I have been building Kyub, a modern construction takeoff, estimating and project management platform aimed at replacing clunky legacy software with something actually intuitive to use. When I am not coding, you will find me following the latest in AI research or thinking about how data can reshape industries like construction and workforce management.',
+      interests: ['Construction Tech & Estimating', 'Machine Learning', 'Data Visualization'],
+      projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management \n\n Kyub: A 3D Earthwork Takeoff & Modern Construction Estimating & Project Management Platform',
+      email: 'cody.m@crewconnect.io',
+      linkedin: 'https://www.linkedin.com/in/cody-mathews-7245a3a6/',
+    },
+    {
+      name: 'Liam Coburn',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/liam.png'),
+      bio: 'Hello, my name is Liam Coburn. I am a soon-to-be graduate with a bachelor’s degree in computer science. I enjoy developing software, with experience working on both independent projects, and collaborative team-based systems through academic work. \n\nOutside of software, I also enjoy exploring technology through hobbies, including PC building, gaming, and creative tools, which have helped to deepen my understanding of systems and user-focused design. I’m excited for the journey of continuing to grow as a developer, while contributing to interesting and meaningful projects. Outside of technology, I also enjoy swimming and tabletop games.',
+      interests: ['Web Development', 'Mobile Development', 'Image Processing'],
+      projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management \n\nDrawing App: A kotlin-based drawing app for android, with image processing tools and cloud-based image sharing. \n\nFish Classifier: A convolutional neural network pipeline to classify fish species',
+      email: 'liammcoburn@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/liam-coburn-511b96233/',
+    },
+    {
+      name: 'Joel Moffatt',
+      degree: 'B.S. Computer Science',
+      image: require('../assets/images/joel.jpg'),
+      bio: 'Hey I’m Joel, a Computer Science senior at the University of Utah with experience building full-stack software and business automation tools. I enjoy creating practical applications that solve real problems, from operational systems to user-focused products. I am a dedicated and collaborative team member, always eager to learn and take on new challenges.',
+      interests: ['Full Stack Development', 'Bussiness Automations', 'Development Operations'],
+      projects: 'Survivor OutDraft: Full stack application built for me and my friends to create and play in a survivor fantasy league. It is built with a React frontend, Spring Boot backend and uses a data-wrangling pipeline to seed the game data. \n\nReinforcement Learning with Large Language Model Feedback (RLLLM): Based off of RLHF but replaces human preferences with LLM-generated feedback to train a reward model. This reward model helps train a network that can outperform a policy trained directly on the environment’s true reward.',
+      email: 'joelemoffatt@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/joel-moffatt-574682212/',
+    },
   ];
 
   const comparison = [
@@ -140,7 +208,6 @@ export default function Index() {
             </View>
           </View>
 
-          {/* Phone Mockup */}
           {isMediumScreen && (
             <View style={styles.heroPhone}>
               <Animated.View style={[styles.phoneContainer, { transform: [{ translateY: floatTransform }] }]}>
@@ -169,6 +236,46 @@ export default function Index() {
               <Text style={styles.trustedLogoText}>{name}</Text>
             </View>
           ))}
+        </View>
+      </View>
+
+      {/* Project Overview Section */}
+      <View style={styles.sectionAlt}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>PROJECT OVERVIEW</Text>
+          <Text style={styles.sectionTitle}>What CrewConnect Is</Text>
+          <Text style={styles.sectionSubtitle}>
+            A high-level overview of the project, the problem it solves, and why it matters.
+          </Text>
+        </View>
+
+        <View style={[styles.overviewGrid, isLargeScreen && styles.overviewGridLarge]}>
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>The Project</Text>
+            <Text style={styles.overviewCardText}>
+              CrewConnect is a construction workforce management platform designed to
+              streamline field operations. It brings together time tracking, crew
+              coordination, safety workflows, and project visibility into a single system.
+            </Text>
+          </View>
+
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>The Problem</Text>
+            <Text style={styles.overviewCardText}>
+              Many construction teams still rely on paper processes, disconnected tools,
+              and manual reporting for tracking labor, safety, and project activity.
+              This creates inefficiencies, delays, and reduced visibility for managers.
+            </Text>
+          </View>
+
+          <View style={styles.overviewCard}>
+            <Text style={styles.overviewCardTitle}>Our Solution</Text>
+            <Text style={styles.overviewCardText}>
+              CrewConnect centralizes these workflows in one platform, making it easier
+              to manage crews, collect field data, track work in real time, and support
+              more accurate project decision-making.
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -233,6 +340,41 @@ export default function Index() {
         </View>
       </View>
 
+      {/* Technology Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>TECHNOLOGY</Text>
+          <Text style={styles.sectionTitle}>How We Built CrewConnect</Text>
+          <Text style={styles.sectionSubtitle}>
+            Our project combines a modern frontend, mapping tools, a backend server, and a relational database.
+          </Text>
+        </View>
+
+        <View style={[styles.techSectionContent, isLargeScreen && styles.techSectionContentLarge]}>
+          <View style={styles.techImageWrapper}>
+            <Image
+              source={require('../assets/images/techChart.png')}
+              style={styles.techChartImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          <View style={styles.techCards}>
+            {techStack.map((tech, index) => (
+              <View key={index} style={styles.techCard}>
+                <View style={styles.techIconContainer}>
+                  <Ionicons name={tech.icon} size={22} color={colors.primary.orange} />
+                </View>
+                <View style={styles.techTextContainer}>
+                  <Text style={styles.techCardTitle}>{tech.title}</Text>
+                  <Text style={styles.techCardDescription}>{tech.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
       {/* Features Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -269,34 +411,77 @@ export default function Index() {
         </View>
       </View>
 
-      {/* Testimonials Section */}
+      {/* About Us Section */}
       <View style={styles.sectionDark}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabelLight}>TESTIMONIALS</Text>
-          <Text style={styles.sectionTitleLight}>Loved by Construction Teams</Text>
+          <Text style={styles.sectionLabelLight}>ABOUT US</Text>
+          <Text style={styles.sectionTitleLight}>Meet the Team</Text>
+          <Text style={styles.sectionSubtitleLight}>The people behind CrewConnect — builders, engineers, and problem solvers.</Text>
         </View>
 
-        <View style={[styles.testimonialsGrid, isLargeScreen && styles.testimonialsGridLarge]}>
-          {testimonials.map((testimonial, index) => (
-            <Pressable
-              key={index}
-              onHoverIn={() => setHoveredTestimonial(index)}
-              onHoverOut={() => setHoveredTestimonial(null)}
-              style={[styles.testimonialCard, hoveredTestimonial === index && styles.testimonialCardHovered]}
-            >
-              <View style={styles.testimonialQuote}>
-                <Ionicons name="chatbubble-outline" size={24} color={colors.primary.orange} style={{ opacity: 0.5 }} />
-              </View>
-              <Text style={styles.testimonialText}>"{testimonial.quote}"</Text>
-              <View style={styles.testimonialAuthor}>
-                <Image source={testimonial.image} style={styles.testimonialAvatar} />
-                <View>
-                  <Text style={styles.testimonialName}>{testimonial.name}</Text>
-                  <Text style={styles.testimonialRole}>{testimonial.role}, {testimonial.company}</Text>
+        <View style={styles.teamList}>
+          {teamMembers.map((member, index) => {
+            const isReversed = isMediumScreen && index % 2 !== 0;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.teamRow,
+                  isReversed && styles.teamRowReversed,
+                  index < teamMembers.length - 1 && styles.teamRowBorder,
+                ]}
+              >
+                {/* Photo */}
+                <View style={styles.teamPhotoCol}>
+                  <Image source={member.image} style={styles.teamPhoto} />
+                </View>
+
+                {/* Info */}
+                <View style={styles.teamInfoCol}>
+                  <Text style={styles.teamName}>{member.name}</Text>
+                  <Text style={styles.teamDegree}>{member.degree}</Text>
+
+                  <Text style={styles.teamBio}>{member.bio}</Text>
+
+                  {/* Projects*/}
+                  <View style={styles.teamMetaItem}>
+                    <Ionicons name="school-outline" size={15} color={colors.primary.orange} style={{ marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.teamMetaLabel}>Projects</Text>
+                      <Text style={styles.teamMetaValue}>{member.projects}</Text>
+                    </View>
+                  </View>
+
+                  {/* Interests */}
+                  <View style={styles.teamInterests}>
+                    {member.interests.map((interest, i) => (
+                      <View key={i} style={styles.interestTag}>
+                        <Text style={styles.interestTagText}>{interest}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Contact */}
+                  <View style={styles.teamContact}>
+                    <Pressable
+                      style={styles.contactLink}
+                      onPress={() => Linking.openURL(`mailto:${member.email}`)}
+                    >
+                      <Ionicons name="mail-outline" size={15} color={colors.primary.orange} />
+                      <Text style={styles.contactLinkText}>{member.email}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.contactLink}
+                      onPress={() => Linking.openURL(member.linkedin)}
+                    >
+                      <Ionicons name="logo-linkedin" size={15} color={colors.primary.orange} />
+                      <Text style={styles.contactLinkText}>LinkedIn</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </Pressable>
-          ))}
+            );
+          })}
         </View>
       </View>
 
@@ -326,33 +511,45 @@ export default function Index() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <View style={[styles.footerContent, isLargeScreen && styles.footerContentLarge]}>
-          <View style={styles.footerBrand}>
-            <Image source={require('../assets/images/CC_logo_nobackground.png')} style={styles.footerLogo} resizeMode="contain" />
-            <Text style={styles.footerTagline}>Built for construction. Built for you.</Text>
+        <View style={styles.footerInner}>
+          <Image
+            source={require('../assets/images/CC_logo_nobackground.png')}
+            style={styles.footerLogo}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.footerTagline}>
+            Built for construction. Built for you.
+          </Text>
+
+          <View style={styles.footerNav}>
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/features')}
+            >
+              <Text style={styles.footerNavText}>Features</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/pricing')}
+            >
+              <Text style={styles.footerNavText}>Pricing</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ hovered }) => [styles.footerNavLink, hovered && styles.footerNavLinkHovered]}
+              onPress={() => router.push('/support')}
+            >
+              <Text style={styles.footerNavText}>Support</Text>
+            </Pressable>
           </View>
-          <View style={styles.footerLinks}>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Product</Text>
-              <Pressable onPress={() => router.push('/features')}><Text style={styles.footerLink}>Features</Text></Pressable>
-              <Pressable onPress={() => router.push('/pricing')}><Text style={styles.footerLink}>Pricing</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Security</Text></Pressable>
-            </View>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Company</Text>
-              <Pressable><Text style={styles.footerLink}>About</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Careers</Text></Pressable>
-              <Pressable onPress={() => router.push('/support')}><Text style={styles.footerLink}>Contact</Text></Pressable>
-            </View>
-            <View style={styles.footerColumn}>
-              <Text style={styles.footerColumnTitle}>Legal</Text>
-              <Pressable><Text style={styles.footerLink}>Privacy</Text></Pressable>
-              <Pressable><Text style={styles.footerLink}>Terms</Text></Pressable>
-            </View>
-          </View>
-        </View>
-        <View style={styles.footerBottom}>
-          <Text style={styles.footerCopyright}>© 2025 CrewConnect. All rights reserved.</Text>
+
+          <View style={styles.footerDivider} />
+
+          <Text style={styles.footerCopyright}>
+            © 2026 CrewConnect. All rights reserved.
+          </Text>
         </View>
       </View>
     </ScrollView>
@@ -406,6 +603,37 @@ const styles = StyleSheet.create({
   trustedLogo: { paddingHorizontal: spacing.lg },
   trustedLogoText: { fontSize: 15, fontWeight: '600', color: colors.text.tertiary },
 
+    // Project Overview
+  overviewGrid: {
+    gap: spacing.lg,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  overviewGridLarge: {
+    flexDirection: 'row',
+  },
+  overviewCard: {
+    flex: 1,
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    minWidth: 260,
+  },
+  overviewCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+  },
+  overviewCardText: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    lineHeight: 25,
+  },
+
   // Sections
   section: { paddingVertical: 100, paddingHorizontal: spacing.lg, backgroundColor: colors.neutral.white },
   sectionAlt: { paddingVertical: 100, paddingHorizontal: spacing.lg, backgroundColor: '#F8FAFC' },
@@ -416,6 +644,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 40, fontWeight: '700', color: colors.text.primary, textAlign: 'center', marginBottom: spacing.md, letterSpacing: -0.5 },
   sectionTitleLight: { fontSize: 40, fontWeight: '700', color: colors.neutral.white, textAlign: 'center', marginBottom: spacing.md, letterSpacing: -0.5 },
   sectionSubtitle: { fontSize: 18, color: colors.text.secondary, textAlign: 'center', lineHeight: 28 },
+  sectionSubtitleLight: { fontSize: 17, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 26 },
 
   // Steps
   stepsGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
@@ -441,6 +670,67 @@ const styles = StyleSheet.create({
   comparisonTextOld: { fontSize: 15, color: colors.text.tertiary, textDecorationLine: 'line-through' },
   comparisonTextNew: { fontSize: 15, color: colors.text.primary, fontWeight: '500' },
 
+    // Technology Section
+  techSectionContent: {
+    gap: spacing.xl,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  techSectionContentLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  techImageWrapper: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    minWidth: 320,
+  },
+  techChartImage: {
+    width: '100%',
+    height: 320,
+  },
+  techCards: {
+    flex: 1,
+    gap: spacing.md,
+  },
+  techCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  techIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.lg,
+    backgroundColor: 'rgba(246, 112, 17, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  techTextContainer: {
+    flex: 1,
+  },
+  techCardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  techCardDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    lineHeight: 22,
+  },
+
   // Features
   featuresGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
   featuresGridLarge: { flexDirection: 'row', flexWrap: 'wrap' },
@@ -455,17 +745,52 @@ const styles = StyleSheet.create({
   outlineButtonHovered: { borderColor: colors.primary.orange, backgroundColor: 'rgba(246, 112, 17, 0.04)' },
   outlineButtonText: { fontSize: 15, fontWeight: '600', color: colors.text.primary },
 
-  // Testimonials
-  testimonialsGrid: { gap: spacing.lg, maxWidth: 1000, alignSelf: 'center', width: '100%' },
-  testimonialsGridLarge: { flexDirection: 'row', flexWrap: 'wrap' },
-  testimonialCard: { flex: 1, minWidth: 280, backgroundColor: colors.neutral.darkGray, borderRadius: borderRadius.xl, padding: spacing.xl, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.06)', transitionDuration: '300ms' },
-  testimonialCardHovered: { borderColor: colors.primary.orange, transform: [{ translateY: -4 }] },
-  testimonialQuote: { marginBottom: spacing.md },
-  testimonialText: { fontSize: 16, color: 'rgba(255, 255, 255, 0.8)', lineHeight: 26, marginBottom: spacing.lg },
-  testimonialAuthor: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  testimonialAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.neutral.gray },
-  testimonialName: { fontSize: 15, fontWeight: '600', color: colors.neutral.white },
-  testimonialRole: { fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' },
+  // About Us — stacked alternating rows
+  teamList: { maxWidth: 1100, alignSelf: 'center', width: '100%' },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 56,
+    paddingVertical: 64,
+    flexWrap: 'wrap',
+  },
+  teamRowReversed: { flexDirection: 'row-reverse' },
+  teamRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  teamPhotoCol: { alignItems: 'center' },
+  teamPhoto: {
+    width: 200,
+    height: 200,
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.neutral.darkGray,
+    borderWidth: 2,
+    borderColor: 'rgba(246, 112, 17, 0.3)',
+  },
+  teamInfoCol: { flex: 1, minWidth: 280 },
+  teamName: { fontSize: 26, fontWeight: '700', color: colors.neutral.white, marginBottom: 4 },
+  teamDegree: { fontSize: 14, fontWeight: '600', color: colors.primary.orange, marginBottom: spacing.lg, letterSpacing: 0.3 },
+  teamBio: { fontSize: 15, color: 'rgba(255,255,255,0.7)', lineHeight: 26, marginBottom: spacing.lg },
+
+  teamMetaItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: spacing.lg },
+  teamMetaLabel: { fontSize: 11, fontWeight: '600', color: colors.primary.orange, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  teamMetaValue: { fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 20 },
+
+  teamInterests: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.lg },
+  interestTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(246, 112, 17, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(246, 112, 17, 0.25)',
+  },
+  interestTagText: { fontSize: 12, fontWeight: '600', color: colors.primary.orange },
+
+  teamContact: { flexDirection: 'row', gap: spacing.lg, flexWrap: 'wrap' },
+  contactLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  contactLinkText: { fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecorationLine: 'underline' },
 
   // CTA
   ctaSection: { position: 'relative', paddingVertical: 100, paddingHorizontal: spacing.lg },
@@ -481,17 +806,67 @@ const styles = StyleSheet.create({
   ctaButtonSecondaryHovered: { borderColor: 'rgba(255, 255, 255, 0.6)', backgroundColor: 'rgba(255, 255, 255, 0.1)' },
   ctaButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: colors.neutral.white },
 
-  // Footer
-  footer: { backgroundColor: colors.neutral.black, paddingTop: 60, paddingHorizontal: spacing.lg },
-  footerContent: { maxWidth: 1200, alignSelf: 'center', width: '100%', marginBottom: 40 },
-  footerContentLarge: { flexDirection: 'row', justifyContent: 'space-between' },
-  footerBrand: { marginBottom: spacing.xl },
-  footerLogo: { width: 140, height: 32, marginBottom: spacing.sm },
-  footerTagline: { fontSize: 14, color: 'rgba(255, 255, 255, 0.5)' },
-  footerLinks: { flexDirection: 'row', gap: 60 },
-  footerColumn: { gap: spacing.sm },
-  footerColumnTitle: { fontSize: 14, fontWeight: '600', color: colors.neutral.white, marginBottom: spacing.sm },
-  footerLink: { fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' },
-  footerBottom: { borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)', paddingVertical: spacing.lg, alignItems: 'center' },
-  footerCopyright: { fontSize: 13, color: 'rgba(255, 255, 255, 0.4)' },
+// Footer
+  footer: {
+    backgroundColor: colors.neutral.black,
+    paddingVertical: 72,
+    paddingHorizontal: spacing.lg,
+  },
+  footerInner: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+    alignItems: 'center',
+  },
+  footerLogo: {
+    width: 150,
+    height: 40,
+    marginBottom: spacing.lg,
+  },
+  footerTagline: {
+    fontSize: 15,
+    lineHeight: 26,
+    color: 'rgba(255, 255, 255, 0.68)',
+    textAlign: 'center',
+    maxWidth: 640,
+    marginBottom: 32,
+  },
+  footerNav: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 36,
+  },
+  footerNavLink: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    transitionDuration: '200ms',
+  },
+  footerNavLinkHovered: {
+    backgroundColor: 'rgba(246, 112, 17, 0.12)',
+    borderColor: 'rgba(246, 112, 17, 0.35)',
+    transform: [{ translateY: -1 }],
+  },
+  footerNavText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.neutral.white,
+  },
+  footerDivider: {
+    width: '100%',
+    maxWidth: 760,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+    marginBottom: 20,
+  },
+  footerCopyright: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.42)',
+    textAlign: 'center',
+  },
 });

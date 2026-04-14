@@ -275,7 +275,7 @@ export default function Pricing() {
               style={({ hovered }) => [styles.ctaButtonSecondary, hovered && styles.ctaButtonSecondaryHovered]}
               onPress={() => router.push('/support')}
             >
-              <Text style={styles.ctaButtonSecondaryText}>Talk to Sales</Text>
+              <Text style={styles.ctaButtonSecondaryText}>View Crew Docs</Text>
             </Pressable>
           </View>
         </View>
