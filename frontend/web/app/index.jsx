@@ -109,7 +109,7 @@ export default function Index() {
       interests: ['Construction Tech & Estimating', 'Machine Learning', 'Data Visualization'],
       projects: 'CrewConnect: A Data-Driven Approach to Construction Workforce Management \n\n Kyub: A 3D Earthwork Takeoff & Modern Construction Estimating & Project Management Platform',
       email: 'cody.m@crewconnect.io',
-      linkedin: 'https://linkedin.com/in/codym',
+      linkedin: 'https://www.linkedin.com/in/cody-mathews-7245a3a6/',
     },
     {
       name: 'Liam Coburn',
