@@ -69,26 +69,31 @@ const QUICK_START_STEPS = [
     num: 1,
     title: 'Create your Company',
     body: 'Sign up at https://crewconnect.site/pricing and choose your plan. No credit card required for the 14-day trial. Enter your company details and the admin information. Once you create your company, youll land on the dashboard where you can manage everything — from job sites to employees to timesheets.',
+    image: require('../assets/Demo/dash.png'),
   },
   {
     num: 2,
     title: 'Add your first job site',
     body: 'Go to the Projects tab and click Create New Project. In the popup window, enter the project name, address, customer, and geofence radius. \n\n The customer refers to the entity youre working for; while you can select No Customer, its highly recommended to create one. To do this, click Manage Customers, then Add New Customer, and fill in the required information. \n\n The geofence is the virtual boundary around your job site, and you can adjust the radius based on the size of the site (e.g., 50 meters for a small store or 200 meters for a large construction site). \n\n Next, enter the project\'s latitude and longitude, which you can find by dropping a pin in Google Maps and copying the coordinates. Don\'t worry about being exact, as geofencing allows for some flexibility. \n\n Once everything is set, click Create Project—you\'re now ready to start tracking time at that location, and you can create as many projects as needed for different job sites.',
+    image: require('../assets/Demo/create-pro.png'),
   },
   {
     num: 3,
     title: 'Add your first employees',
     body: 'Navigate to the Workforce tab. From here click Employees on the top menu, you should see a list of employees (which should only include the admin user at this point) in the top right corner click the Add Employee button. \n\n In the popup, enter the employee\'s name, email address, password and phone number. You can also set their role (e.g., Admin, Supervisor, Laborer) select the correct fit that employee belongs to. \n\n Next enter the employees pay type (hourly or salaried) and their hourly rate or salary amount. \n\n Once you click Create Employee, they will receive an email with instructions to download the CrewConnect mobile app and log in with the credentials you just set up. \n\n Repeat this process for each employee you want to add.',
+    image: require('../assets/Demo/add-emp.png'),
   },
   {
     num: 4,
     title: 'Add Your First Cost Code',
     body: 'Navigate to the Workforce tab. From here click Cost Codes on the top menu, you should see a list of cost codes (which should be empty at this point) in the top right corner click the Add Cost Code button. \n\n In the popup, enter the cost code number, name and units (e.g., hours, tons, etc.). and give it a display order, lower numbers appear first.',
+    image: require('../assets/Demo/add-cost.png'),
   },
   {
     num: 5,
     title: 'Add cost codes to your project',
     body: 'Navigate back to the Projects tab and click on the project you created in step 2. \n\nClick on the cost codes tab at the top, then add the cost codes you just created to the project by clicking the Add Cost Codes button in the top right corner and selecting them from the list.',
+    image: require('../assets/Demo/cost-to-pro.png'),
   },
   {
     num: 6,
@@ -862,7 +867,7 @@ const styles = StyleSheet.create({
   },
   stepImage: {
     width: '100%',
-    height: 220,
+    height: 500,
     borderRadius: 10,
     marginTop: spacing.md,
     backgroundColor: 'rgba(0,0,0,0.03)',
