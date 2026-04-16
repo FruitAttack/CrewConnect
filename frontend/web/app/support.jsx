@@ -6,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   Pressable,
+  Image,
   useWindowDimensions,
   Linking,
 } from 'react-native';
@@ -19,6 +20,13 @@ const NAV_DATA = [
     section: 'Getting started',
     items: [
       { label: 'Quick start', key: 'quickstart' },
+    ],
+  },
+  {
+    section: 'Mobile',
+    items: [
+      { label: 'Mobile quick start', key: 'mobile-quickstart' },
+      { label: 'Timecard guide', key: 'mobile-timecard' },
     ],
   },
   {
@@ -36,12 +44,24 @@ const PAGES = {
     desc: 'Get your crew up and running with CrewConnect in under 10 minutes.',
     type: 'quickstart',
   },
+  'mobile-quickstart': {
+    tag: 'Mobile',
+    title: 'Mobile quick start',
+    desc: 'Get up and running on the CrewConnect mobile app in minutes.',
+    type: 'mobile-quickstart',
+  },
   download: {
     tag: 'Downloads',
     title: 'Download the app',
     desc: 'Get CrewConnect on your device and start tracking in minutes.',
     type: 'download',
   },
+  'mobile-timecard': {
+  tag: 'Mobile',
+  title: 'Timecard guide',
+  desc: 'Learn how to manage your time, request time off, and submit timecards from the mobile app.',
+  type: 'mobile-timecard',
+},
 };
 
 const QUICK_START_STEPS = [
@@ -77,6 +97,88 @@ const QUICK_START_STEPS = [
   },
 ];
 
+const MOBILE_QUICK_START_STEPS = [
+  {
+    num: 1,
+    title: 'Download and install the app',
+    body: 'Ask your admin or visit the Downloads page to get the latest CrewConnect APK. Download the file to your Android device and follow the on-screen prompts to install it. If prompted, allow installation from unknown sources in your device settings.',
+  },
+  {
+    num: 2,
+    title: 'Log in with your credentials',
+    body: 'Open the CrewConnect app. Enter the email address and password provided by your company admin, then tap Log In. If you have trouble logging in, contact your admin to verify your credentials in the Workforce tab on the dashboard.',
+    image: require('../assets/Demo/Login.png'),
+  },
+  {
+    num: 3,
+    title: 'Tap the big blue button',
+    body: 'Once logged in, you\'ll see the main clock-in screen. Tap the large blue button in the center of the screen to begin the clock-in process. This button is your starting point for every shift — it opens the job selection flow and guides you through the remaining steps before your time starts recording.',
+    image: require('../assets/Demo/Blue Button.png'),
+  },
+  {
+    num: 4,
+    title: 'Nearby jobs and quick start',
+    body: 'After tapping the blue button, the app will detect your location and show any job sites within range under Nearby Jobs. Tap a nearby job to jump straight into that project without searching. \n\nIf you\'ve clocked into a job before, it may also appear under Quick Start — a shortlist of your recently used sites and cost codes so you can get clocked in with just a couple of taps.',
+    image: require('../assets/Demo/Select job.png'),
+  },
+  {
+    num: 5,
+    title: 'Select your job site',
+    body: 'If your site isn\'t shown as a nearby or recent job, tap the job site selector and search for the project you are working on today. Only projects assigned to your company will appear in the list. If you don\'t see your site, ask your admin to verify the project is set up correctly.',
+    image: require('../assets/Demo/Select job.png'),
+  },
+  {
+    num: 6,
+    title: 'Select a cost code',
+    body: 'After selecting your job site, choose the cost code that matches the work you\'ll be performing. Cost codes are set up by your admin and help track labor by task type. If no cost codes appear, your admin may need to add them to the project first.',
+    image: require('../assets/Demo/Select Cost.png'),
+  },
+  {
+    num: 7,
+    title: 'Add equipment and notes (optional)',
+    body: 'Before clocking in, you\'ll have the option to log any equipment you\'re using on the job — such as a truck, machine, or tool — and add any notes relevant to the shift. \n\nBoth fields are optional and can be skipped if not needed. Equipment and notes are visible to your admin on the dashboard and can be useful for tracking resources or flagging anything worth noting before the day begins.',
+  },
+  {
+    num: 8,
+    title: 'Clock in',
+    body: 'Once your job site and cost code are selected, tap the Start button. You\'ll see a running timer so you always know how long you\'ve been on the clock.',
+    image: require('../assets/Demo/Clock In.png'),
+  },
+  {
+    num: 9,
+    title: 'Take a break or switch jobs mid-shift',
+    body: 'While clocked in, you\'ll see two additional options on the timer screen: Take Break and Switch Job.\n\nTap Take Break to pause your time. Your break will be recorded and your timer stops until you tap Resume, keeping your hours accurate without clocking out entirely.\n\nTap Switch Job to move to a different job site or cost code without ending your shift. This opens the clock-in screen where you can select a new job and cost code — just like when you first clocked in. Your previous time is saved and a new entry begins for the new job.',
+    image: require('../assets/Demo/Break.png'),
+  },
+  {
+    num: 10,
+    title: 'Clock out when you\'re done',
+    body: 'At the end of your shift, open the app and tap Clock Out. Your hours will be saved and sent to your admin\'s dashboard automatically. That\'s it — your time is logged and ready for review.',
+  },
+];
+const MOBILE_TIMECARD_STEPS = [
+  {
+    num: 1,
+    title: 'View daily details',
+    body: 'To view detailed time entries for a specific day, double tap on a date either in the calendar or within the timecard list. This will open a breakdown of all clock-ins for that day.',
+  },
+  {
+    num: 2,
+    title: 'Request time off',
+    body: 'Navigate to the Timecard page and tap the Time Off button at the top of the screen. Select the dates you want to request off by tapping them on the calendar.\n\nNext, choose the type of time off, enter the number of hours, and provide a reason for your request. Once everything is filled out, tap Submit Request to send it to your admin for approval.',
+  },
+  {
+    num: 3,
+    title: 'Submit a timecard',
+    body: 'Make sure you are on the My Hours screen. Select a past week by tapping any day within that week.\n\nScroll down in the timecard view and tap Submit Time Card. If the button is disabled, it means a past week has not been selected.',
+  },
+  {
+    num: 4,
+    title: 'Edit a note on a time entry',
+    body: 'First, open daily details by double tapping a date. Scroll to the time entry you want to update, tap the three-dot menu, and select Edit Note.\n\nEnter your updated note and tap Save. Changes will be reflected immediately.',
+  },
+];
+
 const DOWNLOAD_STEPS = [
   {
     num: 1,
@@ -92,9 +194,19 @@ const DOWNLOAD_STEPS = [
   },
 ];
 
+// ─── Step Image ────────────────────────────────────────────────────────────────
+
+const StepImage = ({ source }) => (
+  <Image
+    source={source}
+    style={styles.stepImage}
+    resizeMode="contain"
+  />
+);
+
 // ─── Step (Quick Start style) ──────────────────────────────────────────────────
 
-const Step = ({ num, title, body, info, isLast }) => (
+const Step = ({ num, title, body, info, image, isLast }) => (
   <View style={[styles.step, !isLast && styles.stepNotLast]}>
     {!isLast && <View style={styles.stepLine} />}
     <View style={styles.stepNum}>
@@ -103,6 +215,7 @@ const Step = ({ num, title, body, info, isLast }) => (
     <View style={styles.stepBody}>
       <Text style={styles.stepTitle}>{title}</Text>
       <Text style={styles.stepText}>{body}</Text>
+      {image && <StepImage source={image} />}
       {info && (
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={16} color={colors.primary.orange} style={{ marginTop: 1 }} />
@@ -171,6 +284,38 @@ const QuickStartContent = () => (
   </View>
 );
 
+// ─── Mobile Quick Start Content ───────────────────────────────────────────────
+
+const MobileQuickStartContent = () => (
+  <View>
+    <View style={styles.pageHeader}>
+      <Text style={styles.pageTag}>MOBILE</Text>
+      <Text style={styles.pageTitle}>Mobile quick start</Text>
+      <Text style={styles.pageDesc}>
+        Get up and running on the CrewConnect mobile app in minutes.
+      </Text>
+    </View>
+    <View style={styles.infoCard}>
+      <Ionicons name="phone-portrait-outline" size={16} color={colors.primary.orange} style={{ marginTop: 1 }} />
+      <Text style={styles.infoText}>
+        Before following these steps, make sure your admin has created your employee account from the dashboard. You'll need the email and password they set up for you.
+      </Text>
+    </View>
+    <View style={{ marginTop: spacing.xl }}>
+      {MOBILE_QUICK_START_STEPS.map((step, i) => (
+        <Step key={step.num} {...step} isLast={i === MOBILE_QUICK_START_STEPS.length - 1} />
+      ))}
+    </View>
+    <View style={styles.divider} />
+    <View style={styles.infoCard}>
+      <Ionicons name="information-circle-outline" size={16} color={colors.primary.orange} style={{ marginTop: 1 }} />
+      <Text style={styles.infoText}>
+        Having trouble? Contact your admin to check your credentials in the Workforce tab, or visit the Downloads page to reinstall the latest version of the app.
+      </Text>
+    </View>
+  </View>
+);
+
 // ─── Download Content ─────────────────────────────────────────────────────────
 
 const DownloadContent = () => (
@@ -214,6 +359,55 @@ const DownloadContent = () => (
     </View>
   </View>
 );
+
+const MobileTimecardContent = () => (
+  <View>
+    <View style={styles.pageHeader}>
+      <Text style={styles.pageTag}>MOBILE</Text>
+      <Text style={styles.pageTitle}>Timecard guide</Text>
+      <Text style={styles.pageDesc}>
+        Learn how to manage your time, request time off, and submit timecards from the mobile app.
+      </Text>
+    </View>
+
+    <View style={styles.infoCard}>
+      <Ionicons
+        name="time-outline"
+        size={16}
+        color={colors.primary.orange}
+        style={{ marginTop: 1 }}
+      />
+      <Text style={styles.infoText}>
+        Your timecard keeps track of all hours worked, breaks, and job activity. Make sure to review and submit your time each week to ensure accurate payroll.
+      </Text>
+    </View>
+
+    <View style={{ marginTop: spacing.xl }}>
+      {MOBILE_TIMECARD_STEPS.map((step, i) => (
+        <Step
+          key={step.num}
+          {...step}
+          isLast={i === MOBILE_TIMECARD_STEPS.length - 1}
+        />
+      ))}
+    </View>
+
+    <View style={styles.divider} />
+
+    <View style={styles.infoCard}>
+      <Ionicons
+        name="information-circle-outline"
+        size={16}
+        color={colors.primary.orange}
+        style={{ marginTop: 1 }}
+      />
+      <Text style={styles.infoText}>
+        If something looks incorrect in your timecard, contact your admin before submitting so adjustments can be made.
+      </Text>
+    </View>
+  </View>
+);
+
 
 // ─── Nav Item ─────────────────────────────────────────────────────────────────
 
@@ -341,7 +535,9 @@ export default function DocsPage() {
             showsVerticalScrollIndicator={false}
           >
             {currentPage?.type === 'quickstart' && <QuickStartContent />}
+            {currentPage?.type === 'mobile-quickstart' && <MobileQuickStartContent />}
             {currentPage?.type === 'download' && <DownloadContent />}
+            {currentPage?.type === 'mobile-timecard' && <MobileTimecardContent />}
           </ScrollView>
         </View>
       </View>
@@ -663,6 +859,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     lineHeight: 22,
+  },
+  stepImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 10,
+    marginTop: spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
 
   // ── Info card ──
