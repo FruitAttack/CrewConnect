@@ -328,24 +328,19 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <View style={[styles.statsGrid, isLargeScreen && styles.statsGridLarge]}>
         {statCards.map((card, index) => (
-          <Pressable 
-            key={index} 
-            style={({ hovered }) => [
-              styles.statCard, 
-              hovered && styles.statCardHovered,
-              isLargeScreen && styles.statCardLarge
-            ]}
+          <View
+            key={index}
+            style={[styles.statCard, isLargeScreen && styles.statCardLarge]}
           >
             <View style={styles.statCardHeader}>
               <View style={[styles.statIconWrap, { backgroundColor: card.bgColor }]}>
                 <Ionicons name={card.icon} size={20} color={card.color} />
               </View>
-              <Ionicons name="ellipsis-horizontal" size={18} color={colors.text.tertiary} />
             </View>
             <Text style={styles.statValue}>{card.value}</Text>
             <Text style={styles.statTitle}>{card.title}</Text>
             <Text style={styles.statSubtitle}>{card.subtitle}</Text>
-          </Pressable>
+          </View>
         ))}
       </View>
 
@@ -589,12 +584,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border.light,
-    transitionDuration: '200ms',
-  },
-  statCardHovered: {
-    borderColor: colors.primary.orange,
-    transform: [{ translateY: -2 }],
-    ...shadows.md,
   },
   statCardLarge: { minWidth: 0 },
   statCardHeader: { 
@@ -773,9 +762,17 @@ const styles = StyleSheet.create({
     minWidth: 70,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
     transitionDuration: '150ms',
+    cursor: 'pointer',
   },
-  actionItemHovered: { backgroundColor: colors.neutral.offWhite },
+  actionItemHovered: {
+    backgroundColor: colors.neutral.offWhite,
+    borderColor: colors.primary.orange,
+    transform: [{ translateY: -2 }],
+    ...shadows.sm,
+  },
   actionIcon: { 
     width: 44, 
     height: 44, 
