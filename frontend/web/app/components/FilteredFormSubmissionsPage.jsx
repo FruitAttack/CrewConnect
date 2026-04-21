@@ -60,11 +60,17 @@ export default function FilteredFormSubmissionsPage({
   const parseGraphConfigParam = (value) => {
     const parsed = parseJsonParam(value);
     if (!parsed || typeof parsed !== "object") return null;
+    const allowedChartTypes = new Set(["bar", "line", "area", "donut"]);
+    const normalizedChartType = allowedChartTypes.has(parsed.chartType)
+      ? parsed.chartType
+      : parsed.chartType === "pie"
+        ? "donut"
+        : "bar";
     return {
       xAxisField: parsed.xAxisField ?? null,
       metricField: parsed.metricField ?? null,
       aggregationType: parsed.aggregationType || "count",
-      chartType: parsed.chartType || "bar",
+      chartType: normalizedChartType,
       groupByPeriod: parsed.groupByPeriod || "none",
     };
   };
@@ -97,7 +103,7 @@ export default function FilteredFormSubmissionsPage({
       xAxisField: parsed?.xAxisField ?? null,
       metricField: parsed?.metricField ?? null,
       aggregationType: parsed?.aggregationType || "count", // count, sum, average, min, max
-      chartType: parsed?.chartType || "bar", // bar, line, area, pie, donut
+      chartType: parsed?.chartType || "bar", // bar, line, area, donut
       groupByPeriod: parsed?.groupByPeriod || "none", // none, day, week, month, year (for dates)
     };
   });
@@ -1519,15 +1525,6 @@ export default function FilteredFormSubmissionsPage({
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary.orange} />
-        <Text style={styles.loadingText}>Loading submissions...</Text>
-      </View>
-    );
-  }
-
   const renderViewToggle = () => (
     <View style={styles.viewToggle}>
       <Pressable
@@ -1559,6 +1556,134 @@ export default function FilteredFormSubmissionsPage({
       </Pressable>
     </View>
   );
+
+  const displayTitle = formTitle || form?.title || "Form";
+  const displayIcon = formIcon || form?.icon || "📄";
+
+  const csvEscape = useCallback((value) => {
+    const text = String(value ?? "").replace(/"/g, '""');
+    return `"${text}"`;
+  }, []);
+
+  const downloadTextFile = useCallback((content, filename, mimeType) => {
+    if (typeof document === "undefined" || typeof URL === "undefined") return;
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const slugifyFilePart = useCallback((value) => {
+    const source = String(value || "form-submissions").trim().toLowerCase();
+    const cleaned = source.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return cleaned || "form-submissions";
+  }, []);
+
+  const getSubmissionExportValue = (submission, columnId) => {
+    if (columnId === "submission_id") return submission.id || "";
+    if (columnId === "submitted_by") {
+      return submission.submitter?.full_name || submission.submitted_by_name || submission.submitted_by || "Unknown";
+    }
+    if (columnId === "submitted_at") return formatDate(submission.submitted_at);
+    if (columnId === "project") return submission.project?.name || submission.associated_project_name || "-";
+    if (columnId === "equipment") return submission.equipment?.label || submission.associated_equipment_label || "-";
+    if (columnId === "user") return submission.user?.full_name || submission.associated_user_name || "-";
+    if (columnId === "customer") return submission.customer?.name || submission.associated_customer_name || "-";
+    if (columnId === "cost_code") return submission.cost_code?.name || submission.associated_cost_code_name || "-";
+    if (columnId.startsWith("field:")) {
+      const fieldId = columnId.slice(6);
+      const field = displayFields.find((item) => item.id === fieldId);
+      return formatFieldValue(field, submission.data?.[fieldId]);
+    }
+    return "";
+  };
+
+  const exportTableAsCsv = () => {
+    if (!filteredSubmissions.length) return;
+
+    const exportColumns = [
+      { id: "submission_id", label: "ID" },
+      ...availableTableColumns.filter((col) => visibleColumnSet.has(col.id)),
+    ];
+
+    const header = exportColumns.map((col) => csvEscape(col.label)).join(",");
+    const body = filteredSubmissions
+      .map((submission) =>
+        exportColumns
+          .map((col) => csvEscape(getSubmissionExportValue(submission, col.id)))
+          .join(","),
+      )
+      .join("\n");
+
+    const filename = `${slugifyFilePart(displayTitle)}-submissions.csv`;
+    downloadTextFile(`${header}\n${body}`, filename, "text/csv");
+  };
+
+  const exportGraphAsImage = useCallback(async () => {
+    if (typeof document === "undefined") return;
+
+    const svgElement = document.querySelector(".ffsp-chart svg") || document.querySelector(".recharts-surface");
+    if (!svgElement) return;
+
+    const rect = svgElement.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width || 1200));
+    const height = Math.max(1, Math.round(rect.height || 400));
+
+    const serializedSvg = new XMLSerializer().serializeToString(svgElement);
+    const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    try {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+        image.src = svgUrl;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      const pngBlob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, "image/png", 1);
+      });
+      if (!pngBlob) return;
+
+      const pngUrl = URL.createObjectURL(pngBlob);
+      const link = document.createElement("a");
+      link.href = pngUrl;
+      link.download = `${slugifyFilePart(displayTitle)}-graph.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(pngUrl);
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  }, [slugifyFilePart, displayTitle]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary.orange} />
+        <Text style={styles.loadingText}>Loading submissions...</Text>
+      </View>
+    );
+  }
 
   const renderTableView = () => {
     const visibleColumnCount = visibleColumnIds.length;
@@ -1641,6 +1766,14 @@ export default function FilteredFormSubmissionsPage({
             )}
           </ScrollView>
           <View style={styles.filterRightControls}>
+            <Pressable
+              style={[styles.exportButton, !filteredSubmissions.length && styles.exportButtonDisabled]}
+              onPress={exportTableAsCsv}
+              disabled={!filteredSubmissions.length}
+            >
+              <Ionicons name="download-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.exportButtonText}>Export</Text>
+            </Pressable>
             <View style={styles.columnSelectorWrap}>
               <Pressable
                 style={styles.columnSelectorButton}
@@ -1917,7 +2050,6 @@ export default function FilteredFormSubmissionsPage({
                     { value: "bar", label: "Bar" },
                     { value: "line", label: "Line" },
                     { value: "area", label: "Area" },
-                    { value: "pie", label: "Pie" },
                     { value: "donut", label: "Donut" },
                   ].map((type) => (
                     <Pressable
@@ -2013,112 +2145,69 @@ export default function FilteredFormSubmissionsPage({
                 )}
 
               {/* Metric Field Selection */}
-              {graphConfig.chartType !== "pie" && (
-                <>
-                  <View style={styles.configSection}>
-                    <Text style={styles.configLabel}>Metric (Y-Axis)</Text>
-                    <ScrollView
-                      style={styles.configDropdown}
-                      nestedScrollEnabled={true}
-                      scrollEventThrottle={16}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>Metric (Y-Axis)</Text>
+                <ScrollView
+                  style={styles.configDropdown}
+                  nestedScrollEnabled={true}
+                  scrollEventThrottle={16}
+                >
+                  {metricFields.map((field) => (
+                    <Pressable
+                      key={field.id}
+                      style={[
+                        styles.configDropdownItem,
+                        graphConfig.metricField === field.id && styles.configDropdownItemActive,
+                      ]}
+                      onPress={() => setGraphConfig((prev) => ({ ...prev, metricField: field.id }))}
                     >
-                      {metricFields.map((field) => (
-                        <Pressable
-                          key={field.id}
-                          style={[
-                            styles.configDropdownItem,
-                            graphConfig.metricField === field.id && styles.configDropdownItemActive,
-                          ]}
-                          onPress={() => setGraphConfig((prev) => ({ ...prev, metricField: field.id }))}
-                        >
-                          <Ionicons
-                            name={graphConfig.metricField === field.id ? "radio-button-on" : "radio-button-off"}
-                            size={18}
-                            color={
-                              graphConfig.metricField === field.id ? colors.primary.orange : colors.text.secondary
-                            }
-                          />
-                          <Text
-                            style={[
-                              styles.configDropdownItemText,
-                              graphConfig.metricField === field.id && styles.configDropdownItemTextActive,
-                            ]}
-                          >
-                            {field.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-
-                  {/* Aggregation Type */}
-                  {graphConfig.metricField && (
-                    <View style={styles.configSection}>
-                      <Text style={styles.configLabel}>Aggregation</Text>
-                      <View style={styles.configChipGroup}>
-                        {aggregationTypes.map((agg) => (
-                          <Pressable
-                            key={agg.value}
-                            style={[
-                              styles.configChip,
-                              graphConfig.aggregationType === agg.value && styles.configChipActive,
-                            ]}
-                            onPress={() =>
-                              setGraphConfig((prev) => ({ ...prev, aggregationType: agg.value }))
-                            }
-                          >
-                            <Text
-                              style={[
-                                styles.configChipText,
-                                graphConfig.aggregationType === agg.value && styles.configChipTextActive,
-                              ]}
-                            >
-                              {agg.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                </>
-              )}
-
-              {/* For Pie/Donut, metric is always the value field */}
-              {graphConfig.chartType === "pie" && (
-                <View style={styles.configSection}>
-                  <Text style={styles.configLabel}>Values</Text>
-                  <ScrollView
-                    style={styles.configDropdown}
-                    nestedScrollEnabled={true}
-                    scrollEventThrottle={16}
-                  >
-                    {metricFields.map((field) => (
-                      <Pressable
-                        key={field.id}
+                      <Ionicons
+                        name={graphConfig.metricField === field.id ? "radio-button-on" : "radio-button-off"}
+                        size={18}
+                        color={
+                          graphConfig.metricField === field.id ? colors.primary.orange : colors.text.secondary
+                        }
+                      />
+                      <Text
                         style={[
-                          styles.configDropdownItem,
-                          graphConfig.metricField === field.id && styles.configDropdownItemActive,
+                          styles.configDropdownItemText,
+                          graphConfig.metricField === field.id && styles.configDropdownItemTextActive,
                         ]}
-                        onPress={() => setGraphConfig((prev) => ({ ...prev, metricField: field.id }))}
                       >
-                        <Ionicons
-                          name={graphConfig.metricField === field.id ? "radio-button-on" : "radio-button-off"}
-                          size={18}
-                          color={
-                            graphConfig.metricField === field.id ? colors.primary.orange : colors.text.secondary
-                          }
-                        />
+                        {field.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Aggregation Type */}
+              {graphConfig.metricField && (
+                <View style={styles.configSection}>
+                  <Text style={styles.configLabel}>Aggregation</Text>
+                  <View style={styles.configChipGroup}>
+                    {aggregationTypes.map((agg) => (
+                      <Pressable
+                        key={agg.value}
+                        style={[
+                          styles.configChip,
+                          graphConfig.aggregationType === agg.value && styles.configChipActive,
+                        ]}
+                        onPress={() =>
+                          setGraphConfig((prev) => ({ ...prev, aggregationType: agg.value }))
+                        }
+                      >
                         <Text
                           style={[
-                            styles.configDropdownItemText,
-                            graphConfig.metricField === field.id && styles.configDropdownItemTextActive,
+                            styles.configChipText,
+                            graphConfig.aggregationType === agg.value && styles.configChipTextActive,
                           ]}
                         >
-                          {field.label}
+                          {agg.label}
                         </Text>
                       </Pressable>
                     ))}
-                  </ScrollView>
+                  </View>
                 </View>
               )}
             </ScrollView>
@@ -2137,7 +2226,10 @@ export default function FilteredFormSubmissionsPage({
     );
   };
 
-  const renderGraphControls = () => (
+  const renderGraphControls = () => {
+    const graphDataCount = processChartData().length;
+
+    return (
     <View style={styles.controlsCard}>
       <View style={styles.filterBar}>
         <View style={styles.filterControls}>
@@ -2195,6 +2287,14 @@ export default function FilteredFormSubmissionsPage({
         </ScrollView>
         <View style={styles.filterRightControls}>
           <Pressable
+            style={[styles.exportButton, !graphDataCount && styles.exportButtonDisabled]}
+            onPress={exportGraphAsImage}
+            disabled={!graphDataCount}
+          >
+            <Ionicons name="download-outline" size={16} color={colors.text.primary} />
+            <Text style={styles.exportButtonText}>Export</Text>
+          </Pressable>
+          <Pressable
             style={styles.configButton}
             onPress={() => setGraphConfigOpen(true)}
           >
@@ -2205,6 +2305,7 @@ export default function FilteredFormSubmissionsPage({
       </View>
     </View>
   );
+  };
 
   const renderGraphView = () => {
     const chartData = processChartData();
@@ -2472,48 +2573,6 @@ export default function FilteredFormSubmissionsPage({
             </ResponsiveContainer>
           )}
 
-          {graphConfig.chartType === "pie" && (
-            <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={0}
-                  outerRadius={130}
-                  paddingAngle={2}
-                  dataKey="value"
-                  animationDuration={200}
-                  label={(props) => {
-                    const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
-                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                    return (
-                      <text x={x} y={y} fill={colors.text.primary} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontFamily={typography.fontFamily.sans} fontSize="12" fontWeight="500">
-                        {`${name}: ${value}`}
-                      </text>
-                    );
-                  }}
-                  labelLine={false}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: `1px solid ${colors.border.light}`,
-                    borderRadius: 8,
-                    fontFamily: typography.fontFamily.sans,
-                    fontSize: 12,
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-
           {graphConfig.chartType === "donut" && (
             <ResponsiveContainer className="ffsp-chart" width="100%" height={400}>
               <PieChart>
@@ -2619,9 +2678,6 @@ export default function FilteredFormSubmissionsPage({
       </View>
     </Modal>
   );
-
-  const displayTitle = formTitle || form?.title || "Form";
-  const displayIcon = formIcon || form?.icon || "📄";
 
   return (
     <View style={styles.container}>
@@ -3630,6 +3686,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.light,
     ...shadows.small,
+  },
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "white",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    ...shadows.small,
+  },
+  exportButtonDisabled: {
+    opacity: 0.5,
+  },
+  exportButtonText: {
+    fontSize: 13,
+    color: colors.text.primary,
+    fontWeight: "600",
   },
   configButtonText: {
     fontSize: 13,
