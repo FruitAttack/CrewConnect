@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Activity
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSession } from '../../../utils/ctx';
-import { getActiveRoster, getCostCodes, getUserProfile, getTimeEntries } from '../../../utils/api';
+import { getActiveRoster, getAllUsers, getCostCodes, getUserProfile, getTimeEntries } from '../../../utils/api';
 import { calculateHoursInRange } from '../../../utils/timeUtils';
 import { colors, shadows } from '../../../constants/theme';
 
@@ -182,7 +182,8 @@ export default function WorkforceOverview() {
       if (cid) {
         const { startOfWeek, endOfWeek, startDate, endDate } = getWeekRange();
         
-        const [rosterRes, ccRes, timeRes] = await Promise.all([
+        const [usersRes, rosterRes, ccRes, timeRes] = await Promise.all([
+          getAllUsers(token, { company_id: cid }),
           getActiveRoster(token, cid),
           getCostCodes(token),
           getTimeEntries(token, cid, { 
@@ -194,11 +195,28 @@ export default function WorkforceOverview() {
         
         const rosterData = rosterRes?.data?.roster || [];
         setRoster(rosterData);
-        const users = rosterData.map(r => ({ 
-          ...r.user, 
-          is_clocked_in: r.is_clocked_in,
-          open_entry: r.open_entry,
-        })).filter(Boolean);
+
+        const rosterByUserId = new Map(
+          rosterData
+            .filter(r => r?.user?.id)
+            .map(r => [
+              r.user.id,
+              { is_clocked_in: r.is_clocked_in, open_entry: r.open_entry },
+            ])
+        );
+
+        const rawUsers = usersRes?.data?.users || usersRes?.data || [];
+        const users = (Array.isArray(rawUsers) ? rawUsers : [])
+          .filter(user => {
+            const userCompanyId = user?.default_company_id || user?.default_company?.id || user?.company_id;
+            return !cid || !userCompanyId || userCompanyId === cid;
+          })
+          .map(user => ({
+            ...user,
+            is_clocked_in: rosterByUserId.get(user.id)?.is_clocked_in || false,
+            open_entry: rosterByUserId.get(user.id)?.open_entry || null,
+          }));
+
         setEmployees(users);
         setCostCodes(ccRes?.data || []);
         
@@ -220,7 +238,8 @@ export default function WorkforceOverview() {
     try {
       const { startOfWeek, endOfWeek, startDate, endDate } = getWeekRange();
       
-      const [rosterRes, ccRes, timeRes] = await Promise.all([
+      const [usersRes, rosterRes, ccRes, timeRes] = await Promise.all([
+        getAllUsers(token, { company_id: companyId }),
         getActiveRoster(token, companyId),
         getCostCodes(token),
         getTimeEntries(token, companyId, { 
@@ -232,11 +251,28 @@ export default function WorkforceOverview() {
       
       const rosterData = rosterRes?.data?.roster || [];
       setRoster(rosterData);
-      const users = rosterData.map(r => ({ 
-        ...r.user, 
-        is_clocked_in: r.is_clocked_in,
-        open_entry: r.open_entry,
-      })).filter(Boolean);
+
+      const rosterByUserId = new Map(
+        rosterData
+          .filter(r => r?.user?.id)
+          .map(r => [
+            r.user.id,
+            { is_clocked_in: r.is_clocked_in, open_entry: r.open_entry },
+          ])
+      );
+
+      const rawUsers = usersRes?.data?.users || usersRes?.data || [];
+      const users = (Array.isArray(rawUsers) ? rawUsers : [])
+        .filter(user => {
+          const userCompanyId = user?.default_company_id || user?.default_company?.id || user?.company_id;
+          return !companyId || !userCompanyId || userCompanyId === companyId;
+        })
+        .map(user => ({
+          ...user,
+          is_clocked_in: rosterByUserId.get(user.id)?.is_clocked_in || false,
+          open_entry: rosterByUserId.get(user.id)?.open_entry || null,
+        }));
+
       setEmployees(users);
       setCostCodes(ccRes?.data || []);
       
