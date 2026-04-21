@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, ScrollView, Pressable, TextInput, Modal, Activi
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { useSession } from '../../../utils/ctx';
-import { apiCall } from '../../../utils/api';
+import { getAllUsers, getUserProfile } from '../../../utils/api';
 import { Linking } from 'react-native';
 
 const ContactsList = () => {
@@ -14,22 +14,72 @@ const ContactsList = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const getCompanyIdFromUser = (user) => {
+    return (
+      user?.default_company_id ||
+      user?.default_company?.id ||
+      user?.company_id ||
+      null
+    );
+  };
+
+  const isUserInCompany = (user, companyId) => {
+    if (!companyId || !user) return false;
+
+    if (String(getCompanyIdFromUser(user)) === String(companyId)) {
+      return true;
+    }
+
+    if (Array.isArray(user.user_companies)) {
+      return user.user_companies.some((company) => {
+        const linkedCompanyId =
+          company?.company_id ||
+          company?.id ||
+          company?.company?.id ||
+          company?.company?.company_id;
+
+        return String(linkedCompanyId) === String(companyId);
+      });
+    }
+
+    return false;
+  };
+
   // Fetch users from API
   const fetchContacts = async () => {
-    if (!session?.access_token) return;
-    
+    if (!session?.access_token) {
+      setContacts([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
-      const companyId = session.user?.default_company_id;
-      const queryParams = companyId ? `?company_id=${companyId}&active=true` : '?active=true';
-      
-      const response = await apiCall(
-        session.access_token,
-        `users${queryParams}`,
-        'GET'
-      );
-      
-      if (response.success && response.data?.users) {
-        setContacts(response.data.users);
+      let companyId = getCompanyIdFromUser(session.user);
+
+      if (!companyId) {
+        const meResponse = await getUserProfile(session.access_token);
+        if (meResponse?.success) {
+          companyId = getCompanyIdFromUser(meResponse.data?.user);
+        }
+      }
+
+      if (!companyId) {
+        console.warn('ContactsList: no company id found for current user; refusing unscoped users query.');
+        setContacts([]);
+        return;
+      }
+
+      const response = await getAllUsers(session.access_token, {
+        company_id: companyId,
+        active: true,
+      });
+
+      const rawUsers = response?.data?.users || response?.data || [];
+
+      if (response?.success && Array.isArray(rawUsers)) {
+        const scopedUsers = rawUsers.filter((user) => isUserInCompany(user, companyId));
+        setContacts(scopedUsers);
       } else {
         setContacts([]);
       }

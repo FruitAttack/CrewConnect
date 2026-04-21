@@ -61,6 +61,34 @@ const ROLES = [
   { key: 'office', label: 'Office' },
 ];
 
+const EMPLOYEE_MANAGER_ROLES = new Set(['admin', 'office', 'supervisor']);
+
+function getRoleKey(userOrEmployee) {
+  if (!userOrEmployee) return null;
+  return userOrEmployee.role_key || userOrEmployee.user_roles?.[0]?.role_key || null;
+}
+
+function canManageEmployees(userOrEmployee) {
+  return EMPLOYEE_MANAGER_ROLES.has(getRoleKey(userOrEmployee));
+}
+
+function canEditEmployeeRecord(actor, target) {
+  const actorRole = getRoleKey(actor);
+  const targetRole = getRoleKey(target);
+
+  if (actorRole === 'admin') return true;
+  if (actorRole === 'office' || actorRole === 'supervisor') return targetRole !== 'admin';
+  return false;
+}
+
+function canAssignRole(actor, nextRoleKey) {
+  const actorRole = getRoleKey(actor);
+
+  if (actorRole === 'admin') return true;
+  if (actorRole === 'office' || actorRole === 'supervisor') return nextRoleKey !== 'admin';
+  return false;
+}
+
 // Pulsing Dot for active/clocked-in status
 const PulsingDot = ({ color = activeColor, size = 10 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -336,6 +364,51 @@ export default function EmployeesPage() {
     return result;
   }, [employees, search, statusFilter, roleFilter, sortField, sortDirection]);
 
+
+  const currentUserRole = getRoleKey(currentUser);
+  const canManageEmployeeDirectory = canManageEmployees(currentUser);
+  const assignableRoles = useMemo(() => ROLES.filter(role => canAssignRole(currentUser, role.key)), [currentUser]);
+
+  const getAccessLockoutError = ({ targetId, nextRoleKey, nextIsActive }) => {
+    const projectedEmployees = employees.map(emp => (
+      emp.id === targetId
+        ? {
+            ...emp,
+            role_key: nextRoleKey ?? getRoleKey(emp),
+            is_active: typeof nextIsActive === 'boolean' ? nextIsActive : emp.is_active,
+          }
+        : emp
+    ));
+
+    const activeUsersRemaining = projectedEmployees.filter(emp => emp.is_active).length;
+    if (activeUsersRemaining === 0) {
+      return 'You cannot archive or deactivate the last active employee.';
+    }
+
+    const activeManagersRemaining = projectedEmployees.filter(emp => emp.is_active && EMPLOYEE_MANAGER_ROLES.has(getRoleKey(emp))).length;
+    if (activeManagersRemaining === 0) {
+      return 'You must keep at least one active admin, office worker, or supervisor.';
+    }
+
+    return null;
+  };
+
+  const getArchiveDisabledReason = (emp) => {
+    if (!canEditEmployeeRecord(currentUser, emp)) {
+      return 'You do not have permission to change this employee.';
+    }
+
+    if (!emp.is_active) {
+      return null;
+    }
+
+    return getAccessLockoutError({
+      targetId: emp.id,
+      nextRoleKey: getRoleKey(emp),
+      nextIsActive: false,
+    });
+  };
+
   const handleSort = (field) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -346,6 +419,11 @@ export default function EmployeesPage() {
   };
 
   const openEditModal = (emp) => {
+    if (!canEditEmployeeRecord(currentUser, emp)) {
+      setError('You do not have permission to edit this employee.');
+      return;
+    }
+
     const roleKey = emp.role_key || emp.user_roles?.[0]?.role_key || 'laborer';
     const employment = emp.user_employment?.[0] || emp.employment || {};
     setFormData({
@@ -367,6 +445,11 @@ export default function EmployeesPage() {
   };
 
   const openAddModal = () => {
+    if (!canManageEmployeeDirectory) {
+      setError('You do not have permission to add employees.');
+      return;
+    }
+
     setFormData({
       full_name: '',
       email: '',
@@ -399,6 +482,16 @@ export default function EmployeesPage() {
       let targetUserId;
 
       if (modalMode === 'add') {
+        if (!canManageEmployeeDirectory) {
+          setError('You do not have permission to add employees.');
+          setSaving(false);
+          return;
+        }
+        if (!canAssignRole(currentUser, formData.role_key)) {
+          setError('You do not have permission to assign that role.');
+          setSaving(false);
+          return;
+        }
         if (!formData.full_name || !formData.email || !formData.password) {
           setError('Name, email, and password are required');
           setSaving(false);
@@ -417,6 +510,28 @@ export default function EmployeesPage() {
         if (!res.success) { setError(res.message || 'Failed to create employee'); setSaving(false); return; }
         targetUserId = res.data?.user?.id;
       } else {
+        if (!selectedEmployee || !canEditEmployeeRecord(currentUser, selectedEmployee)) {
+          setError('You do not have permission to edit this employee.');
+          setSaving(false);
+          return;
+        }
+        if (!canAssignRole(currentUser, formData.role_key)) {
+          setError('You do not have permission to assign that role.');
+          setSaving(false);
+          return;
+        }
+
+        const accessLockoutError = getAccessLockoutError({
+          targetId: selectedEmployee.id,
+          nextRoleKey: formData.role_key,
+          nextIsActive: selectedEmployee.is_active,
+        });
+        if (accessLockoutError) {
+          setError(accessLockoutError);
+          setSaving(false);
+          return;
+        }
+
         const updateData = {
           full_name: formData.full_name,
           phone: formData.phone,
@@ -465,14 +580,36 @@ export default function EmployeesPage() {
   };
 
   const handleArchive = async (emp) => {
+    if (!canEditEmployeeRecord(currentUser, emp)) {
+      setError('You do not have permission to change this employee.');
+      return;
+    }
+
+    const nextIsActive = !emp.is_active;
+    const accessLockoutError = getAccessLockoutError({
+      targetId: emp.id,
+      nextRoleKey: getRoleKey(emp),
+      nextIsActive,
+    });
+
+    if (accessLockoutError) {
+      setError(accessLockoutError);
+      return;
+    }
+
     try {
-      await updateUser(token, emp.id, { is_active: !emp.is_active });
+      await updateUser(token, emp.id, { is_active: nextIsActive });
       refresh();
     } catch (err) { setError('Failed to update status'); }
   };
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
+    if (!canEditEmployeeRecord(currentUser, confirmDelete)) {
+      setError('You do not have permission to delete this employee.');
+      setConfirmDelete(null);
+      return;
+    }
     try {
       const res = await deleteUser(token, confirmDelete.id, true);
       if (!res.success) {
@@ -488,8 +625,8 @@ export default function EmployeesPage() {
     }
   };
 
-  const canViewRates = currentUser?.can_view_rates || currentUser?.role_key === 'admin';
-  const canManagePto = currentUser?.role_key === 'admin' || currentUser?.role_key === 'supervisor';
+  const canViewRates = currentUser?.can_view_rates || currentUserRole === 'admin';
+  const canManagePto = currentUserRole === 'admin' || currentUserRole === 'supervisor';
 
   if (loading) return (
     <View style={styles.loadingContainer}>
@@ -543,10 +680,12 @@ export default function EmployeesPage() {
         </View>
 
         <View style={styles.toolbarRight}>
-          <Pressable style={styles.addBtn} onPress={openAddModal}>
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>Add Employee</Text>
-          </Pressable>
+          {canManageEmployeeDirectory && (
+            <Pressable style={styles.addBtn} onPress={openAddModal}>
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>Add Employee</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -610,7 +749,13 @@ export default function EmployeesPage() {
               <Text style={styles.emptySubtitle}>{search ? 'Try a different search' : 'No employees in this view'}</Text>
             </View>
           ) : (
-            filtered.map(emp => (
+            filtered.map(emp => {
+              const canEditThisEmployee = canEditEmployeeRecord(currentUser, emp);
+              const archiveDisabledReason = getArchiveDisabledReason(emp);
+              const canToggleStatus = !archiveDisabledReason;
+              const canDeleteThisEmployee = !emp.is_active && canEditThisEmployee;
+
+              return (
               <Pressable key={emp.id} style={({ hovered }) => [styles.row, hovered && styles.rowHovered]}>
                 {/* Employee */}
                 <View style={{ flex: 2, minWidth: 200, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -649,20 +794,27 @@ export default function EmployeesPage() {
                 </View>
                 {/* Actions */}
                 <View style={{ width: 120, flexDirection: 'row', gap: 4 }}>
-                  <Pressable style={({ hovered }) => [styles.actionBtn, hovered && styles.actionBtnHovered]} onPress={() => openEditModal(emp)}>
-                    <Ionicons name="pencil" size={14} color={colors.text.secondary} />
+                  {canEditThisEmployee && (
+                    <Pressable style={({ hovered }) => [styles.actionBtn, hovered && styles.actionBtnHovered]} onPress={() => openEditModal(emp)}>
+                      <Ionicons name="pencil" size={14} color={colors.text.secondary} />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={({ hovered }) => [styles.actionBtn, hovered && styles.actionBtnHovered, !canToggleStatus && styles.actionBtnDisabled]}
+                    onPress={() => handleArchive(emp)}
+                    disabled={!canToggleStatus}
+                  >
+                    <Ionicons name={emp.is_active ? 'archive-outline' : 'refresh-outline'} size={14} color={!canToggleStatus ? colors.text.tertiary : (emp.is_active ? colors.text.secondary : colors.semantic.success)} />
                   </Pressable>
-                  <Pressable style={({ hovered }) => [styles.actionBtn, hovered && styles.actionBtnHovered]} onPress={() => handleArchive(emp)}>
-                    <Ionicons name={emp.is_active ? 'archive-outline' : 'refresh-outline'} size={14} color={emp.is_active ? colors.text.secondary : colors.semantic.success} />
-                  </Pressable>
-                  {!emp.is_active && (
+                  {canDeleteThisEmployee && (
                     <Pressable style={({ hovered }) => [styles.actionBtn, styles.deleteBtn, hovered && styles.deleteBtnHovered]} onPress={() => setConfirmDelete(emp)}>
                       <Ionicons name="trash-outline" size={14} color={colors.semantic.error} />
                     </Pressable>
                   )}
                 </View>
               </Pressable>
-            ))
+              );
+            })
           )}
         </ScrollView>
       </View>
@@ -696,7 +848,7 @@ export default function EmployeesPage() {
         </FormField>
         <FormField label="Role" required>
           <View style={styles.roleSelector}>
-            {ROLES.map(r => (
+            {assignableRoles.map(r => (
               <Pressable key={r.key} style={[styles.roleOption, formData.role_key === r.key && styles.roleOptionActive]} onPress={() => setFormData({...formData, role_key: r.key})}>
                 <Text style={[styles.roleOptionText, formData.role_key === r.key && styles.roleOptionTextActive]}>{r.label}</Text>
               </Pressable>
@@ -862,6 +1014,7 @@ const styles = StyleSheet.create({
 
   actionBtn: { padding: 6, borderRadius: 4 },
   actionBtnHovered: { backgroundColor: colors.neutral.offWhite },
+  actionBtnDisabled: { opacity: 0.4 },
   deleteBtn: {},
   deleteBtnHovered: { backgroundColor: colors.semantic.error + '15' },
 
