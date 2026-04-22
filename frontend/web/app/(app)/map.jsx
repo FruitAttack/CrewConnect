@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius, typography } from "../../constants/theme";
 import { useSession } from "../../utils/ctx";
 import { apiCall, getUserProfile } from "../../utils/api";
 
 // Map marker colors
+// Projects = blue, Crew = orange, Equipment = construction yellow.
 const markerColors = {
-  project: '#F67011',
+  project: '#3B82F6',
   projectInactive: '#9CA3AF',
-  employee: '#10B981',
+  employee: '#F67011',
   employeeOnBreak: '#F59E0B',
-  equipmentInUse: '#3B82F6',
+  equipmentInUse: '#EAB308',
   equipmentIdle: '#6B7280',
 };
 
@@ -19,7 +20,7 @@ export default function MapPage() {
   const { session } = useSession();
   const { width } = useWindowDimensions();
   const iframeRef = useRef(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [companyId, setCompanyId] = useState(null);
@@ -101,12 +102,14 @@ export default function MapPage() {
     }
   }, [mapData, filter]);
 
-  // Filter buttons
+  // Filter buttons - counts reflect everything available, including crew &
+  // equipment that don't have a live GPS pin (those are still surfaced via
+  // the per-project badge and the sidebar).
   const filters = [
     { key: 'all', label: 'All', icon: 'layers-outline' },
     { key: 'projects', label: 'Projects', icon: 'business-outline', count: mapData.projects?.length || 0 },
     { key: 'employees', label: 'Crew', icon: 'people-outline', count: mapData.activeEmployees?.length || 0 },
-    { key: 'equipment', label: 'Equipment', icon: 'construct-outline', count: mapData.equipment?.filter(e => e.lat)?.length || 0 },
+    { key: 'equipment', label: 'Equipment', icon: 'excavator', iconSet: 'mci', count: mapData.equipment?.length || 0 },
   ];
 
   // Stats for sidebar
@@ -136,22 +139,22 @@ export default function MapPage() {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
-    
-    /* Project Marker - Construction Cone / Building */
-    .project-marker {
+
+    /* Unified pin shape used by all three marker types so projects, crew
+       and equipment look like the same family of pins -- they only differ
+       in color and inner icon. */
+    .map-pin {
       position: relative;
-      filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3));
-    }
-    .project-pin {
       width: 40px;
       height: 48px;
-      position: relative;
+      filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3));
     }
-    .project-pin-bg {
+    .map-pin-bg {
       width: 40px;
       height: 40px;
       background: linear-gradient(135deg, var(--color) 0%, var(--color-dark) 100%);
@@ -162,12 +165,28 @@ export default function MapPage() {
       left: 0;
       border: 3px solid white;
     }
-    .project-pin-icon {
+    .map-pin-icon {
       position: absolute;
-      top: 8px;
-      left: 8px;
-      width: 24px;
-      height: 24px;
+      top: 5px;
+      left: 5px;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .map-pin-icon svg {
+      width: 22px;
+      height: 22px;
+      fill: white;
+    }
+    /* MDI font glyphs inside pins - gives us the exact same excavator/domain
+       /account icons as the Workforce tab, without relying on inline SVG
+       paths that can look wrong. */
+    .map-pin-icon i.mdi {
+      font-size: 24px;
+      line-height: 1;
+      color: white;
     }
     .marker-badge {
       position: absolute;
@@ -187,61 +206,7 @@ export default function MapPage() {
       color: white;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    
-    /* Employee Marker - Hard Hat Person */
-    .employee-marker {
-      width: 36px;
-      height: 36px;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    }
-    .employee-pin {
-      width: 36px;
-      height: 36px;
-      background: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 3px solid var(--color);
-      position: relative;
-    }
-    .employee-avatar {
-      width: 26px;
-      height: 26px;
-      background: var(--color);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .employee-status {
-      position: absolute;
-      bottom: -2px;
-      right: -2px;
-      width: 12px;
-      height: 12px;
-      background: var(--color);
-      border-radius: 50%;
-      border: 2px solid white;
-    }
-    
-    /* Equipment Marker - Machinery */
-    .equipment-marker {
-      width: 38px;
-      height: 38px;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
-    }
-    .equipment-pin {
-      width: 38px;
-      height: 38px;
-      background: linear-gradient(135deg, var(--color) 0%, var(--color-dark) 100%);
-      border-radius: 8px;
-      border: 3px solid white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
+
     /* Popup Styles */
     .leaflet-popup-content-wrapper {
       border-radius: 12px;
@@ -286,29 +251,51 @@ export default function MapPage() {
       height: 8px;
       border-radius: 50%;
     }
+    .popup-directions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 7px 12px;
+      background: #3B82F6;
+      color: white !important;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.15s ease;
+    }
+    .popup-directions:hover {
+      background: #2563EB;
+    }
+    .popup-directions svg {
+      width: 14px;
+      height: 14px;
+      fill: white;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
     const markerColors = {
-      project: '#F67011',
-      projectDark: '#E55A00',
+      project: '#3B82F6',
+      projectDark: '#2563EB',
       projectInactive: '#9CA3AF',
       projectInactiveDark: '#6B7280',
-      employee: '#10B981',
-      employeeDark: '#059669',
+      employee: '#F67011',
+      employeeDark: '#E55A00',
       employeeOnBreak: '#F59E0B',
       employeeOnBreakDark: '#D97706',
-      equipmentInUse: '#3B82F6',
-      equipmentInUseDark: '#2563EB',
+      equipmentInUse: '#EAB308',
+      equipmentInUseDark: '#CA8A04',
       equipmentIdle: '#6B7280',
       equipmentIdleDark: '#4B5563',
     };
 
     // Initialize map centered on Salt Lake City
     const map = L.map('map').setView([40.7608, -111.8910], 10);
-    
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
@@ -319,61 +306,66 @@ export default function MapPage() {
     let equipmentLayers = L.layerGroup().addTo(map);
     let geofenceLayers = L.layerGroup().addTo(map);
 
-    // PROJECT ICON - Construction site / Building with crane
+    // Track whether we've already auto-fit the view + which filter we last
+    // fit for. We only want to auto-fit on the very first render and when the
+    // user changes filter -- NOT on every background data refresh, otherwise
+    // the map yanks back out from wherever they panned/zoomed.
+    let hasInitiallyFit = false;
+    let lastFitFilter = null;
+    let userInteracted = false;
+    map.on('zoomstart movestart', () => { userInteracted = true; });
+
+    // MDI font class names - these are the same glyphs the rest of the app
+    // uses (the Workforce Equipment tab renders an excavator with
+    // mdi-excavator), so the map and the sidebar match.
+    const ICON_CLASSES = {
+      project: 'mdi-domain',
+      crew: 'mdi-account',
+      equipment: 'mdi-excavator',
+    };
+
+    // One pin builder, three colors, three glyphs. That way projects, crew
+    // and equipment all read as members of the same family.
+    function buildPin({ color, colorDark, iconClass, count }) {
+      const badge = count > 0 ? \`<div class="marker-badge">\${count}</div>\` : '';
+      return \`
+        <div class="map-pin" style="--color: \${color}; --color-dark: \${colorDark};">
+          <div class="map-pin-bg"></div>
+          <div class="map-pin-icon">
+            <i class="mdi \${iconClass}"></i>
+          </div>
+          \${badge}
+        </div>
+      \`;
+    }
+
     function createProjectIcon(color, colorDark, count) {
       return L.divIcon({
-        className: 'project-marker',
-        html: \`
-          <div class="project-pin" style="--color: \${color}; --color-dark: \${colorDark};">
-            <div class="project-pin-bg"></div>
-            <svg class="project-pin-icon" viewBox="0 0 24 24" fill="white">
-              <path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z"/>
-              <path d="M12 5L8 9h3v4h2V9h3z"/>
-            </svg>
-          </div>
-          \${count > 0 ? \`<div class="marker-badge">\${count}</div>\` : ''}
-        \`,
+        className: '',
+        html: buildPin({ color, colorDark, iconClass: ICON_CLASSES.project, count }),
         iconSize: [40, 48],
         iconAnchor: [20, 48],
         popupAnchor: [0, -48],
       });
     }
 
-    // EMPLOYEE ICON - Worker with hard hat
-    function createEmployeeIcon(color, colorDark, initials) {
+    function createEmployeeIcon(color, colorDark) {
       return L.divIcon({
-        className: 'employee-marker',
-        html: \`
-          <div class="employee-pin" style="--color: \${color}; --color-dark: \${colorDark};">
-            <div class="employee-avatar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                <path d="M12 6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m0 10c2.7 0 5.8 1.29 6 2H6c.23-.72 3.31-2 6-2m0-12C9.79 4 8 5.79 8 8s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-              </svg>
-            </div>
-            <div class="employee-status"></div>
-          </div>
-        \`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-        popupAnchor: [0, -18],
+        className: '',
+        html: buildPin({ color, colorDark, iconClass: ICON_CLASSES.crew }),
+        iconSize: [40, 48],
+        iconAnchor: [20, 48],
+        popupAnchor: [0, -48],
       });
     }
 
-    // EQUIPMENT ICON - Excavator/Machinery
     function createEquipmentIcon(color, colorDark) {
       return L.divIcon({
-        className: 'equipment-marker',
-        html: \`
-          <div class="equipment-pin" style="--color: \${color}; --color-dark: \${colorDark};">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-              <path d="M18.5 18.5C18.5 19.33 17.83 20 17 20H15C14.17 20 13.5 19.33 13.5 18.5V18H10.5V18.5C10.5 19.33 9.83 20 9 20H7C6.17 20 5.5 19.33 5.5 18.5V18H4V8H6.59L8 5H16L17.41 8H20V16H18.5V18.5ZM6 10V14H18V10H6ZM7.5 11.5H9V12.5H7.5V11.5ZM15 11.5H16.5V12.5H15V11.5Z"/>
-              <rect x="10" y="11" width="4" height="2" rx="0.5"/>
-            </svg>
-          </div>
-        \`,
-        iconSize: [38, 38],
-        iconAnchor: [19, 19],
-        popupAnchor: [0, -19],
+        className: '',
+        html: buildPin({ color, colorDark, iconClass: ICON_CLASSES.equipment }),
+        iconSize: [40, 48],
+        iconAnchor: [20, 48],
+        popupAnchor: [0, -48],
       });
     }
 
@@ -390,7 +382,7 @@ export default function MapPage() {
       if (filter === 'all' || filter === 'projects') {
         (data.projects || []).forEach(project => {
           if (!project.lat || !project.lng) return;
-          
+
           bounds.push([project.lat, project.lng]);
 
           // Geofence circle
@@ -410,8 +402,17 @@ export default function MapPage() {
           const marker = L.marker([project.lat, project.lng], {
             icon: createProjectIcon(color, colorDark, project.activeEmployeeCount || 0)
           });
-          
-          const statusColor = project.active ? markerColors.employee : markerColors.equipmentIdle;
+
+          // Use semantic green for "Active" so the project pin color (blue)
+          // doesn't get confused with its status badge.
+          const statusColor = project.active ? '#10B981' : markerColors.equipmentIdle;
+          // Prefer the street address for directions when available so Google
+          // Maps shows the friendly name; otherwise fall back to lat/lng.
+          const directionsQuery = encodeURIComponent(
+            project.address || \`\${project.lat},\${project.lng}\`
+          );
+          const directionsUrl =
+            \`https://www.google.com/maps/dir/?api=1&destination=\${directionsQuery}\`;
           marker.bindPopup(\`
             <div class="popup-title">\${project.name}</div>
             \${project.address ? \`<div class="popup-subtitle">\${project.address}</div>\` : ''}
@@ -425,26 +426,41 @@ export default function MapPage() {
               <span class="popup-label">Crew on site:</span>
               <strong>\${project.activeEmployeeCount || 0}</strong>
             </div>
+            <a class="popup-directions" href="\${directionsUrl}" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5z"/></svg>
+              Get Directions
+            </a>
           \`);
-          
+
           marker.addTo(projectLayers);
         });
       }
 
       // Employees
+      //  - In "all" mode we only drop a pin when the employee has their own
+      //    GPS reading; everyone else is represented by the project's badge.
+      //  - In "employees" mode the user explicitly wants to see crew, so we
+      //    fall back to the project location for anyone without GPS.
       if (filter === 'all' || filter === 'employees') {
         (data.activeEmployees || []).forEach(emp => {
-          if (!emp.lat || !emp.lng) return;
-          
-          bounds.push([emp.lat, emp.lng]);
+          let lat = emp.lat, lng = emp.lng;
+          let isFallback = false;
+
+          if (!emp.hasLiveLocation) {
+            if (filter !== 'employees') return;
+            lat = emp.projectLat; lng = emp.projectLng;
+            isFallback = true;
+          }
+          if (!lat || !lng) return;
+
+          bounds.push([lat, lng]);
 
           const color = emp.onBreak ? markerColors.employeeOnBreak : markerColors.employee;
           const colorDark = emp.onBreak ? markerColors.employeeOnBreakDark : markerColors.employeeDark;
-          const initials = emp.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??';
-          const marker = L.marker([emp.lat, emp.lng], {
-            icon: createEmployeeIcon(color, colorDark, initials)
+          const marker = L.marker([lat, lng], {
+            icon: createEmployeeIcon(color, colorDark)
           });
-          
+
           const statusText = emp.onBreak ? 'On Break' : 'Working';
           const statusColor = emp.onBreak ? markerColors.employeeOnBreak : markerColors.employee;
           marker.bindPopup(\`
@@ -457,28 +473,45 @@ export default function MapPage() {
               </span>
             </div>
             \${emp.equipmentName ? \`<div class="popup-row">🚜 \${emp.equipmentName}</div>\` : ''}
+            \${isFallback ? \`<div class="popup-row" style="font-size: 11px; color: #888;">📍 Shown at job site (no live GPS)</div>\` : ''}
           \`);
-          
+
           marker.addTo(employeeLayers);
         });
       }
 
-      // Equipment
+      // Equipment - we want to show equipment pins whenever we know where
+      // the equipment is, even via fallback. The backend already computes a
+      // single canonical fallback (fallbackLat/fallbackLng) which prefers
+      // the operator's clock-in GPS and falls back to the project location.
+      // We render fallbacks in BOTH "all" and "equipment" modes because, unlike
+      // employees, equipment is not represented by a count badge on the
+      // project pin -- if we hide it here it disappears from the map entirely.
       if (filter === 'all' || filter === 'equipment') {
         (data.equipment || []).forEach(equip => {
-          if (!equip.lat || !equip.lng) return;
-          
-          bounds.push([equip.lat, equip.lng]);
+          let lat = equip.lat, lng = equip.lng;
+          let isFallback = false;
+
+          if (!equip.hasLiveLocation) {
+            // Use the operator-or-project fallback the backend computed.
+            if (!equip.fallbackLat || !equip.fallbackLng) return;
+            lat = equip.fallbackLat; lng = equip.fallbackLng;
+            isFallback = true;
+          }
+          if (!lat || !lng) return;
+
+          bounds.push([lat, lng]);
 
           const color = equip.inUse ? markerColors.equipmentInUse : markerColors.equipmentIdle;
           const colorDark = equip.inUse ? markerColors.equipmentInUseDark : markerColors.equipmentIdleDark;
-          const marker = L.marker([equip.lat, equip.lng], {
+          const marker = L.marker([lat, lng], {
             icon: createEquipmentIcon(color, colorDark)
           });
-          
+
           const statusText = equip.inUse ? 'In Use' : 'Idle';
           marker.bindPopup(\`
             <div class="popup-title">\${equip.name}</div>
+            \${equip.projectName ? \`<div class="popup-subtitle">\${equip.projectName}</div>\` : ''}
             <div class="popup-row">
               <span class="popup-status" style="background: \${color}15;">
                 <span class="popup-status-dot" style="background: \${color};"></span>
@@ -486,15 +519,24 @@ export default function MapPage() {
               </span>
             </div>
             \${equip.lastLocationAt ? \`<div class="popup-row" style="font-size: 11px; color: #888;">Last updated: \${new Date(equip.lastLocationAt).toLocaleString()}</div>\` : ''}
+            \${isFallback ? \`<div class="popup-row" style="font-size: 11px; color: #888;">📍 Shown at job site (no live GPS)</div>\` : ''}
           \`);
-          
+
           marker.addTo(equipmentLayers);
         });
       }
 
-      // Fit bounds if we have markers
-      if (bounds.length > 0) {
+      // Only auto-fit bounds on the first render or when the filter changes.
+      // Background refreshes (every 30s) should NOT reset the user's view.
+      const filterChanged = filter !== lastFitFilter;
+      const shouldFit =
+        bounds.length > 0 &&
+        ((!hasInitiallyFit && !userInteracted) || filterChanged);
+
+      if (shouldFit) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        hasInitiallyFit = true;
+        lastFitFilter = filter;
       }
     }
 
@@ -549,11 +591,19 @@ export default function MapPage() {
               style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
               onPress={() => setFilter(f.key)}
             >
-              <Ionicons 
-                name={f.icon} 
-                size={16} 
-                color={filter === f.key ? colors.primary.orange : colors.text.tertiary} 
-              />
+              {f.iconSet === 'mci' ? (
+                <MaterialCommunityIcons
+                  name={f.icon}
+                  size={18}
+                  color={filter === f.key ? colors.primary.orange : colors.text.tertiary}
+                />
+              ) : (
+                <Ionicons
+                  name={f.icon}
+                  size={16}
+                  color={filter === f.key ? colors.primary.orange : colors.text.tertiary}
+                />
+              )}
               <Text style={[styles.filterBtnText, filter === f.key && styles.filterBtnTextActive]}>
                 {f.label}
               </Text>
@@ -646,9 +696,9 @@ export default function MapPage() {
         <iframe
           ref={iframeRef}
           srcDoc={mapHTML}
-          style={{ 
-            width: '100%', 
-            height: '100%', 
+          style={{
+            width: '100%',
+            height: '100%',
             border: 'none',
           }}
           onLoad={handleIframeLoad}
@@ -693,7 +743,7 @@ export default function MapPage() {
           {/* Stats */}
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(246, 112, 17, 0.1)' }]}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
                 <Ionicons name="business-outline" size={18} color={markerColors.project} />
               </View>
               <Text style={styles.statValue}>{stats.activeProjects}</Text>
@@ -701,7 +751,7 @@ export default function MapPage() {
             </View>
 
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(246, 112, 17, 0.1)' }]}>
                 <Ionicons name="people-outline" size={18} color={markerColors.employee} />
               </View>
               <Text style={styles.statValue}>{stats.clockedIn}</Text>
@@ -709,8 +759,8 @@ export default function MapPage() {
             </View>
 
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-                <Ionicons name="construct-outline" size={18} color={markerColors.equipmentInUse} />
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(234, 179, 8, 0.1)' }]}>
+                <MaterialCommunityIcons name="excavator" size={20} color={markerColors.equipmentInUse} />
               </View>
               <Text style={styles.statValue}>{stats.equipmentInUse}</Text>
               <Text style={styles.statLabel}>Equipment In Use</Text>
@@ -719,69 +769,103 @@ export default function MapPage() {
 
           {/* Active Employees List */}
           <View style={styles.listSection}>
-            <Text style={styles.listTitle}>Active Crew</Text>
+            <View style={styles.listHeaderRow}>
+              <Text style={styles.listTitle}>Active Crew</Text>
+              <Text style={styles.listCount}>{mapData.activeEmployees?.length || 0}</Text>
+            </View>
             <ScrollView style={styles.list}>
-              {mapData.activeEmployees?.length === 0 ? (
+              {!mapData.activeEmployees || mapData.activeEmployees.length === 0 ? (
                 <View style={styles.emptyList}>
                   <Text style={styles.emptyListText}>No one clocked in</Text>
                 </View>
               ) : (
-                mapData.activeEmployees?.map((emp, i) => (
-                  <Pressable 
-                    key={emp.id || i} 
-                    style={({ hovered }) => [styles.listItem, hovered && styles.listItemHovered]}
-                    onPress={() => {
-                      if (emp.lat && emp.lng) {
-                        flyTo(emp.lat, emp.lng);
-                      }
-                    }}
-                  >
-                    <View style={styles.listItemAvatar}>
-                      <Text style={styles.listItemAvatarText}>
-                        {emp.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
-                      </Text>
-                      <View style={[styles.listItemDot, { backgroundColor: emp.onBreak ? markerColors.employeeOnBreak : markerColors.employee }]} />
-                    </View>
-                    <View style={styles.listItemContent}>
-                      <Text style={styles.listItemName}>{emp.name}</Text>
-                      <Text style={styles.listItemSub}>{emp.projectName || 'No project'}</Text>
-                    </View>
-                    <Ionicons name="location-outline" size={16} color={colors.text.tertiary} />
-                  </Pressable>
-                ))
+                mapData.activeEmployees.map((emp, i) => {
+                  // Use employee's live location if available, otherwise fall
+                  // back to the project location so the user can still jump
+                  // to where they're working.
+                  const targetLat = emp.lat ?? emp.projectLat;
+                  const targetLng = emp.lng ?? emp.projectLng;
+                  const canFlyTo = !!(targetLat && targetLng);
+
+                  return (
+                    <Pressable
+                      key={emp.id || i}
+                      style={({ hovered }) => [styles.listItem, hovered && styles.listItemHovered]}
+                      onPress={() => {
+                        if (canFlyTo) flyTo(targetLat, targetLng);
+                      }}
+                    >
+                      <View style={styles.listItemAvatar}>
+                        <Text style={styles.listItemAvatarText}>
+                          {emp.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
+                        </Text>
+                        <View style={[styles.listItemDot, { backgroundColor: emp.onBreak ? markerColors.employeeOnBreak : markerColors.employee }]} />
+                      </View>
+                      <View style={styles.listItemContent}>
+                        <Text style={styles.listItemName}>{emp.name}</Text>
+                        <Text style={styles.listItemSub} numberOfLines={1}>
+                          {emp.projectName || 'No project'}
+                          {emp.onBreak ? ' • On break' : ''}
+                          {!emp.hasLiveLocation && emp.projectName ? ' • At site' : ''}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={emp.hasLiveLocation ? 'location' : 'location-outline'}
+                        size={16}
+                        color={canFlyTo ? colors.text.tertiary : colors.border.light}
+                      />
+                    </Pressable>
+                  );
+                })
               )}
             </ScrollView>
           </View>
 
           {/* Equipment List */}
           <View style={styles.listSection}>
-            <Text style={styles.listTitle}>Equipment</Text>
+            <View style={styles.listHeaderRow}>
+              <Text style={styles.listTitle}>Equipment</Text>
+              <Text style={styles.listCount}>{mapData.equipment?.length || 0}</Text>
+            </View>
             <ScrollView style={styles.list}>
-              {mapData.equipment?.filter(e => e.lat).length === 0 ? (
+              {!mapData.equipment || mapData.equipment.length === 0 ? (
                 <View style={styles.emptyList}>
                   <Text style={styles.emptyListText}>No equipment tracked</Text>
                 </View>
               ) : (
-                mapData.equipment?.filter(e => e.lat).map((equip, i) => (
-                  <Pressable 
-                    key={equip.id || i} 
-                    style={({ hovered }) => [styles.listItem, hovered && styles.listItemHovered]}
-                    onPress={() => {
-                      if (equip.lat && equip.lng) {
-                        flyTo(equip.lat, equip.lng);
-                      }
-                    }}
-                  >
-                    <View style={[styles.listItemIcon, { backgroundColor: equip.inUse ? 'rgba(59, 130, 246, 0.1)' : colors.neutral.offWhite }]}>
-                      <Ionicons name="construct" size={16} color={equip.inUse ? markerColors.equipmentInUse : markerColors.equipmentIdle} />
-                    </View>
-                    <View style={styles.listItemContent}>
-                      <Text style={styles.listItemName}>{equip.name}</Text>
-                      <Text style={styles.listItemSub}>{equip.inUse ? 'In Use' : 'Idle'}</Text>
-                    </View>
-                    <Ionicons name="location-outline" size={16} color={colors.text.tertiary} />
-                  </Pressable>
-                ))
+                mapData.equipment.map((equip, i) => {
+                  // Use live GPS if we have it, otherwise fall back to the
+                  // operator-or-project location the backend computed so the
+                  // user can still jump to where the equipment is.
+                  const targetLat = equip.lat ?? equip.fallbackLat;
+                  const targetLng = equip.lng ?? equip.fallbackLng;
+                  const canFlyTo = !!(targetLat && targetLng);
+                  return (
+                    <Pressable
+                      key={equip.id || i}
+                      style={({ hovered }) => [styles.listItem, hovered && styles.listItemHovered]}
+                      onPress={() => {
+                        if (canFlyTo) flyTo(targetLat, targetLng);
+                      }}
+                    >
+                      <View style={[styles.listItemIcon, { backgroundColor: equip.inUse ? 'rgba(234, 179, 8, 0.1)' : colors.neutral.offWhite }]}>
+                        <MaterialCommunityIcons name="excavator" size={18} color={equip.inUse ? markerColors.equipmentInUse : markerColors.equipmentIdle} />
+                      </View>
+                      <View style={styles.listItemContent}>
+                        <Text style={styles.listItemName}>{equip.name}</Text>
+                        <Text style={styles.listItemSub}>
+                          {equip.inUse ? 'In Use' : 'Idle'}
+                          {!canFlyTo ? ' • No location' : ''}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="location-outline"
+                        size={16}
+                        color={canFlyTo ? colors.text.tertiary : colors.border.light}
+                      />
+                    </Pressable>
+                  );
+                })
               )}
             </ScrollView>
           </View>
@@ -797,7 +881,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.surface.background,
   },
-  
+
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
@@ -1048,12 +1132,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
+  listHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
   listTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.text.secondary,
-    padding: 16,
-    paddingBottom: 8,
+  },
+  listCount: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.text.tertiary,
+    backgroundColor: colors.neutral.offWhite,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    textAlign: 'center',
   },
   list: {
     flex: 1,
