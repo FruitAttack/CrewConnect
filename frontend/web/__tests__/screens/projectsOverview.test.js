@@ -110,29 +110,29 @@ describe('ProjectOverview screen', () => {
     expect(getProject).not.toHaveBeenCalled();
   });
 
-  test('fetches a project when selectedProject is missing but projectId param exists', async () => {
-    useLocalSearchParams.mockReturnValue({ projectId: 'p1' });
+test('fetches a project when selectedProject is missing but projectId param exists', async () => {
+  useLocalSearchParams.mockReturnValue({ projectId: 'p1' });
 
-    useProject.mockReturnValue({
-      selectedProject: null,
-      selectedProjectId: null,
-      setSelectedProject: setSelectedProjectMock,
-    });
-
-    getProject.mockResolvedValueOnce({
-      success: true,
-      data: { project: baseProject },
-    });
-
-    render(<ProjectOverview />);
-
-    // Loaded screen has these cards, placeholder does not.
-    await waitFor(() => expect(screen.getByText('Core Details')).toBeTruthy());
-
-    expect(getProject).toHaveBeenCalledWith(TOKEN, 'p1');
-    expect(setSelectedProjectMock).toHaveBeenCalledWith(baseProject);
-    expect(screen.getByText('Edit')).toBeTruthy();
+  useProject.mockReturnValue({
+    selectedProject: null,
+    selectedProjectId: null,
+    setSelectedProject: setSelectedProjectMock,
   });
+
+  getProject.mockResolvedValueOnce({
+    success: true,
+    data: { project: baseProject },
+  });
+
+  render(<ProjectOverview />);
+
+  // waits for element to appear without hanging indefinitely
+  expect(await screen.findByText('Core Details')).toBeTruthy();
+
+  expect(getProject).toHaveBeenCalledWith(TOKEN, 'p1');
+  expect(setSelectedProjectMock).toHaveBeenCalledWith(baseProject);
+  expect(screen.getByText('Edit')).toBeTruthy();
+});
 
   test('renders from selectedProject without calling getProject', async () => {
     useProject.mockReturnValue({
