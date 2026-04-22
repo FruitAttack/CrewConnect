@@ -343,7 +343,7 @@ export default function TimeOverview() {
         
         <View style={s.headerRight}>
           <Pressable style={s.actionBtn} onPress={() => router.push('/time/timecards')}><Text style={s.actionText}>Review Timecards</Text></Pressable>
-          <Pressable style={s.actionBtnPrimary} onPress={() => router.push('/time/reports')}><Ionicons name="document-text-outline" size={14} color="#fff" /><Text style={s.actionTextPrimary}>Reports</Text></Pressable>
+          <Pressable style={s.actionBtnPrimary} onPress={() => router.push('/reports')}><Ionicons name="document-text-outline" size={14} color="#fff" /><Text style={s.actionTextPrimary}>Reports</Text></Pressable>
         </View>
       </View>
 
