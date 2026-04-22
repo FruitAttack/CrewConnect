@@ -7,7 +7,7 @@ import {
 import { useSession } from '../../utils/ctx';
 import { getUserProfile, getPayrollSummary, getBudgetVsActual } from '../../utils/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
-
+import { useLocalSearchParams } from 'expo-router';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REPORT_TABS = [
@@ -448,11 +448,12 @@ function ExportReport({ payrollData, projectCostData }) {
 
 export default function Reports() {
   const { session }      = useSession();
+  const params = useLocalSearchParams();
   const token            = session?.access_token;
   const sessionCompanyId = session?.user?.user_metadata?.default_company_id;
   const [companyId, setCompanyId] = useState(sessionCompanyId || null);
 
-  const [activeReport, setActiveReport] = useState('payroll');
+  const [activeReport, setActiveReport] = useState(params?.tab || 'payroll');
   const [datePreset,   setDatePreset]   = useState('month');
 
   // Payroll (also used by Employee Hours tab)

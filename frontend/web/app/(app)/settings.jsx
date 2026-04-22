@@ -19,24 +19,27 @@ export default function Settings() {
     {
       title: 'Account',
       items: [
-        { icon: 'person-outline', label: 'Profile', subtitle: user?.email || 'Manage your profile' },
-        { icon: 'notifications-outline', label: 'Notifications', subtitle: 'Manage alerts & reminders' },
-        { icon: 'lock-closed-outline', label: 'Security', subtitle: 'Password & authentication' },
-      ],
-    },
-    {
-      title: 'Company',
-      items: [
-        { icon: 'business-outline', label: 'Company Info', subtitle: 'Edit company details' },
-        { icon: 'people-outline', label: 'Team Members', subtitle: 'Manage users & roles' },
-        { icon: 'card-outline', label: 'Billing', subtitle: 'Subscription & payments' },
+        { icon: 'person-outline', 
+          label: 'Profile', 
+          subtitle: user?.email || 'Manage your profile',
+          href: '/workforce/employees?userId='+user?.id,
+         },
       ],
     },
     {
       title: 'Integrations',
       items: [
-        { icon: 'cloud-outline', label: 'Payroll', subtitle: 'Connect payroll systems' },
-        { icon: 'sync-outline', label: 'Accounting', subtitle: 'Sync with accounting software' },
+        { icon: 'cloud-outline',
+           label: 'Payroll',
+            subtitle: 'Connect payroll systems',
+            href: '/reports?tab=export',
+        },
+          { icon: 'cloud-outline',
+           label: 'Safety',
+            subtitle: 'Connect safety systems',
+            href: '/form/submissions',
+        },
+      
       ],
     },
   ];
@@ -55,6 +58,7 @@ export default function Settings() {
             {group.items.map((item, itemIndex) => (
               <Pressable
                 key={itemIndex}
+                onPress={() => item.href && router.push(item.href)}
                 style={({ hovered }) => [
                   styles.settingItem,
                   itemIndex < group.items.length - 1 && styles.settingItemBorder,

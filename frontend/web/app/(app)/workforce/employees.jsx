@@ -166,6 +166,7 @@ export default function EmployeesPage() {
   const token = session?.access_token;
   const params = useLocalSearchParams();
   const addNew = params?.addNew;
+  const openUserId = params?.userId;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -201,6 +202,12 @@ export default function EmployeesPage() {
 
   const [sortField, setSortField] = useState('full_name');
   const [sortDirection, setSortDirection] = useState('asc');
+
+  useEffect(() => {
+  if (!openUserId || loading || employees.length === 0) return;
+  const emp = employees.find(e => e.id === openUserId);
+  if (emp) openEditModal(emp);
+}, [openUserId, loading, employees]);
 
   async function load() {
     if (!token) return;
