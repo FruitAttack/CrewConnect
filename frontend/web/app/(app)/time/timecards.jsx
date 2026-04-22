@@ -47,6 +47,46 @@ const SCROLLBAR_WIDTH = 8;
 // Emerald green 500 for active status
 const activeColor = "#10b981";
 
+// ─── Split a single entry into per-day segments ───────────────────────────────
+const splitEntryByDay = (entry) => {
+  if (!entry.clock_out) return [entry]; // active entry, can't split
+
+  const segments = [];
+  let segmentStart = new Date(entry.clock_in);
+  const finalEnd = new Date(entry.clock_out);
+
+  while (segmentStart < finalEnd) {
+    const dayEnd = new Date(segmentStart);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const segmentEnd = dayEnd < finalEnd ? dayEnd : finalEnd;
+
+    segments.push({
+      ...entry,
+      clock_in: segmentStart.toISOString(),
+      clock_out: segmentEnd.toISOString(),
+      break_minutes: 0,
+      _isSplit: segments.length > 0,
+    });
+
+    segmentStart = new Date(segmentEnd.getTime() + 1);
+  }
+
+  // Apply break_minutes only to the first segment to avoid double-deducting
+  if (segments.length > 0 && entry.break_minutes) {
+    segments[0] = { ...segments[0], break_minutes: entry.break_minutes };
+  }
+
+  return segments;
+};
+
+const calcHours = (clockIn, clockOut, breakMinutes = 0) => {
+  if (!clockOut) return 0;
+  const hours =
+    (new Date(clockOut) - new Date(clockIn)) / 3600000 - breakMinutes / 60;
+  return Math.max(0, hours);
+};
+
 // Pulsing Dot Component for active status
 const PulsingDot = ({ color = activeColor, size = 10 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -82,7 +122,6 @@ const PulsingDot = ({ color = activeColor, size = 10 }) => {
         justifyContent: "center",
       }}
     >
-      {/* Pulsing ring */}
       <Animated.View
         style={{
           position: "absolute",
@@ -94,7 +133,6 @@ const PulsingDot = ({ color = activeColor, size = 10 }) => {
           transform: [{ scale: pulseAnim }],
         }}
       />
-      {/* Solid dot with white border */}
       <View
         style={{
           width: size,
@@ -326,7 +364,7 @@ const dpStyles = StyleSheet.create({
   dayTextToday: { color: colors.primary.orange, fontWeight: "600" },
 });
 
-// Status Badge Component (for approval status)
+// Status Badge Component
 const StatusBadge = ({ status }) => {
   const config = {
     approved: {
@@ -376,7 +414,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Convert ISO string to datetime-local format "YYYY-MM-DDTHH:MM"
   const toLocalInput = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -450,7 +487,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
           onPress={!saving ? onClose : undefined}
         />
         <View style={editStyles.modal}>
-          {/* Header */}
           <View style={editStyles.header}>
             <View style={{ flex: 1 }}>
               <Text style={editStyles.title}>Edit Time Entry</Text>
@@ -466,14 +502,11 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
               <Ionicons name="close" size={20} color={colors.text.secondary} />
             </Pressable>
           </View>
-
-          {/* Form Body */}
           <ScrollView
             style={editStyles.body}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Clock In */}
             <View style={editStyles.fieldGroup}>
               <Text style={editStyles.label}>Clock In</Text>
               {Platform.OS === "web" ? (
@@ -493,8 +526,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
                 />
               )}
             </View>
-
-            {/* Clock Out */}
             <View style={editStyles.fieldGroup}>
               <Text style={editStyles.label}>Clock Out</Text>
               {Platform.OS === "web" ? (
@@ -526,8 +557,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
                 </View>
               )}
             </View>
-
-            {/* Break Minutes */}
             <View style={editStyles.fieldGroup}>
               <Text style={editStyles.label}>Break (minutes)</Text>
               <TextInput
@@ -539,8 +568,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
                 placeholderTextColor={colors.text.tertiary}
               />
             </View>
-
-            {/* Notes */}
             <View style={editStyles.fieldGroup}>
               <Text style={editStyles.label}>Notes</Text>
               <TextInput
@@ -554,8 +581,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
                 textAlignVertical="top"
               />
             </View>
-
-            {/* Computed Hours Summary */}
             {computedHours && (
               <View style={editStyles.summaryRow}>
                 <Ionicons
@@ -585,8 +610,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
                 </Text>
               </View>
             )}
-
-            {/* Error */}
             {error && (
               <View style={editStyles.errorRow}>
                 <Ionicons
@@ -598,8 +621,6 @@ const EditEntryModal = ({ visible, onClose, entry, onSave }) => {
               </View>
             )}
           </ScrollView>
-
-          {/* Footer */}
           <View style={editStyles.footer}>
             <Pressable
               style={editStyles.cancelBtn}
@@ -754,7 +775,7 @@ const editStyles = StyleSheet.create({
   saveBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
 });
 
-// Action Modal Component
+// ─── Action Modal ─────────────────────────────────────────────────────────────
 const ActionModal = ({
   visible,
   onClose,
@@ -779,13 +800,11 @@ const ActionModal = ({
     setSuccessAction("approved");
     setStep("success");
   };
-
   const handleReject = async () => {
     await onReject(note);
     setSuccessAction("rejected");
     setStep("success");
   };
-
   const handleRequestChanges = async () => {
     await onRequestChanges(note);
     setSuccessAction("requested changes for");
@@ -1056,7 +1075,7 @@ const modalStyles = StyleSheet.create({
   submitBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
 });
 
-// Employee Row Component
+// ─── Employee Row Component ───────────────────────────────────────────────────
 const EmployeeRow = ({
   employee,
   weekDays,
@@ -1155,82 +1174,86 @@ const EmployeeRow = ({
 
     {isExpanded && (
       <View style={styles.expandedDetails}>
-        {employee.entries.length === 0 ? (
+        {employee.rawEntries.length === 0 ? (
           <Text style={styles.noEntriesText}>No time entries</Text>
         ) : (
-          employee.entries.map((entry, idx) => {
-            const clockIn = new Date(entry.clock_in);
-            const clockOut = entry.clock_out ? new Date(entry.clock_out) : null;
-            const hours = clockOut
-              ? (
-                  (clockOut - clockIn) / (1000 * 60 * 60) -
-                  (entry.break_minutes || 0) / 60
-                ).toFixed(1)
-              : "Active";
-
-            return (
-              <Pressable
-                key={entry.id || idx}
-                style={({ hovered }) => [
-                  styles.entryDetail,
-                  hovered && styles.entryDetailHovered,
-                ]}
-                onPress={() => onEditEntry(entry)}
-              >
-                <View style={styles.entryLeft}>
-                  <Text style={styles.entryDate}>
-                    {clockIn.toLocaleDateString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </Text>
-                  <Text style={styles.entryProject}>
-                    {entry.project?.name || "No project"}
-                  </Text>
-                </View>
-                <View style={styles.entryRight}>
-                  <Text style={styles.entryTime}>
-                    {clockIn.toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                    {" – "}
-                    {clockOut
-                      ? clockOut.toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })
-                      : "Now"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.entryHours,
-                      !clockOut && styles.entryHoursActive,
-                    ]}
-                  >
-                    {hours}
-                    {clockOut ? "h" : ""}
-                  </Text>
-                </View>
-                {/* Edit pencil icon */}
-                <View style={styles.entryEditIcon}>
-                  <Ionicons
-                    name="pencil-outline"
-                    size={13}
-                    color={colors.text.tertiary}
-                  />
-                </View>
-              </Pressable>
+          (() => {
+            const weekDayStrings = new Set(
+              weekDays.map((d) => d.date.toDateString()),
             );
-          })
+            const byDay = {};
+            employee.rawEntries.forEach((rawEntry) => {
+              const segments = splitEntryByDay(rawEntry);
+              segments.forEach((seg) => {
+                const dayKey = new Date(seg.clock_in).toDateString();
+                if (!weekDayStrings.has(dayKey)) return; // ← skip days outside the week
+                if (!byDay[dayKey]) byDay[dayKey] = { segments: [], rawEntry };
+                byDay[dayKey].segments.push(seg);
+              });
+            });
+
+            return Object.entries(byDay)
+              .sort(([a], [b]) => new Date(a) - new Date(b))
+              .map(([dayKey, { segments, rawEntry }]) => {
+                const dayDate = new Date(dayKey);
+                const hasActive = !rawEntry.clock_out;
+
+                const totalHours = segments.reduce(
+                  (sum, seg) =>
+                    sum +
+                    calcHours(seg.clock_in, seg.clock_out, seg.break_minutes),
+                  0,
+                );
+
+                return (
+                  <Pressable
+                    key={dayKey}
+                    style={({ hovered }) => [
+                      styles.entryDetail,
+                      hovered && styles.entryDetailHovered,
+                    ]}
+                    onPress={() => onEditEntry(rawEntry)}
+                  >
+                    <View style={styles.entryLeft}>
+                      <Text style={styles.entryDate}>
+                        {dayDate.toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </Text>
+                      <Text style={styles.entryProject}>
+                        {rawEntry.project?.name || "No project"}
+                      </Text>
+                    </View>
+                    <View style={styles.entryRight}>
+                      <Text
+                        style={[
+                          styles.entryHours,
+                          hasActive && styles.entryHoursActive,
+                        ]}
+                      >
+                        {hasActive ? "Active" : `${totalHours.toFixed(1)}h`}
+                      </Text>
+                    </View>
+                    <View style={styles.entryEditIcon}>
+                      <Ionicons
+                        name="pencil-outline"
+                        size={13}
+                        color={colors.text.tertiary}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              });
+          })()
         )}
       </View>
     )}
   </View>
 );
 
-// Main Component
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function Timecards() {
   const { width } = useWindowDimensions();
   const { session } = useSession();
@@ -1251,8 +1274,6 @@ export default function Timecards() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [employeeStatuses, setEmployeeStatuses] = useState({});
-
-  // Edit entry state
   const [editEntry, setEditEntry] = useState(null);
 
   const datePickerRef = useRef(null);
@@ -1376,6 +1397,7 @@ export default function Timecards() {
     return startDate.toISOString().split("T")[0];
   }, [selectedDate, getWeekRange]);
 
+  // ─── Group and split entries per employee ───────────────────────────────────
   const employeesData = useMemo(() => {
     const grouped = {};
     timeEntries.forEach((entry) => {
@@ -1385,23 +1407,28 @@ export default function Timecards() {
           id: userId,
           name: entry.user?.full_name || "Unknown",
           email: entry.user?.email,
-          entries: [],
+          entries: [], // split segments — used for day columns & totals
+          rawEntries: [], // original DB records — used for edit modal
           isActive: false,
         };
-      grouped[userId].entries.push(entry);
+      grouped[userId].rawEntries.push(entry);
+      // Expand each entry into per-day segments
+      const segments = splitEntryByDay(entry);
+      grouped[userId].entries.push(...segments);
       if (!entry.clock_out) grouped[userId].isActive = true;
     });
+
     return Object.values(grouped).map((emp) => {
-      const totalHours = emp.entries.reduce((sum, e) => {
-        if (!e.clock_out) return sum;
-        const clockIn = new Date(e.clock_in);
-        const clockOut = new Date(e.clock_out);
-        return (
-          sum +
-          ((clockOut - clockIn) / (1000 * 60 * 60) -
-            (e.break_minutes || 0) / 60)
+      const { startDate, endDate } = getWeekRange(selectedDate);
+      const totalHours = emp.entries
+        .filter((e) => {
+          const d = new Date(e.clock_in);
+          return d >= startDate && d <= endDate;
+        })
+        .reduce(
+          (sum, e) => sum + calcHours(e.clock_in, e.clock_out, e.break_minutes),
+          0,
         );
-      }, 0);
       const statusKey = `${emp.id}_${currentWeekKey}`;
       return {
         ...emp,
@@ -1421,20 +1448,15 @@ export default function Timecards() {
     );
   }, [employeesData, searchQuery]);
 
+  // entries are already split by day so simple dayStr match is enough
   const getHoursForDay = (employee, date) => {
     const dayStr = date.toDateString();
     return employee.entries
       .filter((e) => new Date(e.clock_in).toDateString() === dayStr)
-      .reduce((sum, e) => {
-        if (!e.clock_out) return sum;
-        const clockIn = new Date(e.clock_in);
-        const clockOut = new Date(e.clock_out);
-        return (
-          sum +
-          ((clockOut - clockIn) / (1000 * 60 * 60) -
-            (e.break_minutes || 0) / 60)
-        );
-      }, 0);
+      .reduce(
+        (sum, e) => sum + calcHours(e.clock_in, e.clock_out, e.break_minutes),
+        0,
+      );
   };
 
   const formatHours = (hours) => (hours === 0 ? "–" : hours.toFixed(1));
@@ -1522,17 +1544,16 @@ export default function Timecards() {
     }
   };
 
-  // ─── Handle save from edit modal ───────────────────────────────────────────
   const handleSaveEntry = async (entryId, updates) => {
     const response = await updateTimeEntry(token, entryId, updates);
     if (!response.success) {
-      throw new Error("Pleae check to make sure your edit does not overlap with existing time entries and try again.");
+      throw new Error(
+        "Please check to make sure your edit does not overlap with existing time entries and try again.",
+      );
     }
-    // Update local state optimistically so the UI refreshes immediately
     setTimeEntries((prev) =>
       prev.map((e) => (e.id === entryId ? { ...e, ...updates } : e)),
     );
-    // Then re-fetch to get fully populated relational data
     fetchTimeEntries();
   };
 
@@ -1678,19 +1699,6 @@ export default function Timecards() {
           </Pressable>
         </View>
         <View style={styles.toolbarRight}>
-          <Pressable
-            style={({ hovered }) => [
-              styles.exportBtn,
-              hovered && styles.exportBtnHovered,
-            ]}
-          >
-            <Ionicons
-              name="download-outline"
-              size={16}
-              color={colors.text.primary}
-            />
-            <Text style={styles.exportBtnText}>Export</Text>
-          </Pressable>
           <Pressable
             style={[
               styles.approveBtn,
@@ -1862,7 +1870,6 @@ export default function Timecards() {
         processing={processing}
       />
 
-      {/* Edit Entry Modal */}
       <EditEntryModal
         visible={!!editEntry}
         onClose={() => setEditEntry(null)}
@@ -1965,23 +1972,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.orange,
   },
   todayBtnText: { fontSize: 12, fontWeight: "600", color: "#fff" },
-  exportBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-    backgroundColor: colors.neutral.white,
-  },
-  exportBtnHovered: { borderColor: colors.text.tertiary },
-  exportBtnText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.text.primary,
-  },
   approveBtn: {
     flexDirection: "row",
     alignItems: "center",
