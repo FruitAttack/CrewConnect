@@ -30,9 +30,6 @@ CrewConnect empowers construction companies to make smarter, data-driven decisio
 - Integration with cloud services for file storage, notifications, and analytics.
 - Secure authentication and role-based access controls.
 
-## Project Status
-CrewConnect's features are fully implemented, and the product is available to use at https://crewconnect.site/ for the web version, and https://crewconnect.site/mobile for the mobile version.
-
 ## Contributors
 - Joel Moffatt  
 - Spencer Perry  
